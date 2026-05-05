@@ -1,15 +1,16 @@
-from cmath import log
 import tkinter as tk
 from tkinter import ttk, messagebox
 import mss
 import mss.tools
 import os
+import pickle
 import threading
 import subprocess
 import sys
 import ast
 import json
 import keyring
+import time
 from datetime import datetime
 from pathlib import Path
 from selenium import webdriver
@@ -107,6 +108,33 @@ app.iniciar()
 CONFIG_FILE = "config.json"
 keyring_APP = "AutoCapturaApp"  # nombre para keyring (si decides usarlo en el futuro)
 
+# ── Funciones de manejo de cookies ─────────────────────────
+
+
+def guardar_cookies(driver, sitio_nombre):
+    Path("cookies").mkdir(exist_ok=True)
+    ruta = f"cookies/{sitio_nombre.replace(' ', '_')}.pkl"
+    with open(ruta, "wb") as f:
+        pickle.dump(driver.get_cookies(), f)
+
+
+def cargar_cookies(driver, sitio, url_base):
+    ruta = f"cookies/{sitio['nombre'].replace(' ', '_')}.pkl"
+    if not Path(ruta).exists():
+        print(f"[cookies] No existe archivo: {ruta}")
+        return False
+    driver.get(url_base)
+    with open(ruta, "rb") as f:
+        cookies = pickle.load(f)
+        print(f"[cookies] Cargando {len(cookies)} cookies para {sitio['nombre']}")
+        for cookie in cookies:
+            try:
+                driver.add_cookie(cookie)
+            except Exception as e:
+                print(f"[cookies] Skipped: {cookie.get('name')} — {e}")
+    driver.refresh()
+    return True
+
 
 def guardar_credenciales(sitio_nombre, usuario, clave):
     keyring.set_password(keyring_APP, f"{sitio_nombre}_usuario", usuario)
@@ -161,8 +189,17 @@ def capturar(region):
     return ruta
 
 
-def crear_driver(headless):
+def crear_driver(headless, usar_chrome_existente=False):
     options = webdriver.ChromeOptions()
+
+    if usar_chrome_existente:
+        # Conectarse al Chrome ya abierto
+        options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+        return webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()), options=options
+        )
+
+    # Comportamiento original: abrir Chrome nuevo
     if headless:
         options.add_argument("--headless")
         options.add_argument("--disable-gpu")
@@ -173,17 +210,64 @@ def crear_driver(headless):
     )
 
 
-def subir(sitio, ruta_imagen, headless, log, credenciales_sesion=None):
+# La función subir ahora maneja tanto el caso de login como el de sitios sin login, e incluye validaciones para asegurar que la sesión esté activa antes de intentar subir
+#  la imagen. Si el sitio requiere login, primero intenta restaurar la sesión con cookies, y si eso falla, procede a hacer login con las credenciales proporcionadas.
+#  Después de un login exitoso, guarda las cookies para futuras ejecuciones. Durante la subida, espera a que se confirme que la imagen fue subida correctamente antes
+#  de registrar el resultado.
+def subir(
+    sitio,
+    ruta_imagen,
+    headless,
+    log,
+    credenciales_sesion=None,
+    usar_chrome_existente=False,
+):
     driver = crear_driver(headless)
     wait = WebDriverWait(driver, 15)
+    sesion_activa = True  # asume sesión activa, se validará más adelante
+    nombre = sitio.get("nombre", "sitio")
 
     try:
         if sitio["necesita_login"]:
-            nombre = sitio["nombre"]
+            url_base = sitio["url_login"]
+            sesion_activa = False
 
+            if usar_chrome_existente:
+                # ── Reutilizar la pestaña activa en lugar de abrir una nueva ──
+                pestaña_original = driver.current_window_handle
+                driver.switch_to.window(pestaña_original)
+                # Verificar si ya hay sesión activa en el Chrome abierto
+                driver.get(sitio["url_upload"])
+                time.sleep(1)
+
+                if "login" not in driver.current_url.lower():
+                    log(f"  ✓ Sesión activa detectada en Chrome: {sitio['nombre']}")
+                    sesion_activa = True
+                else:
+                    log(
+                        f"  ✗ Chrome abierto pero sin sesión activa en {sitio['nombre']}"
+                    )
+                    log(
+                        f"  → Inicia sesión manualmente en el navegador y vuelve a intentar"
+                    )
+                    return  # no intenta login automático
+            else:
+                # 1. Intentar cargar cookies para restaurar sesión
+                cargar_cookies(driver, sitio, url_base)
+                # Navegar a pagina protegida para verificar si la sesión es válida
+                driver.get(sitio["url_upload"])
+                time.sleep(1)  # pequeña pausa para que cargue
+                if "login" not in driver.current_url:
+                    log(f"  ✓ Sesión restaurada con cookies para {nombre}")
+                    sesion_activa = True
+                else:
+                    log(f"  ✗ Cookies expiradas, haciendo login...")
+
+        if not sesion_activa:
             if credenciales_sesion and nombre in credenciales_sesion:
                 usuario = credenciales_sesion[nombre]["usuario"]
                 clave = credenciales_sesion[nombre]["clave"]
+
             # ── LOGIN ─────────────────────────────
             else:
                 usuario, clave = cargar_credenciales(sitio["nombre"])
@@ -193,13 +277,11 @@ def subir(sitio, ruta_imagen, headless, log, credenciales_sesion=None):
                 return
 
             driver.get(sitio["url_login"])
-
             wait.until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, sitio["selector_user"])
                 )
             )
-
             driver.find_element(By.CSS_SELECTOR, sitio["selector_user"]).send_keys(
                 usuario
             )
@@ -207,14 +289,10 @@ def subir(sitio, ruta_imagen, headless, log, credenciales_sesion=None):
                 clave
             )
             driver.find_element(By.CSS_SELECTOR, sitio["selector_btn_login"]).click()
-
             wait.until(EC.url_contains("secure"))
 
-            if "secure" not in driver.current_url:
-                log(f"  ✗ Login fallido en {sitio['nombre']}")
-                return
-
-            log(f"  ✓ Login exitoso en {sitio['nombre']}")
+            guardar_cookies(driver, nombre)
+            log(f"  ✓ Login exitoso, cookies guardadas: {nombre}")
 
         # ── SUBIDA ────────────────────────────
         driver.get(sitio["url_upload"])
@@ -243,10 +321,15 @@ def subir(sitio, ruta_imagen, headless, log, credenciales_sesion=None):
         log(f"  ✗ Error en {sitio['nombre']}: {e}")
 
     finally:
-        driver.quit()
+        if usar_chrome_existente:
+            pass  # no cerrar el Chrome que el usuario tiene abierto
+        else:
+            driver.quit()
 
-    usuario, clave = cargar_credenciales(sitio["nombre"])
-    print("DEBUG CREDENCIALES:", usuario, clave)
+    usuario, clave = cargar_credenciales(
+        sitio["nombre"]
+    )  # Esto hay que comentarlo despues
+    print("DEBUG CREDENCIALES:", usuario, clave)  # Esto hay que comentarlo despues
 
 
 # Interfaz de Login
@@ -315,6 +398,7 @@ class LoginWindow(tk.Toplevel):
             }
 
         # Botones de acción
+
         frame.btns = ttk.Frame(self)
         frame.btns.grid(row=99, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         ttk.Button(frame.btns, text="Continuar", command=self._confirmar).pack(
@@ -443,11 +527,27 @@ class App(tk.Tk):
         ttk.Button(
             frame_opts, text="Credenciales", command=self._abrir_credenciales
         ).grid(row=0, column=1, padx=(20, 0))
+        ttk.Button(
+            frame_opts, text="Renovar sesión", command=self._renovar_sesion
+        ).grid(row=1, column=0, sticky="w", pady=(8, 0))
 
         # ── Botón ejecutar ──
         self.btn = ttk.Button(self, text="▶  Capturar y subir", command=self._ejecutar)
         self.btn.grid(row=2, column=0, columnspan=2, pady=(0, 12), sticky="ew")
         # ── En _build_ui, después de crear self.btn ──
+
+        self.chrome_existente_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            frame_opts,
+            text="Usar Chrome ya abierto (puerto 9222)",
+            variable=self.chrome_existente_var,
+        ).grid(row=2, column=0, sticky="w", pady=(8, 0))
+
+        ttk.Button(
+            frame_opts,
+            text="Abrir Chrome con depuración",
+            command=self._abrir_chrome_debug,
+        ).grid(row=2, column=1, padx=(20, 0))
 
         # Keybind configurable
         frame_key = ttk.LabelFrame(
@@ -468,6 +568,7 @@ class App(tk.Tk):
         ttk.Button(frame_key, text="Aplicar atajo", command=self._aplicar_keybind).grid(
             row=0, column=2
         )
+        self.keybind_entry.bind("<KeyPress>", self._capturar_tecla)
         self.keybind_label = ttk.Label(frame_key, text="", foreground="black")
         self.keybind_label.grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
@@ -643,17 +744,23 @@ class App(tk.Tk):
             self._log(f"→ Capturando región: {region}")
 
             self.after(0, self.iconify)  # minimiza antes de capturar
-            import time
-
             time.sleep(0.4)  # pequeña pausa para que minimice
             ruta = capturar(region)
             self.after(0, self.deiconify)  # restaura al guardars
 
             self._log(f"✓ Imagen guardada: {ruta}\n")
             headless = self.headless_var.get()
+            usar_chrome_existente = self.chrome_existente_var.get()
             for sitio in SITIOS:
                 self._log(f"→ Subiendo a: {sitio['nombre']}")
-                subir(sitio, ruta, headless, self._log, self._credenciales_sesion)
+                subir(
+                    sitio,
+                    ruta,
+                    headless,
+                    self._log,
+                    self._credenciales_sesion,
+                    usar_chrome_existente,
+                )
                 self._log("")
             self._log("✓ Proceso completado.")
             self.status_var.set("Completado")
@@ -663,6 +770,60 @@ class App(tk.Tk):
         finally:
             self.after(0, self.deiconify)
             self.after(0, lambda: self.btn.configure(state="normal"))
+
+    def _renovar_sesion(self):
+        """Borra cookies guardadas para forzar un login fresco."""
+        import shutil
+
+        if Path("cookies").exists():
+            shutil.rmtree("cookies")
+        self._log("→ Cookies eliminadas. Se hará login en la próxima ejecución.")
+
+    def _abrir_chrome_debug(self):
+        """Lanza Chrome con el puerto de depuración remota."""
+        import subprocess
+
+        rutas_chrome = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        ]
+        chrome_exe = next((r for r in rutas_chrome if Path(r).exists()), None)
+
+        if not chrome_exe:
+            self._log(
+                "✗ No se encontró Chrome. Abre chrome.exe manualmente con --remote-debugging-port=9222"
+            )
+            return
+
+        subprocess.Popen(
+            [
+                chrome_exe,
+                "--remote-debugging-port=9222",
+                "--user-data-dir=C:\\chrome_sesion_ssauto",
+            ]
+        )
+        self._log("✓ Chrome abierto con depuración en puerto 9222")
+        self._log("→ Inicia sesión en los sitios y luego ejecuta la captura")
+
+    def _capturar_tecla(self, event):
+        """Detecta la combinación presionada y la escribe automáticamente."""
+        partes = []
+        if event.state & 0x4:
+            partes.append("Control")
+        if event.state & 0x1:
+            partes.append("Shift")
+        if event.state & 0x20000:
+            partes.append("Alt")
+
+        tecla = event.keysym
+        # Ignorar si solo se presiona un modificador solo
+        if tecla in ("Control_L", "Control_R", "Shift_L", "Shift_R", "Alt_L", "Alt_R"):
+            return "break"
+
+        partes.append(tecla)
+        combinacion = "<" + "-".join(partes) + ">"
+        self.keybind_var.set(combinacion)
+        return "break"  # evita que el caracter se escriba en el campo
 
 
 if __name__ == "__main__":
@@ -684,11 +845,24 @@ if __name__ == "__main__":
 # Los sitios son: https://the-internet.herokuapp.com/upload (sin login) y https://the-internet.herokuapp.com/login (con login de prueba: tomsmith/SuperSecretPassword!).
 
 # 05-05-2026
+
 # En el dia de hoy, me enfoqué en implementar la funcionalidad de login para los sitios que lo requieren, utilizando Selenium para automatizar el proceso de autenticación.
 # Creé una ventana modal de login que se muestra al iniciar la aplicación, donde se pueden ingresar y guardar las credenciales de cada sitio de forma
 # segura utilizando la librería keyring.
 # La función de subida ahora incluye el proceso de login automático antes de intentar subir la imagen,
 # lo que permite manejar sitios con autenticación sin necesidad de ingresar las credenciales cada vez.
 # Además, se agregó una validación para verificar que el login fue exitoso antes de proceder con la subida, y se muestra un mensaje de error si el login falla.
+# Se implemento un sistema de cookies para intentar restaurar la sesión antes de hacer login, lo que puede evitar la necesidad de autenticarse en cada ejecución
+# si las cookies siguen siendo válidas. Ademas de las cookies un boton para renovar la sesión, que borra las cookies guardadas y fuerza un login fresco en la próxima ejecución.
+# Tambien añadi una opción para reutilizar una sesión de Chrome ya abierta, lo que permite aprovechar una sesión activa sin necesidad de hacer login automático cada vez,
+# aunque requiere que el usuario inicie sesión manualmente en el navegador.
 # Las pruebas se realizaron con dos sitios de ejemplo, uno sin login y otro con login, utilizando Selenium para manejar la autenticación y la subida de archivos.
 # Los sitios son: https://the-internet.herokuapp.com/upload (sin login) y https://the-internet.herokuapp.com/login (con login de prueba: tomsmith/SuperSecretPassword!).
+
+
+# realmente es necesario iniciar sesion cada vez que se quiera subir una captura a un sitio que requiere autenticacion?, ademas si el sitio se mantiene abierto siempre
+# en el navegador, no se podria aprovechar esa sesion activa para subir las capturas sin necesidad de hacer login cada vez?
+
+# Hay que arreglar el chrome con depuracion, ya que se abre bien, pero cuando se ejecuta la captura y subida, no detecta la sesión activa, aunque el Chrome abierto
+#  tenga sesión iniciada en el sitio, entonces hace el login automático, pero no funciona, no detecta que se hizo login exitoso,
+#  y no sube la imagen. Hay que revisar esa parte para que funcione correctamente con un Chrome ya abierto y con sesión activa.
