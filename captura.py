@@ -2,6 +2,7 @@ import mss
 from datetime import datetime
 from pathlib import Path
 
+
 def capturar_region(region: dict, carpeta="screenshots") -> str:
     Path(carpeta).mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

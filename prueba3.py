@@ -3,14 +3,18 @@ import ctypes
 
 # ESTA LÍNEA DEBE IR ANTES DE CREAR LA VENTANA TKINTER
 try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2) # Para Windows 8.1 y 10/11
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Para Windows 8.1 y 10/11
 except:
-    ctypes.windll.user32.SetProcessDPIAware() # Para versiones más antiguas
+    ctypes.windll.user32.SetProcessDPIAware()  # Para versiones más antiguas
+
+
 class MedidorDeRegion:
     def __init__(self):
         self.root = tk.Tk()
         self.root.overrideredirect(True)
-        self.root.geometry(f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0")
+        self.root.geometry(
+            f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0"
+        )
         self.root.attributes("-alpha", 0.3)
         self.root.config(cursor="cross")
 
@@ -30,16 +34,26 @@ class MedidorDeRegion:
         self.inicio_x = event.x
         self.inicio_y = event.y
         self.rectangulo = self.canvas.create_rectangle(
-            self.inicio_x, self.inicio_y, self.inicio_x, self.inicio_y, 
-            outline="red", width=2
+            self.inicio_x,
+            self.inicio_y,
+            self.inicio_x,
+            self.inicio_y,
+            outline="red",
+            width=2,
         )
         self.texto = self.canvas.create_text(
-            self.inicio_x + 10, self.inicio_y - 10, 
-            text="0 x 0", fill="white", font=("Arial", 12, "bold"), anchor="nw"
+            self.inicio_x + 10,
+            self.inicio_y - 10,
+            text="0 x 0",
+            fill="white",
+            font=("Arial", 12, "bold"),
+            anchor="nw",
         )
 
     def al_arrastrar(self, event):
-        self.canvas.coords(self.rectangulo, self.inicio_x, self.inicio_y, event.x, event.y)
+        self.canvas.coords(
+            self.rectangulo, self.inicio_x, self.inicio_y, event.x, event.y
+        )
         ancho = abs(event.x - self.inicio_x)
         alto = abs(event.y - self.inicio_y)
         self.canvas.itemconfig(self.texto, text=f"{ancho} x {alto} px")
@@ -50,18 +64,13 @@ class MedidorDeRegion:
         # min() asegura que funcione aunque arrastres de abajo hacia arriba
         top = min(self.inicio_y, event.y)
         left = min(self.inicio_x, event.x)
-        
+
         # Calcula las dimensiones
         width = abs(event.x - self.inicio_x)
         height = abs(event.y - self.inicio_y)
 
         # Crea el diccionario con el formato exacto que pediste
-        REGION = {
-            "top": top,
-            "left": left,
-            "width": width,
-            "height": height
-        }
+        REGION = {"top": top, "left": left, "width": width, "height": height}
 
         # Imprime el resultado en consola
         print("\n📋 Copia tu región aquí:")
@@ -71,6 +80,7 @@ class MedidorDeRegion:
 
     def iniciar(self):
         self.root.mainloop()
+
 
 if __name__ == "__main__":
     print("Haz clic y arrastra para obtener el diccionario de la región.")

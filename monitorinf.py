@@ -6,7 +6,7 @@ for m in get_monitors():
     # m.width, m.height, m.x, m.y (coordenadas del monitor)
 
 
-#monitor = get_monitors()[0]
+# monitor = get_monitors()[0]
 
-#print("Ancho:", monitor.width)
-#print("Alto:", monitor.height)
+# print("Ancho:", monitor.width)
+# print("Alto:", monitor.height)

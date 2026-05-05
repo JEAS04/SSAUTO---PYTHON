@@ -6,15 +6,16 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 import os
 
+
 def crear_driver():
     options = webdriver.ChromeOptions()
     # options.add_argument("--headless")  # Descomenta para modo silencioso
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     return webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
+        service=Service(ChromeDriverManager().install()), options=options
     )
+
 
 def subir_a_sitio(sitio: dict, ruta_imagen: str):
     driver = crear_driver()
@@ -23,9 +24,15 @@ def subir_a_sitio(sitio: dict, ruta_imagen: str):
     try:
         # Login
         driver.get(sitio["url"])
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, sitio["selector_user"])))
-        driver.find_element(By.CSS_SELECTOR, sitio["selector_user"]).send_keys(sitio["usuario"])
-        driver.find_element(By.CSS_SELECTOR, sitio["selector_pass"]).send_keys(sitio["clave"])
+        wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, sitio["selector_user"]))
+        )
+        driver.find_element(By.CSS_SELECTOR, sitio["selector_user"]).send_keys(
+            sitio["usuario"]
+        )
+        driver.find_element(By.CSS_SELECTOR, sitio["selector_pass"]).send_keys(
+            sitio["clave"]
+        )
         driver.find_element(By.CSS_SELECTOR, sitio["selector_submit"]).click()
 
         # Ir a página de subida
@@ -33,9 +40,11 @@ def subir_a_sitio(sitio: dict, ruta_imagen: str):
         driver.get(sitio["url_upload"])
 
         # Subir archivo
-        input_file = wait.until(EC.presence_of_element_located(
-            (By.CSS_SELECTOR, sitio["selector_input_file"])
-        ))
+        input_file = wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, sitio["selector_input_file"])
+            )
+        )
         input_file.send_keys(os.path.abspath(ruta_imagen))
 
         print(f"[✓] Subido a: {sitio['url_upload']}")

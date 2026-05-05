@@ -37,6 +37,7 @@ SITIOS = [
     },
 ]
 
+
 # ── Lógica de captura y subida ───────────────────────────────────────
 def capturar(region):
     Path("screenshots").mkdir(exist_ok=True)
@@ -47,6 +48,7 @@ def capturar(region):
         mss.tools.to_png(screenshot.rgb, screenshot.size, output=ruta)
     return ruta
 
+
 def crear_driver(headless):
     options = webdriver.ChromeOptions()
     if headless:
@@ -55,9 +57,9 @@ def crear_driver(headless):
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     return webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
+        service=Service(ChromeDriverManager().install()), options=options
     )
+
 
 def subir(sitio, ruta_imagen, headless, log):
     driver = crear_driver(headless)
@@ -65,17 +67,27 @@ def subir(sitio, ruta_imagen, headless, log):
     try:
         if sitio["necesita_login"]:
             driver.get(sitio["url_login"])
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, sitio["selector_user"])))
-            driver.find_element(By.CSS_SELECTOR, sitio["selector_user"]).send_keys(sitio["usuario"])
-            driver.find_element(By.CSS_SELECTOR, sitio["selector_pass"]).send_keys(sitio["clave"])
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, sitio["selector_user"])
+                )
+            )
+            driver.find_element(By.CSS_SELECTOR, sitio["selector_user"]).send_keys(
+                sitio["usuario"]
+            )
+            driver.find_element(By.CSS_SELECTOR, sitio["selector_pass"]).send_keys(
+                sitio["clave"]
+            )
             driver.find_element(By.CSS_SELECTOR, sitio["selector_btn_login"]).click()
             wait.until(EC.url_contains("secure"))
             log(f"  ✓ Login exitoso en {sitio['nombre']}")
 
         driver.get(sitio["url_upload"])
-        input_file = wait.until(EC.presence_of_element_located(
-            (By.CSS_SELECTOR, sitio["selector_input_file"])
-        ))
+        input_file = wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, sitio["selector_input_file"])
+            )
+        )
         input_file.send_keys(os.path.abspath(ruta_imagen))
         driver.find_element(By.CSS_SELECTOR, sitio["selector_submit"]).click()
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "h3")))
@@ -85,6 +97,7 @@ def subir(sitio, ruta_imagen, headless, log):
         log(f"  ✗ Error en {sitio['nombre']}: {e}")
     finally:
         driver.quit()
+
 
 # ── Interfaz gráfica ─────────────────────────────────────────────────
 class App(tk.Tk):
@@ -97,7 +110,9 @@ class App(tk.Tk):
 
     def _build_ui(self):
         # ── Región de captura ──
-        frame_region = ttk.LabelFrame(self, text="Región de captura (píxeles)", padding=10)
+        frame_region = ttk.LabelFrame(
+            self, text="Región de captura (píxeles)", padding=10
+        )
         frame_region.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
 
         labels = ["Top", "Left", "Width", "Height"]
@@ -105,9 +120,11 @@ class App(tk.Tk):
         self.region_vars = {}
 
         for i, (lbl, val) in enumerate(zip(labels, defaults)):
-            ttk.Label(frame_region, text=lbl).grid(row=0, column=i*2, padx=(0, 4))
+            ttk.Label(frame_region, text=lbl).grid(row=0, column=i * 2, padx=(0, 4))
             var = tk.IntVar(value=val)
-            ttk.Entry(frame_region, textvariable=var, width=7).grid(row=0, column=i*2+1, padx=(0, 12))
+            ttk.Entry(frame_region, textvariable=var, width=7).grid(
+                row=0, column=i * 2 + 1, padx=(0, 12)
+            )
             self.region_vars[lbl.lower()] = var
 
         # ── Opciones ──
@@ -115,8 +132,11 @@ class App(tk.Tk):
         frame_opts.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 12))
 
         self.headless_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(frame_opts, text="Modo headless (sin ventana de Chrome)",
-                        variable=self.headless_var).grid(row=0, column=0, sticky="w")
+        ttk.Checkbutton(
+            frame_opts,
+            text="Modo headless (sin ventana de Chrome)",
+            variable=self.headless_var,
+        ).grid(row=0, column=0, sticky="w")
 
         # ── Botón ejecutar ──
         self.btn = ttk.Button(self, text="▶  Capturar y subir", command=self._ejecutar)
@@ -126,10 +146,17 @@ class App(tk.Tk):
         frame_log = ttk.LabelFrame(self, text="Registro", padding=10)
         frame_log.grid(row=3, column=0, columnspan=2, sticky="nsew")
 
-        self.log_text = tk.Text(frame_log, height=14, width=62,
-                                state="disabled", font=("Consolas", 10),
-                                bg="#1e1e1e", fg="#d4d4d4",
-                                insertbackground="white", relief="flat")
+        self.log_text = tk.Text(
+            frame_log,
+            height=14,
+            width=62,
+            state="disabled",
+            font=("Consolas", 10),
+            bg="#1e1e1e",
+            fg="#d4d4d4",
+            insertbackground="white",
+            relief="flat",
+        )
         self.log_text.pack(side="left", fill="both", expand=True)
 
         scroll = ttk.Scrollbar(frame_log, command=self.log_text.yview)
@@ -138,9 +165,9 @@ class App(tk.Tk):
 
         # Etiqueta de estado
         self.status_var = tk.StringVar(value="Listo")
-        ttk.Label(self, textvariable=self.status_var,
-                  foreground="gray").grid(row=4, column=0, columnspan=2,
-                                          sticky="w", pady=(8, 0))
+        ttk.Label(self, textvariable=self.status_var, foreground="gray").grid(
+            row=4, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
 
     def _log(self, msg):
         self.log_text.configure(state="normal")
@@ -176,6 +203,7 @@ class App(tk.Tk):
             self.status_var.set("Error")
         finally:
             self.btn.configure(state="normal")
+
 
 if __name__ == "__main__":
     App().mainloop()

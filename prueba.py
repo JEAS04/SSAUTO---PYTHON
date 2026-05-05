@@ -10,7 +10,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 # ── Configuración de prueba ──────────────────────────────────────────
-REGION = {'top': 178, 'left': 47, 'width': 1290, 'height': 728}
+REGION = {"top": 178, "left": 47, "width": 1290, "height": 728}
 
 URL = [
     {
@@ -35,6 +35,7 @@ URL = [
     },
 ]
 
+
 # ── 1. Captura de región ─────────────────────────────────────────────
 def capturar(region):
     Path("screenshots").mkdir(exist_ok=True)
@@ -42,20 +43,23 @@ def capturar(region):
     ruta = f"screenshots/captura_{ts}.png"
 
     with mss.MSS() as sct:
-        screenshot = sct.grab(region)   # grab() sí acepta el dict con top/left/width/height
+        screenshot = sct.grab(
+            region
+        )  # grab() sí acepta el dict con top/left/width/height
         mss.tools.to_png(screenshot.rgb, screenshot.size, output=ruta)
 
     print(f"[✓] Captura guardada: {ruta}")
     return ruta
+
 
 # ── 2. Driver de Chrome ──────────────────────────────────────────────
 def crear_driver():
     options = webdriver.ChromeOptions()
     # options.add_argument("--headless")  # Descomenta para modo sin ventana
     return webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
+        service=Service(ChromeDriverManager().install()), options=options
     )
+
 
 # ── 3. Subida a un sitio ─────────────────────────────────────────────
 def subir(sitio, ruta_imagen):
@@ -67,9 +71,17 @@ def subir(sitio, ruta_imagen):
         # Login (si lo requiere)
         if sitio["necesita_login"]:
             driver.get(sitio["url_login"])
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, sitio["selector_user"])))
-            driver.find_element(By.CSS_SELECTOR, sitio["selector_user"]).send_keys(sitio["usuario"])
-            driver.find_element(By.CSS_SELECTOR, sitio["selector_pass"]).send_keys(sitio["clave"])
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, sitio["selector_user"])
+                )
+            )
+            driver.find_element(By.CSS_SELECTOR, sitio["selector_user"]).send_keys(
+                sitio["usuario"]
+            )
+            driver.find_element(By.CSS_SELECTOR, sitio["selector_pass"]).send_keys(
+                sitio["clave"]
+            )
             driver.find_element(By.CSS_SELECTOR, sitio["selector_btn_login"]).click()
             wait.until(EC.url_contains("secure"))
             print("  [✓] Login exitoso")
@@ -78,9 +90,11 @@ def subir(sitio, ruta_imagen):
         driver.get(sitio["url_upload"])
 
         # Seleccionar y subir el archivo
-        input_file = wait.until(EC.presence_of_element_located(
-            (By.CSS_SELECTOR, sitio["selector_input_file"])
-        ))
+        input_file = wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, sitio["selector_input_file"])
+            )
+        )
         input_file.send_keys(os.path.abspath(ruta_imagen))
 
         # Confirmar subida
@@ -96,6 +110,7 @@ def subir(sitio, ruta_imagen):
 
     finally:
         driver.quit()
+
 
 # ── 4. Main ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
