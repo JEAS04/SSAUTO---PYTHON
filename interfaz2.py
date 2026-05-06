@@ -945,10 +945,11 @@ if __name__ == "__main__":
 # Las pruebas se realizaron con dos sitios de ejemplo, uno sin login y otro con login, utilizando Selenium para manejar la autenticación y la subida de archivos.
 # Los sitios son: https://the-internet.herokuapp.com/upload (sin login) y https://the-internet.herokuapp.com/login (con login de prueba: tomsmith/SuperSecretPassword!).
 
-
+# arreglado
 # realmente es necesario iniciar sesion cada vez que se quiera subir una captura a un sitio que requiere autenticacion?, ademas si el sitio se mantiene abierto siempre
 # en el navegador, no se podria aprovechar esa sesion activa para subir las capturas sin necesidad de hacer login cada vez?
 
+# arreglado
 # Hay que arreglar el chrome con depuracion, ya que se abre bien, pero cuando se ejecuta la captura y subida, no detecta la sesión activa, aunque el Chrome abierto
 #  tenga sesión iniciada en el sitio, entonces hace el login automático, pero no funciona, no detecta que se hizo login exitoso,
 #  y no sube la imagen. Hay que revisar esa parte para que funcione correctamente con un Chrome ya abierto y con sesión activa.
@@ -963,3 +964,5 @@ if __name__ == "__main__":
 # pero no estaba funcionando así. Entonces, para solucionar esto, modifiqué el flujo para que después de detectar la sesión activa,
 # se navegue directamente a la página de subida en las pestañas correspondientes donde ya habia una sesion iniciada, esperando que
 # no se abrieran nuevas pestañas, ademas de esto se debe confirmar la subida de la imagen al sitio, con su respectivo boton.
+
+# PENDIENTES: PONERLE LINEA DE TIEMPO, TIEMPO DE DESARROLLO, Y PROXIMOS PASOS, MEJORAS FUTURAS, ETC.
