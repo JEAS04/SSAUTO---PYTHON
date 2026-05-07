@@ -1,17 +1,21 @@
-from captura import capturar_region
-from uploader import subir_a_sitio
-from config import REGION, URL
+"""
+main.py — Punto de entrada de SSAuto.
 
+Este es el único archivo que se ejecuta directamente:
+    python main.py
 
-def main():
-    # 1. Capturar
-    ruta = capturar_region(REGION)
+Solo aplica el tema visual e instancia la ventana principal.
+Toda la lógica está en los módulos del proyecto.
+"""
 
-    # 2. Subir a cada sitio
-    for sitio in URL:
-        print(f"\n→ Procesando: {sitio['url']}")
-        subir_a_sitio(sitio, ruta)
+import customtkinter as ctk
+from configuracion import TEMA_APARIENCIA, TEMA_COLOR
+from ventana_principal import App
 
+# Aplicar tema antes de crear cualquier widget.
+ctk.set_appearance_mode(TEMA_APARIENCIA)
+ctk.set_default_color_theme(TEMA_COLOR)
 
 if __name__ == "__main__":
-    main()
+    app = App()
+    app.mainloop()
