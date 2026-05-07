@@ -23,7 +23,14 @@ import customtkinter as ctk
 from tkinter import messagebox
 
 from automatizacion import capturar, subir
-from configuracion import SITIOS, cargar_config, guardar_config
+from configuracion import (
+    SITIOS,
+    PERFIL_POR_DEFECTO,
+    cargar_config,
+    guardar_config,
+    cargar_perfiles,
+    guardar_perfiles,
+)
 from credenciales import cargar_credenciales
 from medidor import MEDIDOR_CODE
 from ventana_credenciales import VentanaCredenciales
@@ -88,9 +95,9 @@ class App(ctk.CTk):
 
         padre = self._frame_scroll
 
-        # 1. Región de captura: campo para pegar dict y controles individuales.
+        # 1. Región de captura: selector de perfiles, coordenadas y medidor.
         sec1 = self._seccion(padre, "  REGIÓN DE CAPTURA", fila=0)
-        self._crear_entrada_pegar(sec1)
+        self._crear_panel_perfiles(sec1)
         self._separador(sec1)
         self._crear_coordenadas(sec1)
         ctk.CTkButton(
@@ -178,45 +185,217 @@ class App(ctk.CTk):
         cuerpo.pack(fill="x", padx=14, pady=12)
         return cuerpo
 
-    def _crear_entrada_pegar(self, padre):
+    def _crear_panel_perfiles(self, padre):
         """
-        Crea el campo de texto para pegar un dict de región completo.
+        Crea el panel de gestión de perfiles de región.
 
-        Permite copiar la salida del medidor directamente y aplicarla
-        de una vez, sin escribir cada coordenada a mano.
+        Contiene tres zonas:
+          · Fila superior : selector desplegable de perfiles guardados + botón Cargar.
+          · Fila inferior : campo de nombre + botones Guardar y Eliminar.
+          · Fila de pegado: campo de texto para pegar un dict de región directamente.
+
+        Los perfiles se persisten en config.json mediante cargar_perfiles /
+        guardar_perfiles para que estén disponibles entre ejecuciones.
         """
-        fila = ctk.CTkFrame(padre, fg_color="transparent")
-        fila.pack(fill="x", pady=(0, 8))
+        # Estado interno: dict en memoria con todos los perfiles.
+        self._perfiles = cargar_perfiles()
+
+        # ── Fila 1: selector + botón Cargar ──────────────────────────
+        fila_selector = ctk.CTkFrame(padre, fg_color="transparent")
+        fila_selector.pack(fill="x", pady=(0, 6))
 
         ctk.CTkLabel(
-            fila,
+            fila_selector,
+            text="Perfil:",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray60"),
+        ).pack(side="left", padx=(0, 8))
+
+        # El OptionMenu se reconstruye cada vez que cambia la lista de perfiles.
+        self._perfil_var = ctk.StringVar(value="— sin perfiles —")
+        self._perfil_menu = ctk.CTkOptionMenu(
+            fila_selector,
+            variable=self._perfil_var,
+            values=self._nombres_perfiles(),
+            font=ctk.CTkFont(size=11),
+            dynamic_resizing=False,
+            width=220,
+        )
+        self._perfil_menu.pack(side="left", padx=(0, 8), fill="x", expand=True)
+
+        ctk.CTkButton(
+            fila_selector,
+            text="Cargar",
+            command=self._cargar_perfil_seleccionado,
+            font=ctk.CTkFont(size=10),
+            width=70,
+            height=28,
+        ).pack(side="left")
+
+        # ── Fila 2: nombre + Guardar + Eliminar ───────────────────────
+        fila_acciones = ctk.CTkFrame(padre, fg_color="transparent")
+        fila_acciones.pack(fill="x", pady=(0, 8))
+
+        ctk.CTkLabel(
+            fila_acciones,
+            text="Nombre:",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray60"),
+        ).pack(side="left", padx=(0, 8))
+
+        # Campo donde el usuario escribe el nombre del perfil a guardar.
+        self._perfil_nombre_var = ctk.StringVar()
+        ctk.CTkEntry(
+            fila_acciones,
+            textvariable=self._perfil_nombre_var,
+            placeholder_text="Ej: Monitor 1 — Panel izquierdo",
+            font=ctk.CTkFont(size=11),
+        ).pack(side="left", padx=(0, 8), fill="x", expand=True)
+
+        ctk.CTkButton(
+            fila_acciones,
+            text="Guardar",
+            command=self._guardar_perfil_actual,
+            font=ctk.CTkFont(size=10),
+            width=70,
+            height=28,
+            fg_color=("#1f6aa5", "#1f6aa5"),
+            hover_color=("#144e7a", "#144e7a"),
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(
+            fila_acciones,
+            text="Eliminar",
+            command=self._eliminar_perfil_seleccionado,
+            font=ctk.CTkFont(size=10),
+            width=70,
+            height=28,
+            fg_color=("gray70", "gray30"),
+            hover_color=("gray60", "gray40"),
+        ).pack(side="left")
+
+        # ── Fila 3: campo pegar dict (acceso rápido sin usar el medidor) ─
+        fila_pegar = ctk.CTkFrame(padre, fg_color="transparent")
+        fila_pegar.pack(fill="x", pady=(0, 0))
+
+        ctk.CTkLabel(
+            fila_pegar,
             text="Pegar región:",
             font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray60"),
         ).pack(side="left", padx=(0, 8))
 
-        self.region_paste_var = ctk.StringVar(
-            value="{'top': 392, 'left': 524, 'width': 934, 'height': 404}"
-        )
+        self.region_paste_var = ctk.StringVar(value=str(PERFIL_POR_DEFECTO))
         entrada = ctk.CTkEntry(
-            fila,
+            fila_pegar,
             textvariable=self.region_paste_var,
             font=ctk.CTkFont(size=11),
         )
         entrada.pack(side="left", padx=(0, 8), fill="x", expand=True)
-        # Aplicar automáticamente al perder el foco o presionar Enter.
         entrada.bind("<FocusOut>", self._parsear_region)
         entrada.bind("<Return>", self._parsear_region)
         self.region_paste = entrada
 
         ctk.CTkButton(
-            fila,
+            fila_pegar,
             text="Aplicar",
             command=self._parsear_region,
             font=ctk.CTkFont(size=10),
             width=70,
             height=28,
         ).pack(side="left")
+
+    # ── Helpers de perfiles ───────────────────────────────────────────
+
+    def _nombres_perfiles(self) -> list[str]:
+        """
+        Devuelve la lista de nombres de perfiles para el OptionMenu.
+
+        Si no hay ninguno, devuelve un placeholder para que el widget
+        no quede vacío (CTkOptionMenu requiere al menos un valor).
+        """
+        nombres = list(self._perfiles.keys())
+        return nombres if nombres else ["— sin perfiles —"]
+
+    def _actualizar_menu_perfiles(self):
+        """
+        Reconstruye los valores del OptionMenu con la lista actual de perfiles.
+
+        Se llama después de guardar o eliminar un perfil para que el
+        desplegable refleje el estado real sin necesidad de reiniciar.
+        """
+        nombres = self._nombres_perfiles()
+        self._perfil_menu.configure(values=nombres)
+        # Seleccionar el primero de la lista como valor activo.
+        self._perfil_var.set(nombres[0])
+
+    def _cargar_perfil_seleccionado(self):
+        """
+        Lee las coordenadas del perfil seleccionado en el OptionMenu
+        y las aplica a los campos de la UI.
+
+        Si el valor seleccionado es el placeholder (sin perfiles) o no
+        existe en el dict, no hace nada y registra un aviso en el log.
+        """
+        nombre = self._perfil_var.get()
+        if nombre not in self._perfiles:
+            self._log("✗ No hay ningún perfil seleccionado.")
+            return
+        region = self._perfiles[nombre]
+        self._aplicar_region(region)
+        # Poner el nombre en el campo de texto para facilitar editar y re-guardar.
+        self._perfil_nombre_var.set(nombre)
+        self._log(f"✓ Perfil cargado: «{nombre}» → {region}")
+
+    def _guardar_perfil_actual(self):
+        """
+        Guarda las coordenadas actuales de los campos bajo el nombre introducido.
+
+        Si el nombre ya existe lo sobreescribe (permite actualizar un perfil
+        existente después de mover o cambiar la región). Si está vacío, muestra
+        un error.
+        """
+        nombre = self._perfil_nombre_var.get().strip()
+        if not nombre:
+            messagebox.showerror(
+                "Nombre vacío",
+                "Escribe un nombre para el perfil antes de guardar.",
+            )
+            return
+
+        region = {k: v.get() for k, v in self.region_vars.items()}
+        es_nuevo = nombre not in self._perfiles
+        self._perfiles[nombre] = region
+        guardar_perfiles(self._perfiles)
+        self._actualizar_menu_perfiles()
+        self._perfil_var.set(nombre)  # Dejar seleccionado el perfil recién guardado.
+
+        accion = "guardado" if es_nuevo else "actualizado"
+        self._log(f"✓ Perfil {accion}: «{nombre}» → {region}")
+
+    def _eliminar_perfil_seleccionado(self):
+        """
+        Elimina el perfil seleccionado en el OptionMenu después de pedir confirmación.
+
+        Si no hay perfil válido seleccionado, muestra un aviso en el log
+        sin abrir ningún diálogo de confirmación.
+        """
+        nombre = self._perfil_var.get()
+        if nombre not in self._perfiles:
+            self._log("✗ No hay ningún perfil seleccionado para eliminar.")
+            return
+
+        confirmar = messagebox.askyesno(
+            "Eliminar perfil",
+            f"¿Eliminar el perfil «{nombre}»?",
+        )
+        if not confirmar:
+            return
+
+        del self._perfiles[nombre]
+        guardar_perfiles(self._perfiles)
+        self._actualizar_menu_perfiles()
+        self._log(f"→ Perfil eliminado: «{nombre}»")
 
     def _crear_coordenadas(self, padre):
         """
@@ -552,10 +731,20 @@ class App(ctk.CTk):
         threading.Thread(target=_esperar, daemon=True).start()
 
     def _aplicar_region(self, region: dict):
-        """Actualiza los cuatro campos de coordenadas con los valores del medidor."""
+        """
+        Actualiza los cuatro campos de coordenadas con los valores recibidos.
+
+        Se llama tanto desde el medidor (subproceso) como desde _cargar_perfil,
+        por eso está separada: centraliza la escritura en region_vars en un
+        solo lugar y evita duplicar lógica.
+        """
         for clave in ("top", "left", "width", "height"):
             if clave in region:
                 self.region_vars[clave].set(int(region[clave]))
+        # Sincronizar también el campo de pegar para que quede consistente.
+        self.region_paste_var.set(
+            str({k: v.get() for k, v in self.region_vars.items()})
+        )
         self._log(f"✓ Región actualizada: {region}")
         self.btn.configure(state="normal")
 

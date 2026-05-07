@@ -1,5 +1,5 @@
 """
-config.py — Constantes globales y configuración de la aplicación.
+configuracion.py — Constantes globales y configuración de la aplicación.
 
 Este módulo centraliza todo lo que puede necesitar cambiarse sin tocar
 la lógica del programa: sitios destino, rutas de archivos y funciones
@@ -89,28 +89,40 @@ def guardar_config(datos: dict) -> None:
         print(f"[✗] Error guardando config: {e}")
 
 
-# # Coordenadas de la región a capturar (x, y, ancho, alto)
-# REGION = {"top": 100, "left": 200, "width": 800, "height": 600}
+# ── Perfiles de región ────────────────────────────────────────────────
+# Los perfiles se guardan dentro de config.json bajo la clave "perfiles_region".
+# Estructura: {"Monitor principal": {"top": 0, "left": 0, "width": 1920, "height": 1080}, ...}
+# Se usan funciones independientes para dejar clara la separación de datos.
 
-# URL = [
-#     {
-#         "url": "HUBSPOT",
-#         "usuario": "tu_usuario",
-#         "clave": "tu_clave",
-#         "url_upload": "HUBSPOT-SUBIR",
-#         "selector_user": "#username",
-#         "selector_pass": "#password",
-#         "selector_submit": "#btn-login",
-#         "selector_input_file": "input[type='file']",
-#     },
-#     {
-#         "url": "SUNRUN",
-#         "usuario": "tu_usuario2",
-#         "clave": "tu_clave2",
-#         "url_upload": "SUNRUN-SUBIR",
-#         "selector_user": "#email",
-#         "selector_pass": "#pwd",
-#         "selector_submit": ".login-btn",
-#         "selector_input_file": "#file-upload",
-#     },
-# ]
+CLAVE_PERFILES = "perfiles_region"
+
+# Perfil por defecto que se carga la primera vez que se abre la app,
+# antes de que el usuario haya creado ninguno propio.
+PERFIL_POR_DEFECTO = {"top": 392, "left": 524, "width": 934, "height": 404}
+
+
+def cargar_perfiles() -> dict:
+    """
+    Devuelve todos los perfiles de región guardados en config.json.
+
+    Si no existe ninguno todavía, devuelve un dict vacío para que la app
+    arranque sin perfiles predefinidos y el usuario cree los suyos.
+    """
+    config = cargar_config()
+    return config.get(CLAVE_PERFILES, {})
+
+
+def guardar_perfiles(perfiles: dict) -> None:
+    """
+    Persiste el dict completo de perfiles en config.json.
+
+    Lee la config actual para no sobreescribir otros valores (keybind,
+    etc.) y solo actualiza la clave de perfiles.
+
+    Parámetros
+    ----------
+    perfiles : dict con el formato {nombre_perfil: {top, left, width, height}}
+    """
+    config = cargar_config()
+    config[CLAVE_PERFILES] = perfiles
+    guardar_config(config)

@@ -973,7 +973,13 @@ if __name__ == "__main__":
 # Se añadio scroll para que el contenido de la interfaz se vea correctamente, ademas ahora al minimizar y maximizar, el contenido se adapta correctamente.
 # Se migro todo el script de Tkinter a CustomTkinter con toda la funcionalidad preservada, lo que nos permitio hacer una interfaz mas estetica y mas facil de optimizar, CustomTkinter permite hacer que
 #  el tema de fondo de la aplicacion sea mas sencillo de utilizar o cambiar, lo cual no se podia hacer tan facil desde Tkinter, se quitaron todos los LOGS y se documento
-# y se documento la funcionalidad del script, se le coloco un favicon sencillo
+# y se documento la funcionalidad del script, se le coloco un favicon sencillo.
+# Se agrego una nueva funcionalidad, ahora se pueden guardar diferentes perfiles segun el tipo de monitor, ejemplo: (monitor 1- panel izquierdo) y se rellena automaticamente
+# cuando se mide la pantalla se da un nombre y se guarda, y asi se crea un nuevo perfil, luego se puede ir cambiando de perfiles y dar al boton cargar, para usar
+# la region guardada
+
+# pendientes: hacer que se guarde en config.json y que se pueda utilizar cualquier monitor conectado a la computadora principal
+
 # CORRECCIONES APLICADAS:
 # 1 — _make_status_bar: .grid(side=) → .pack(side=)
 # 2 — _make_log_section era código muerto (log_text se creaba dos veces); eliminado
