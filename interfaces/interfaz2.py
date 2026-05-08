@@ -1004,6 +1004,11 @@ if __name__ == "__main__":
 # ├── cookies/                  ← Generado automáticamente al hacer login
 # └── screenshots/              ← Generado automáticamente al capturar
 
+# Se empezo a realizar el script con web scraping + api, para automatizar varias cosas
+# pendientes. realizar el web scraping para comparar los datos traidos de ahi con los de la api, determinar si son iguales o no, si son iguales se dejan iguales,
+#  si son diferentes se ponen los dos encima del otro, como una sugerencia, si en uno de los dos el dato esta vacio, se coloca el dato que este,
+#  ejemplo: sitio 1: nombre: no encontrado, pero en el sitio 2: nombre: Julian, se coloca el valor del sitio 2, para asi lograr una comparacion completa
+
 ## Mejoras necesarias (a corto plazo)
 
 # ### 1. Compatibilidad con macOS y Linux
