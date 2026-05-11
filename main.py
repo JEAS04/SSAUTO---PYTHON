@@ -8,6 +8,8 @@ Solo aplica el tema visual e instancia la ventana principal.
 Toda la lógica está en los módulos del proyecto.
 """
 
+# https://sunrun.my.site.com/partners/s/fs-dispatch/a0QUJ00000pd7qf2AA/fsd1217790
+# https://sunrun.my.site.com/partners/s/fs-dispatch/a0QUJ00000iYmqV2AS/fsd1187405
 import customtkinter as ctk
 from configuracion import TEMA_APARIENCIA, TEMA_COLOR
 from ventana_principal import App

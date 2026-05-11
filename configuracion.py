@@ -33,27 +33,49 @@ KEYRING_APP = "AutoCapturaApp"
 # los valores sin modificar el resto del código.
 SITIOS = [
     {
-        # Sitio público: no necesita iniciar sesión.
-        "nombre": "Sitio 1 (sin login)",
-        "necesita_login": False,
-        "url_upload": "https://the-internet.herokuapp.com/upload",
-        "selector_input_file": "#file-upload",  # campo <input type="file">
-        "selector_submit": "#file-submit",  # botón de envío
-    },
-    {
-        # Sitio privado: requiere usuario y contraseña antes de subir.
-        "nombre": "Sitio 2 (con login)",
+        "nombre": "HUBSPOT",
         "necesita_login": True,
-        "url_login": "https://the-internet.herokuapp.com/login",
+        "url_login": "https://app.hubspot.com/login/",
         "selector_user": "#username",
         "selector_pass": "#password",
-        "selector_btn_login": "button[type='submit']",
+        "selector_btn_login": "#loginBtn",
+        # URL base del ticket: se reemplazará dinámicamente con el número
+        # del ticket actual cuando se integre con la API de HubSpot.
+        # Por ahora apunta a una URL de prueba.
+        "url_upload": "https://app.hubspot.com/contacts/TICKET_ID",
+        # ── Selectores específicos para subir captura a nota ──────────
+        # Flujo: Notas → Crear nota → botón imagen → input file → Guardar
+        "selector_tab_notas": '[data-test-id="timeline-tab-filter-notes"]',
+        "selector_btn_crear_nota": 'button[data-selenium-test="create-engagement-note-button"]',
+        "selector_btn_imagen": '[data-test-id="image-upload-toggle"]',
+        "selector_input_file": 'input[type="file"]',
+        "selector_btn_guardar": '[data-test-id="activity-creator-window-footer-save-button"]',
+        "selector_confirmacion": "h3, h1",
+        "palabras_confirmacion": [
+            "uploaded",
+            "success",
+            "exitoso",
+            "subido",
+            "note",
+            "nota",
+            "guardado",
+        ],
+    },
+    {
+        "nombre": "SUNRUN",
+        "necesita_login": True,
+        "url_login": "https://sunrun.my.site.com/partner/login?locale=us",
+        "selector_user": "#username",
+        "selector_pass": "#password",
+        "selector_btn_login": "#Login",
         # url_base_upload se usa cuando la URL de subida varía por número
         # (p. ej. /upload/1, /upload/2…). Si es fija, usa url_upload.
         "url_base_upload": "https://miejemplo.com/upload",
         "url_upload": "https://the-internet.herokuapp.com/upload",
         "selector_input_file": "#file-upload",
         "selector_submit": "#file-submit",
+        "selector_confirmacion": "h3, h1",
+        "palabras_confirmacion": ["uploaded", "success", "exitoso", "subido"],
     },
 ]
 

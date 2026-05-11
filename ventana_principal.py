@@ -77,6 +77,11 @@ class App(ctk.CTk):
         if faltan_creds:
             self.after(100, self._abrir_login_inicial)
 
+    def _abrir_comparacion(self):
+        from ventana_comparacion import VentanaComparacion
+
+        VentanaComparacion(self, log_callback=self._log)
+
     # ── Construcción de la UI ─────────────────────────────────────────
 
     def _construir_ui(self):
@@ -466,6 +471,17 @@ class App(ctk.CTk):
             height=28,
         ).pack(side="left")
 
+        ctk.CTkButton(
+            fila_botones,
+            text="🔍 Comparar",
+            command=self._abrir_comparacion,
+            font=ctk.CTkFont(size=10),
+            width=110,
+            height=28,
+            fg_color=("#1f6aa5", "#1f6aa5"),
+            hover_color=("#144e7a", "#144e7a"),
+        ).pack(side="left", padx=(8, 0))
+
     def _crear_opciones(self, padre):
         """
         Crea los toggles de modo headless, Chrome existente y el atajo de teclado.
@@ -473,7 +489,9 @@ class App(ctk.CTk):
         # Toggle: modo headless (Chrome sin ventana visible)
         self.headless_var = ctk.BooleanVar(value=False)
         self._fila_toggle(
-            padre, "Modo headless (sin ventana de Chrome)", self.headless_var
+            padre,
+            "Modo sin ventana de Chrome",
+            self.headless_var,  # Modo headless (sin ventana de Chrome)"
         )
         self._separador(padre)
 

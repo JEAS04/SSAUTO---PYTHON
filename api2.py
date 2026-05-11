@@ -210,5 +210,121 @@ def extraer_tickets():
         print(f"❌ Error de API: {e}")
 
 
+def extraer_ticket_por_fsd(fsd: str) -> dict | None:
+    """
+    Busca en HubSpot el ticket cuyo campo FSD coincide con el valor dado.
+
+    Parámetros
+    ----------
+    fsd : string con el número FSD, con o sin prefijo (ej: "FSD983316" o "983316").
+
+    Devuelve
+    --------
+    dict con claves: fsd, nombre, id_cliente, municipio, ticket_id
+    None si no se encuentra ningún ticket con ese FSD.
+    """
+    from hubspot.crm.tickets import PublicObjectSearchRequest, ApiException
+
+    # Normalizar: quitar el prefijo FSD si viene incluido y cualquier guión
+    fsd_numero = fsd.upper().replace("FSD", "").replace("-", "").strip()
+
+    NOMBRE_INTERNO_FSD = "fsd__"
+
+    # Búsqueda exacta por el valor del campo FSD
+    search_request = PublicObjectSearchRequest(
+        filter_groups=[
+            {
+                "filters": [
+                    {
+                        "propertyName": NOMBRE_INTERNO_FSD,
+                        "operator": "EQ",  # igual exacto
+                        "value": fsd_numero,
+                    }
+                ]
+            }
+        ],
+        properties=["subject", NOMBRE_INTERNO_FSD, "hs_object_id"],
+        limit=1,  # solo necesitamos el primero que coincida
+    )
+
+    try:
+        results_page = client.crm.tickets.search_api.do_search(
+            public_object_search_request=search_request
+        )
+
+        if not results_page.results:
+            return None  # No se encontró
+
+        ticket = results_page.results[0]
+        p = ticket.properties
+        asunto = p.get("subject", "")
+        fsd_real = p.get(NOMBRE_INTERNO_FSD, fsd_numero)
+
+        municipio = detectar_municipio(asunto)
+        nombre, id_cliente = parsear_asunto(asunto, municipio)
+
+        return {
+            "fsd": fsd_real,
+            "nombre": nombre,
+            "id_cliente": id_cliente,
+            "municipio": municipio,
+            "ticket_id": ticket.id,
+            "asunto": asunto,
+            "error": None,
+        }
+
+    except ApiException as e:
+        print(f"[HubSpot API] Error al buscar FSD {fsd}: {e}")
+        return {
+            "fsd": fsd_numero,
+            "nombre": "No encontrado",
+            "id_cliente": "No encontrado",
+            "municipio": "No detectado",
+            "ticket_id": None,
+            "asunto": "",
+            "error": str(e),
+        }
+
+
+# from hubspot.crm.properties import ApiException
+
+# props = client.crm.properties.core_api.get_all(object_type="tickets")
+
+# for p in props.results:
+#     print(p.name, "-", p.label)
+
+from hubspot.crm.properties import ApiException
+
+props = client.crm.properties.core_api.get_all(object_type="contacts")
+
+for p in props.results:
+    print(p.name, "-", p.label)
+
 if __name__ == "__main__":
     extraer_tickets()
+
+
+# necesito usar ciertos atributos que ya tengo anotados y usarlos para la comparacion con el scraping de SUNRUN, los usuarios de CONTACTO se identifican por id_de_goformz__contacto_ (id cliente), ademas en el nombre del ticket (subject) esta el fsd__ de ticket, nombre apellido (firstname, lastname) de contacto, id_goformz__servicios_tecnicos_ (id cliente) de contacto y una nota (notas), todo esto puede estar en la api con los mismos atributos, ademas tambien necesito el atributo municipio(pueblo_para_servicio_tecnico), Ticket ID o id de ticket (hs_ticket_id) y id de registro o Record ID (hs_object_id). Cabe resaltar que en el subject, en algunos tickets si esta toda esa informacion pero en otros se encuentra incompleta, la unica forma de identificar a ambos es por su id de GOFORMZ: id_de_goformz__contacto_ y id_goformz__servicios_tecnicos_ - ID GoFormz (Servicios Tecnicos)
+
+# tampoco
+# no me esta realizando la busqueda por fsd-000000, ni fsd000000, deberia admitir ambos y hasta sin la palabra fsd escrita, tampoco me esta usando el chrome ya abierto (default), y por lo tanto tampoco hace el web scraping a SUNRUN. Cabe recalcar que ya tengo la sesion abierta en chrome y comprobe que la http://localhost:9222/json/version dijera "webSocketDebuggerUrl": "ws://localhost:9222/devtools/browser/a5b8b551-c718-42fc-8d09-028825ae09f4" y TCP 127.0.0.1:9222 LISTENING -> TCP    127.0.0.1:9222         0.0.0.0:0              LISTENING       13928
+# Nombre de imagen               PID Nombre de sesión Núm. de ses Uso de memor
+# ========================= ======== ================ =========== ============
+# chrome.exe                   13928 Console                    6   191,196 KB pero no se abre el chrome que ya tengo abierto para eso, se abre uno nuevo o no carga nada del web scraping
+
+# bro, esto me imprime un monton de atributos o propiedades de TICKET, no esta mal, me sirve para ver que atributos tiene pero si son un monton XD
+# from hubspot.crm.properties import ApiException
+
+# props = client.crm.properties.core_api.get_all(object_type="tickets")
+
+# for p in props.results:
+#     print(p.name, "-", p.label)
+
+# necesito usar ciertos atributos que ya tengo anotados y usarlos para la comparacion con el scraping de SUNRUN, los usuarios de CONTACTO se identifican por id_de_goformz__contacto_ (id cliente), ademas en el nombre del ticket (subject) esta el fsd__ de ticket, nombre apellido (firstname, lastname) de contacto, id_goformz__servicios_tecnicos_ (id cliente) de contacto y una nota (notas), todo esto puede estar en la api con los mismos atributos, ademas tambien necesito el atributo municipio(pueblo_para_servicio_tecnico), Ticket ID o id de ticket (hs_ticket_id) y id de registro o Record ID (hs_object_id). Cabe resaltar que en el subject, en algunos tickets si esta toda esa informacion pero en otros se encuentra incompleta, la unica forma de identificar a ambos es por su id de GOFORMZ: id_de_goformz__contacto_ y id_goformz__servicios_tecnicos_ - ID GoFormz (Servicios Tecnicos)
+
+
+# #tampoco
+# # no me esta realizando la busqueda por fsd-000000, ni fsd000000, deberia admitir ambos y hasta sin la palabra fsd escrita, tampoco me esta usando el chrome ya abierto (default), y por lo tanto tampoco hace el web scraping a SUNRUN. Cabe recalcar que ya tengo la sesion abierta en chrome y comprobe que la http://localhost:9222/json/version dijera "webSocketDebuggerUrl": "ws://localhost:9222/devtools/browser/a5b8b551-c718-42fc-8d09-028825ae09f4" y TCP 127.0.0.1:9222 LISTENING -> TCP    127.0.0.1:9222         0.0.0.0:0              LISTENING       13928
+# # Nombre de imagen               PID Nombre de sesión Núm. de ses Uso de memor
+# # ========================= ======== ================ =========== ============
+# # chrome.exe                   13928 Console                    6   191,196 KB pero no se abre el chrome que ya tengo abierto para eso, se abre uno nuevo o no carga nada del web scraping

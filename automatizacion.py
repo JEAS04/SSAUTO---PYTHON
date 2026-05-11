@@ -164,7 +164,12 @@ def subir(
             driver.get(sitio["url_upload"])
 
         # ── Subida del archivo ────────────────────────────────────────
-        _realizar_subida(driver, espera, sitio, nombre, ruta_imagen, log)
+        # Si el sitio tiene selectores específicos de HubSpot (data-test-id
+        # para notas), usar flujo HubSpot; de lo contrario, flujo genérico.
+        if sitio.get("selector_tab_notas"):
+            _subir_captura_hubspot(driver, espera, sitio, nombre, ruta_imagen, log)
+        else:
+            _realizar_subida(driver, espera, sitio, nombre, ruta_imagen, log)
 
     except Exception as e:
         log(f"  ✗ Error inesperado en {nombre}: {e}")
@@ -339,3 +344,69 @@ def _realizar_subida(
     except Exception:
         log(f"  ✗ {nombre}: no se pudo confirmar la subida (timeout).")
         driver.save_screenshot(f"debug_upload_{nombre.replace(' ', '_')}.png")
+
+
+# ── Subida HubSpot (notas con imagen) ─────────────────────────────────
+
+
+def _subir_captura_hubspot(
+    driver, espera, sitio: dict, nombre: str, ruta_imagen: str, log
+) -> None:
+    """
+    Sube una captura a una nueva nota dentro del ticket actual de HubSpot.
+
+    Flujo específico de HubSpot:
+      1. Click en la pestaña "Notas" de la timeline
+      2. Click en "Crear nota"
+      3. Click en botón de imagen
+      4. Localiza el input file real
+      5. Sube la imagen
+      6. Guarda la nota
+
+    Requiere que el sitio tenga las claves:
+      selector_tab_notas, selector_btn_crear_nota, selector_btn_imagen,
+      selector_input_file, selector_btn_guardar
+    """
+    log(f"  → Subiendo captura a nota de {nombre}…")
+
+    # ── 1. ABRIR TAB "NOTAS" ──────────────────────────────────────────
+    log("  → Abriendo pestaña 'Notas'…")
+    espera.until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, sitio["selector_tab_notas"]))
+    ).click()
+    time.sleep(1)
+
+    # ── 2. CREAR NOTA ─────────────────────────────────────────────────
+    log("  → Creando nueva nota…")
+    espera.until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, sitio["selector_btn_crear_nota"]))
+    ).click()
+    time.sleep(1)
+
+    # ── 3. CLICK BOTÓN IMAGEN ─────────────────────────────────────────
+    log("  → Haciendo clic en botón de imagen…")
+    espera.until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, sitio["selector_btn_imagen"]))
+    ).click()
+    time.sleep(0.5)
+
+    # ── 4. INPUT FILE REAL ────────────────────────────────────────────
+    log("  → Localizando input file…")
+    file_input = espera.until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, sitio["selector_input_file"]))
+    )
+
+    # ── 5. SUBIR IMAGEN ───────────────────────────────────────────────
+    log(f"  → Enviando archivo: {ruta_imagen}")
+    file_input.send_keys(os.path.abspath(ruta_imagen))
+    # Esperar a que la imagen se procese (subida asíncrona en HubSpot)
+    time.sleep(2)
+
+    # ── 6. GUARDAR NOTA ───────────────────────────────────────────────
+    log("  → Guardando nota…")
+    espera.until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, sitio["selector_btn_guardar"]))
+    ).click()
+    time.sleep(1.5)
+
+    log(f"  ✓ Captura subida correctamente a nota de {nombre}")
