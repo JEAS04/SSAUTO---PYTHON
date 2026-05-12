@@ -186,19 +186,23 @@ def comparar(datos_hubspot: dict, datos_sunrun: dict) -> dict:
             "id_cliente",
             "ID del cliente",
         ),  # Sunrun → siempre "No encontrado"
-        ("municipio", "municipio", "Ciudad / Municipio"),
     ]
 
     # ── Campos exclusivos de Sunrun (HubSpot no los tiene) ────────────
     # clave_sr, etiqueta_visible
+    # IMPORTANTE: las claves deben coincidir exactamente con las que
+    # devuelve scraping_sunrun.py en su dict de resultado:
+    #   direccion, telefono, telefono_movil, email,
+    #   estado_pr, condado, ciudad, codigo_postal
     CAMPOS_SOLO_SUNRUN = [
         ("direccion", "Dirección"),
         ("telefono", "Teléfono principal"),
-        ("movil", "Teléfono móvil"),
+        ("telefono_movil", "Teléfono móvil"),
         ("email", "Email"),
-        ("estado", "Estado (State)"),
-        ("county", "County"),
-        ("zip_code", "Zip Code"),
+        ("estado_pr", "Estado (State)"),
+        ("condado", "County"),
+        ("ciudad", "Ciudad / Municipio"),
+        ("codigo_postal", "Zip Code"),
     ]
 
     resultados_campos = []

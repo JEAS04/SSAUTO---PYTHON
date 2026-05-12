@@ -195,46 +195,76 @@ def guardar_config(datos: dict):
 
 def crear_driver(headless: bool, usar_chrome_existente: bool = False):
     """
-    Casos de uso para crear_driver:
+    Crea y devuelve una instancia de ChromeDriver configurada.
+
+    Casos de uso:
     - usar_chrome_existente=True  → se conecta al Chrome ya abierto en puerto 9222.
     - usar_chrome_existente=False → abre un Chrome nuevo (con o sin headless).
+
+    Nota: Se evitan opciones experimentales obsoletas (excludeSwitches,
+    useAutomationExtension) que causan errores con ChromeDriver moderno.
+    El antifingerprinting se logra exclusivamente vía --disable-blink-features.
     """
+    import logging
+
+    _log_driver = logging.getLogger("ssauto.driver")
+
     options = webdriver.ChromeOptions()
 
-    # Ocultar automatización
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
+    # ── Antifingerprinting: ocultar indicadores de automatización ──────
+    # NOTA: excludeSwitches y useAutomationExtension ya no son compatibles
+    # con ChromeDriver moderno (causan "invalid argument: unrecognized chrome
+    # option"). Se reemplazan por --disable-blink-features que es el método
+    # oficial y soportado.
     options.add_argument("--disable-blink-features=AutomationControlled")
 
-    if usar_chrome_existente:
-        # Conectarse al Chrome ya abierto
-        options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
-        # No se pasan flags de headless ni sandbox: el chrome ya esta abierto.
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()), options=options
-        )
+    try:
+        if usar_chrome_existente:
+            # Conectarse al Chrome ya abierto en puerto 9222
+            _log_driver.info("Conectando a Chrome existente en puerto 9222...")
+            options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+            # No se pasan flags de headless ni sandbox: el Chrome ya está abierto.
 
-    else:
+        else:
+            _log_driver.info("Abriendo nuevo Chrome...")
+            if headless:
+                options.add_argument("--headless=new")
+                options.add_argument("--disable-gpu")
 
-        if headless:
-            options.add_argument("--headless=new")
-            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
 
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
+        # ── Inicializar WebDriver con manejo de errores ──────────────────
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
 
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()), options=options
-        )
+        # ── Opcional: ocultar navigator.webdriver ─────────────────────────
+        # En Chrome 147+ esta propiedad ya no es redefinible cuando se
+        # conecta a una sesión real de usuario (remote debugging 9222).
+        # Se envuelve en try/catch para evitar el error:
+        #   "Cannot redefine property: webdriver"
+        # El logging permite diagnosticar si la inyección falla.
+        try:
+            driver.execute_script("""
+            try {
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            } catch(e) {
+                // Chrome 147+ no permite redefinir navigator.webdriver
+                // en sesiones de depuración reales. Esto es normal y seguro.
+            }
+            """)
+        except Exception as _js_err:
+            _log_driver.debug(
+                f"Script de navigator.webdriver no se pudo inyectar "
+                f"(esperado en Chrome moderno): {_js_err}"
+            )
 
-    # Ocultar navigator.webdriver
-    driver.execute_script("""
-    Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined
-    })
-    """)
+        _log_driver.info("ChromeDriver inicializado correctamente.")
+        return driver
 
-    return driver
+    except Exception as e:
+        _log_driver.error(f"Error al inicializar ChromeDriver: {e}")
+        raise
 
 
 # ── Lógica de captura ─────────────────────────────────────────────────

@@ -1058,3 +1058,5 @@ if __name__ == "__main__":
 # Se empezo a hacer pruebas con el web scraping y el API para la comparacion de datos de clientes.
 # El bot se ejecuta en el puerto 9222 de Chrome esto para que la automatizacion sea efectiva.
 # En ese perfil de Chrome se puede iniciar sesion normal con cualquier cuenta, PERO su uso es unica y exclusivamente para el uso de los bots, ya que permite que los perfiles de uso diario no se rompan, no se bloquee chrome, no se corrompan los perfiles y es mas seguro aislar, ademas ahi se guardan todos los datos de la sesion incluyendo, cookies, sesiones, las cuentas, extensiones, pestañas, preferencias, etc. Y es mejor para que el bot no sea detectado por el navegador
+
+# ESTOY EN EL TICKET -> ACTIVIDADES -> NOTAS -> CREAR NOTA -> INTERFAZ NOTA, DONDE APARECE PARA ADJUNTAR ARCHIVOS Y SUBIR FOTOS O ESCRIBIR -> CREAR NOTA. ESE ES EL FLUJO DE INTERACCION EN HUBSPOT PARA SUBIR UNA NOTA

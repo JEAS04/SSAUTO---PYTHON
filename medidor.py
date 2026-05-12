@@ -13,9 +13,14 @@ La app principal captura esa salida y actualiza los campos de coordenadas.
 
 # Código completo del medidor como string.
 # Se usa -c para no requerir un archivo .py extra distribuido con la app.
+# Soporta un argumento opcional --monitor <índice> para elegir en qué
+# monitor mostrar la superposición. Con 0 (Todos los monitores) usa la
+# ventana virtual del escritorio completo; con 1, 2, … se limita a ese
+# monitor físico.
 MEDIDOR_CODE = """
 import tkinter as tk
 import ctypes
+import sys
 
 # Necesario en Windows para que las coordenadas sean correctas en
 # pantallas con escala (ej. 150 % DPI); sin esto, las coords estarían
@@ -29,21 +34,59 @@ except Exception:
         pass  # En macOS/Linux no hay windll, se ignora sin error.
 
 
+# ── Detectar monitor desde argumentos ────────────────────────────────
+# Busca "--monitor X" en sys.argv. Si no se encuentra, usa monitor 0
+# (virtual / todos los monitores) para mantener compatibilidad.
+try:
+    idx = sys.argv.index("--monitor")
+    MONITOR_IDX = int(sys.argv[idx + 1])
+except (ValueError, IndexError):
+    MONITOR_IDX = 0
+
+
+def _obtener_monitores():
+    \"\"\"Usa mss para obtener la lista de monitores.\"\"\"
+    try:
+        import mss
+        with mss.MSS() as sct:
+            return sct.monitors
+    except Exception:
+        return []
+
+
+MONITORES = _obtener_monitores()
+
+
+def _bounds_monitor(indice):
+    \"\"\"
+    Devuelve (x, y, ancho, alto) del monitor en la posición `indice`.
+    Si el índice está fuera de rango, devuelve el escritorio virtual (índice 0).
+    \"\"\"
+    if 0 <= indice < len(MONITORES):
+        m = MONITORES[indice]
+    else:
+        m = MONITORES[0]
+    return m["left"], m["top"], m["width"], m["height"]
+
+# Desplazamiento del monitor donde se mostrará la ventana.
+MON_X, MON_Y, MON_W, MON_H = _bounds_monitor(MONITOR_IDX)
+
+
 class MedidorDeRegion:
     \"\"\"
-    Ventana transparente a pantalla completa que permite al usuario
-    dibujar un rectángulo y obtener sus coordenadas (top, left, width, height).
+    Ventana transparente que permite al usuario dibujar un rectángulo
+    y obtener sus coordenadas (top, left, width, height).
 
-    Al soltar el mouse imprime la región en stdout y cierra la ventana.
+    Si se especificó un monitor distinto de 0, la ventana se posiciona
+    únicamente sobre ese monitor. Con monitor 0 (virtual) cubre toda el
+    área del escritorio.
     \"\"\"
 
     def __init__(self):
         self.root = tk.Tk()
-        # Sin bordes ni barra de título: ocupa toda la pantalla.
+        # Sin bordes ni barra de título: ocupa toda la pantalla o el monitor elegido.
         self.root.overrideredirect(True)
-        self.root.geometry(
-            f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0"
-        )
+        self.root.geometry(f"{MON_W}x{MON_H}+{MON_X}+{MON_Y}")
         # Semitransparente para que el usuario vea lo que va a capturar.
         self.root.attributes("-alpha", 0.3)
         self.root.config(cursor="cross")
@@ -95,9 +138,13 @@ class MedidorDeRegion:
 
         La app principal lee esta línea del subproceso para obtener las
         coordenadas sin necesitar archivos temporales.
+
+        Nota: las coordenadas devueltas son absolutas (pantalla virtual),
+        no relativas al monitor. Esto es necesario porque mss.grab()
+        espera coordenadas absolutas.
         \"\"\"
-        top    = min(self.inicio_y, event.y)
-        left   = min(self.inicio_x, event.x)
+        top    = MON_Y + min(self.inicio_y, event.y)
+        left   = MON_X + min(self.inicio_x, event.x)
         width  = abs(event.x - self.inicio_x)
         height = abs(event.y - self.inicio_y)
         region = {"top": top, "left": left, "width": width, "height": height}

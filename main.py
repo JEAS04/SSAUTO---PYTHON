@@ -20,4 +20,7 @@ ctk.set_default_color_theme(TEMA_COLOR)
 
 if __name__ == "__main__":
     app = App()
-    app.mainloop()
+    try:
+        app.mainloop()
+    except KeyboardInterrupt:
+        pass

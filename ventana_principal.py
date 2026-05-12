@@ -30,6 +30,8 @@ from configuracion import (
     guardar_config,
     cargar_perfiles,
     guardar_perfiles,
+    obtener_monitores,
+    obtener_nombres_monitores,
 )
 from credenciales import cargar_credenciales
 from medidor import MEDIDOR_CODE
@@ -54,6 +56,10 @@ class App(ctk.CTk):
         self._credenciales_sesion = {}  # credenciales en memoria (no en disco)
         self._keybind_actual = None
         self._config = cargar_config()
+
+        # Índice del monitor seleccionado para el medidor / captura.
+        # Por defecto: 1 (primer monitor físico) para mantener compatibilidad.
+        self._monitor_seleccionado = 1
 
         self._construir_ui()
 
@@ -103,6 +109,8 @@ class App(ctk.CTk):
         # 1. Región de captura: selector de perfiles, coordenadas y medidor.
         sec1 = self._seccion(padre, "  REGIÓN DE CAPTURA", fila=0)
         self._crear_panel_perfiles(sec1)
+        self._separador(sec1)
+        self._crear_selector_monitor(sec1)
         self._separador(sec1)
         self._crear_coordenadas(sec1)
         ctk.CTkButton(
@@ -310,6 +318,96 @@ class App(ctk.CTk):
             height=28,
         ).pack(side="left")
 
+    def _crear_selector_monitor(self, padre):
+        """
+        Crea el selector de monitor para elegir en qué pantalla medir/capturar.
+
+        Se coloca dentro de la sección de región de captura, antes de las
+        coordenadas. El valor seleccionado se usa al lanzar el medidor y se
+        guarda junto con cada perfil de región.
+        """
+        fila_monitor = ctk.CTkFrame(padre, fg_color="transparent")
+        fila_monitor.pack(fill="x", pady=(0, 8))
+
+        ctk.CTkLabel(
+            fila_monitor,
+            text="Monitor:",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray60"),
+        ).pack(side="left", padx=(0, 8))
+
+        # Obtener nombres de monitores; si falla, mostrar opción por defecto.
+        nombres_monitores = obtener_nombres_monitores()
+        if not nombres_monitores:
+            nombres_monitores = ["Monitor 1 (principal)"]
+
+        # Valor por defecto: intentar usar el monitor guardado en config,
+        # o monitor 1 si no hay.
+        monitor_guardado = int(self._config.get("ultimo_monitor", 1))
+        if monitor_guardado < len(nombres_monitores):
+            valor_inicial = nombres_monitores[monitor_guardado]
+        else:
+            valor_inicial = (
+                nombres_monitores[1]
+                if len(nombres_monitores) > 1
+                else nombres_monitores[0]
+            )
+
+        self._monitor_var = ctk.StringVar(value=valor_inicial)
+        self._monitor_menu = ctk.CTkOptionMenu(
+            fila_monitor,
+            variable=self._monitor_var,
+            values=nombres_monitores,
+            font=ctk.CTkFont(size=11),
+            dynamic_resizing=False,
+            width=220,
+        )
+        self._monitor_menu.pack(side="left", padx=(0, 8), fill="x", expand=True)
+
+        # Etiqueta informativa con resolución del monitor seleccionado.
+        self._monitor_info_label = ctk.CTkLabel(
+            fila_monitor,
+            text="",
+            font=ctk.CTkFont(size=10),
+            text_color=("gray40", "gray60"),
+        )
+        self._monitor_info_label.pack(side="left")
+
+        # Actualizar info al cambiar de monitor.
+        self._monitor_var.trace_add("write", self._actualizar_info_monitor)
+        self._actualizar_info_monitor()
+
+    def _actualizar_info_monitor(self, *_):
+        """
+        Muestra la resolución del monitor seleccionado como texto informativo.
+        """
+        indice = self._monitor_var_indice()
+        monitores = obtener_monitores()
+        if 0 <= indice < len(monitores):
+            m = monitores[indice]
+            self._monitor_info_label.configure(text=f"{m['width']}×{m['height']} px")
+        else:
+            self._monitor_info_label.configure(text="")
+
+    def _monitor_var_indice(self) -> int:
+        """
+        Traduce el texto del selector de monitor a su índice en la lista de mss.
+
+        Busca el nombre mostrado en la lista de nombres y devuelve su
+        índice dentro de la lista de monitores de mss.
+
+        Returns
+        -------
+        int : índice del monitor (0 = virtual, 1 = primer físico, ...)
+              Por defecto devuelve 1 si no encuentra coincidencia.
+        """
+        nombres = obtener_nombres_monitores()
+        seleccion = self._monitor_var.get()
+        try:
+            return nombres.index(seleccion)
+        except ValueError:
+            return 1  # fallback: primer monitor físico
+
     # ── Helpers de perfiles ───────────────────────────────────────────
 
     def _nombres_perfiles(self) -> list[str]:
@@ -337,7 +435,11 @@ class App(ctk.CTk):
     def _cargar_perfil_seleccionado(self):
         """
         Lee las coordenadas del perfil seleccionado en el OptionMenu
-        y las aplica a los campos de la UI.
+        y las aplica a los campos de la UI, incluyendo el monitor.
+
+        Si el perfil guardó un monitor_index, se selecciona ese monitor
+        en el selector. Si no (perfiles antiguos sin ese campo), se
+        mantiene el monitor actual.
 
         Si el valor seleccionado es el placeholder (sin perfiles) o no
         existe en el dict, no hace nada y registra un aviso en el log.
@@ -348,13 +450,24 @@ class App(ctk.CTk):
             return
         region = self._perfiles[nombre]
         self._aplicar_region(region)
+
+        # Restaurar el monitor asociado al perfil (si existe).
+        monitor_idx = region.get("monitor_index")
+        if monitor_idx is not None:
+            monitor_idx = int(monitor_idx)
+            nombres = obtener_nombres_monitores()
+            if 0 <= monitor_idx < len(nombres):
+                self._monitor_var.set(nombres[monitor_idx])
+                self._monitor_seleccionado = monitor_idx
+
         # Poner el nombre en el campo de texto para facilitar editar y re-guardar.
         self._perfil_nombre_var.set(nombre)
         self._log(f"✓ Perfil cargado: «{nombre}» → {region}")
 
     def _guardar_perfil_actual(self):
         """
-        Guarda las coordenadas actuales de los campos bajo el nombre introducido.
+        Guarda las coordenadas actuales de los campos bajo el nombre introducido,
+        junto con el monitor seleccionado.
 
         Si el nombre ya existe lo sobreescribe (permite actualizar un perfil
         existente después de mover o cambiar la región). Si está vacío, muestra
@@ -368,10 +481,15 @@ class App(ctk.CTk):
             )
             return
 
-        region = {k: v.get() for k, v in self.region_vars.items()}
+        region = {k: int(v.get() or 0) for k, v in self.region_vars.items()}
+        # Guardar el monitor seleccionado junto con la región.
+        region["monitor_index"] = self._monitor_var_indice()
+
         es_nuevo = nombre not in self._perfiles
-        self._perfiles[nombre] = region
-        guardar_perfiles(self._perfiles)
+        perfiles = cargar_perfiles()
+        perfiles[nombre] = region
+        guardar_perfiles(perfiles)
+        self._perfiles = perfiles
         self._actualizar_menu_perfiles()
         self._perfil_var.set(nombre)  # Dejar seleccionado el perfil recién guardado.
 
@@ -397,10 +515,11 @@ class App(ctk.CTk):
         if not confirmar:
             return
 
-        del self._perfiles[nombre]
-        guardar_perfiles(self._perfiles)
-        self._actualizar_menu_perfiles()
-        self._log(f"→ Perfil eliminado: «{nombre}»")
+        perfiles = cargar_perfiles()
+        if nombre in perfiles:
+            del perfiles[nombre]
+        guardar_perfiles(perfiles)
+        self._perfiles = perfiles
 
     def _crear_coordenadas(self, padre):
         """
@@ -428,7 +547,7 @@ class App(ctk.CTk):
                 text_color=("gray50", "gray50"),
             ).pack(pady=(6, 0))
 
-            var = ctk.IntVar(value=valor)
+            var = ctk.StringVar(value=str(valor))
             ctk.CTkEntry(
                 caja,
                 textvariable=var,
@@ -496,7 +615,7 @@ class App(ctk.CTk):
         self._separador(padre)
 
         # Toggle: usar Chrome ya abierto por el usuario en puerto 9222
-        self.chrome_existente_var = ctk.BooleanVar(value=False)
+        self.chrome_existente_var = ctk.BooleanVar(value=True)
         self._fila_toggle(
             padre, "Usar Chrome ya abierto (puerto 9222)", self.chrome_existente_var
         )
@@ -510,6 +629,19 @@ class App(ctk.CTk):
         ).pack(anchor="e", pady=(4, 0))
 
         self._separador(padre)
+
+        # Toggle: auto-submit de nota en HubSpot
+        from configuracion import cargar_auto_submit, guardar_auto_submit
+
+        self.auto_submit_var = ctk.BooleanVar(value=cargar_auto_submit())
+
+        def _on_auto_submit_toggle():
+            guardar_auto_submit(self.auto_submit_var.get())
+
+        self._fila_toggle(padre, "Auto-submit nota (HubSpot)", self.auto_submit_var)
+        # Guardar en config cuando se cambie el toggle
+        # Usamos trace en lugar de command porque CTkSwitch no expone command directamente
+        self.auto_submit_var.trace_add("write", lambda *_: _on_auto_submit_toggle())
 
         # Campo para configurar el atajo de teclado global.
         fila_atajo = ctk.CTkFrame(padre, fg_color="transparent")
@@ -716,16 +848,22 @@ class App(ctk.CTk):
         """
         Lanza el medidor de región en un subproceso separado y espera su resultado.
 
-        Se minimiza la ventana principal para no tapar la pantalla mientras
-        el usuario selecciona la región. La reabre al recibir el resultado.
+        Pasa el argumento --monitor <índice> para que la ventana se muestre
+        únicamente en el monitor seleccionado. Se minimiza la ventana principal
+        para no tapar la pantalla mientras el usuario selecciona la región.
+        La reabre al recibir el resultado.
         """
-        self._log("→ Abre el medidor — haz clic y arrastra en pantalla...")
+        monitor_idx = self._monitor_var_indice()
+        self._monitor_seleccionado = monitor_idx
+        self._log(
+            f"→ Abre el medidor en {self._monitor_var.get()} — haz clic y arrastra en pantalla..."
+        )
         self.btn.configure(state="disabled")
         self.iconify()  # Minimizar ventana principal.
 
         def _esperar():
             proc = subprocess.Popen(
-                [sys.executable, "-c", MEDIDOR_CODE],
+                [sys.executable, "-c", MEDIDOR_CODE, "--monitor", str(monitor_idx)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 text=True,
@@ -826,9 +964,28 @@ class App(ctk.CTk):
         """
         Abre Google Chrome con el flag de depuración remota en el puerto 9222.
 
-        Necesario para que la opción 'Usar Chrome ya abierto' pueda conectarse.
+        Antes de abrir uno nuevo verifica si el puerto 9222 ya está activo.
+        Si ya hay un Chrome con debugging corriendo, solo lo notifica sin
+        abrir una ventana adicional.
+
         Solo funciona en Windows porque busca el ejecutable en rutas predefinidas.
         """
+        import socket
+
+        # ── Verificar si el puerto 9222 ya está en uso ────────────────
+        def _puerto_activo(host: str, puerto: int) -> bool:
+            try:
+                with socket.create_connection((host, puerto), timeout=1):
+                    return True
+            except OSError:
+                return False
+
+        if _puerto_activo("127.0.0.1", 9222):
+            self._log("✓ Chrome con depuración ya está activo en el puerto 9222.")
+            self._log("→ Puedes usar el Comparador directamente.")
+            return
+
+        # ── Puerto libre: abrir Chrome con debugging ──────────────────
         rutas_chrome = [
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -846,8 +1003,8 @@ class App(ctk.CTk):
                 "--user-data-dir=C:\\chrome_sesion_ssauto",
             ]
         )
-        self._log("✓ Chrome abierto con depuración en puerto 9222")
-        self._log("→ Inicia sesión en los sitios y luego ejecuta la captura")
+        self._log("✓ Chrome abierto con depuración en puerto 9222.")
+        self._log("→ Inicia sesión en Sunrun y luego usa el Comparador.")
 
     # ── Atajo de teclado ──────────────────────────────────────────────
 
@@ -870,13 +1027,20 @@ class App(ctk.CTk):
         try:
             self.bind(nuevo, lambda e: self._ejecutar())
             self._keybind_actual = nuevo
+
             legible = self._keybind_legible(nuevo)
+
             self.keybind_label.configure(
                 text=f"Combinación activa: {legible}",
                 text_color=("green", "#3fb950"),
             )
-            self._config["keybind"] = nuevo
-            guardar_config(self._config)
+
+            config = cargar_config()
+            config["keybind"] = nuevo
+            guardar_config(config)
+
+            self._config = config
+
         except Exception as e:
             self.keybind_label.configure(
                 text=f"Atajo inválido: {e}",
@@ -937,8 +1101,11 @@ class App(ctk.CTk):
             self.after(0, lambda m=msg: self._log(m))
 
         try:
-            region = {k: v.get() for k, v in self.region_vars.items()}
-            ui(f"→ Capturando región: {region}")
+            region = {k: int(v.get()) for k, v in self.region_vars.items()}
+
+            # Mostrar en qué monitor se está capturando.
+            monitor_nombre = self._monitor_var.get()
+            ui(f"→ Capturando región en {monitor_nombre}: {region}")
 
             # Minimizar antes de capturar para no incluir la propia ventana.
             self.after(0, self.iconify)
@@ -952,7 +1119,26 @@ class App(ctk.CTk):
             usar_chrome_existente = self.chrome_existente_var.get()
 
             for sitio in SITIOS:
+                # ── SUNRUN upload temporarily disabled ────────────────
+                # The SUNRUN upload logic (scraping_sunrun.py) remains intact in
+                # the codebase and can be re-enabled by removing this condition.
+                # When re-enabling, uncomment the subir() call below.
+                if sitio["nombre"] == "SUNRUN":
+                    ui(f"→ SUNRUN: subida deshabilitada temporalmente.")
+                    ui(
+                        "  · La lógica de SUNRUN permanece en el código "
+                        "(scraping_sunrun.py)."
+                    )
+                    ui(
+                        "  · Los datos de SUNRUN siguen disponibles vía "
+                        "Comparador (ScraperSunrun)."
+                    )
+                    ui("")
+                    continue
+
+                auto_submit = self.auto_submit_var.get()
                 ui(f"→ Subiendo a: {sitio['nombre']}")
+                ui(f"  · Auto-submit nota: {'ON' if auto_submit else 'OFF'}")
                 subir(
                     sitio,
                     ruta,
@@ -960,6 +1146,7 @@ class App(ctk.CTk):
                     ui,
                     self._credenciales_sesion,
                     usar_chrome_existente,
+                    auto_submit_nota=auto_submit,
                 )
                 ui("")
 
@@ -984,5 +1171,12 @@ class App(ctk.CTk):
 
     def _al_cerrar(self):
         """Guarda la configuración en disco antes de cerrar la ventana."""
-        guardar_config(self._config)
+        config_actual = cargar_config()
+
+        for k, v in self._config.items():
+            config_actual[k] = v
+
+        # Guardar el último monitor seleccionado para restaurarlo al iniciar.
+        config_actual["ultimo_monitor"] = self._monitor_var_indice()
+
         self.destroy()

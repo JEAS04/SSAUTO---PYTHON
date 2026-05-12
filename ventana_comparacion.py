@@ -99,8 +99,10 @@ class VentanaComparacion(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Comparación HubSpot ↔ Sunrun")
         self.resizable(True, True)
-        self.grab_set()
-        self.transient(parent)
+        # grab_set() removido: causaba bloqueo de la ventana principal.
+        # transient() removido: causaba que la ventana desapareciera al usar
+        # "Mostrar escritorio" de Windows y no se pudiera recuperar.
+        # La ventana ahora es independiente (toplevel normal).
 
         self._log_ext = log_callback or (lambda m: None)
         self._datos_hs = datos_hubspot
@@ -116,9 +118,33 @@ class VentanaComparacion(ctk.CTkToplevel):
 
         self._construir_ui()
 
+        # Manejar cierre con X correctamente
+        self.protocol("WM_DELETE_WINDOW", self._cerrar)
+
+        # Traer al frente al abrir
+        self.after(50, self._traer_al_frente)
+
         # Si ya vienen datos, mostrarlos directamente
         if datos_hubspot and datos_sunrun:
             self.after(100, self._mostrar_resultado_externo)
+
+    def _traer_al_frente(self):
+        """Asegura que la ventana aparezca al frente al abrirse."""
+        try:
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+            self.attributes("-topmost", True)
+            self.after(200, lambda: self.attributes("-topmost", False))
+        except Exception:
+            pass
+
+    def _cerrar(self):
+        """Cierra la ventana de comparación limpiamente."""
+        try:
+            self.destroy()
+        except Exception:
+            pass
 
     # ── Construcción de la UI ─────────────────────────────────────────
 
@@ -311,8 +337,17 @@ class VentanaComparacion(ctk.CTkToplevel):
     def _mostrar_resultado(self, resultado: dict):
         """
         Renderiza la tabla de comparación con colores por estado.
+        Tras comparar, trae la ventana al frente si estaba minimizada.
         """
         self._limpiar_resultados()
+        # Restaurar si estaba minimizada y traer al frente
+        try:
+            if self.state() == "iconic":
+                self.deiconify()
+            self.lift()
+            self.focus_force()
+        except Exception:
+            pass
         frame = self._frame_resultados
 
         fila = 0
