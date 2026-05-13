@@ -26,10 +26,20 @@ Mejoras aplicadas (v2.0):
   - Reintento en elementos obsoletos (stale elements).
   - Selectores con logging de fallos.
   - Detección y cambio a iframes si es necesario.
+
+v4.0 — Depuración del dropdown MRU:
+  - Añadido diagnóstico detallado cuando MRU no se detecta.
+  - Guarda DOM y screenshot cuando falla la detección.
+  - Busca múltiples selectores alternativos para el dropdown.
+  - Verifica is_displayed(), size, location del elemento.
+  - Aumento de timeout a 10s para TIMEOUT_MRU.
+  - Búsqueda de keywords: mru, dropdown, recent, autocomplete, suggestion.
 """
 
 import re
 import time
+from datetime import datetime
+from pathlib import Path
 
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -69,32 +79,6 @@ SEL_BUSQUEDA_GLOBAL = "div.forceSearchInputDesktop input[role='combobox']"
 # Se construye dinámicamente con el número buscado (ver _clic_resultado)
 
 # ── Datos del cliente — XPath corregidos según DOM real de Sunrun ──────
-#
-# PROBLEMA ANTERIOR: se usaba //span[text()='Campo'] pero el DOM real
-# tiene el texto en un nodo hijo sin espacios exactos, y el valor NO está
-# directamente en <lightning-formatted-text> bajo slds-form-element, sino
-# dentro de slds-form-element__control > span > slot > records-formula-output
-# > lightning-formatted-text.
-#
-# SOLUCIÓN: usar normalize-space() en el span con clase test-id__field-label
-# y bajar por slds-form-element__control hasta lightning-formatted-text.
-# Patrón correcto confirmado en DOM capturado:
-#
-#   <div class="slds-form-element ...">
-#     <div class="slds-form-element__label ...">
-#       <span class="test-id__field-label">Customer Name</span>
-#     </div>
-#     <div class="slds-form-element__control">
-#       <span class="slds-form-element__static ...">
-#         <slot name="outputField">
-#           <records-formula-output>
-#             <lightning-formatted-text>Loyda Martinez</lightning-formatted-text>
-#           </records-formula-output>
-#         </slot>
-#       </span>
-#     </div>
-#   </div>
-
 SELECTOR_NUMERO_FSD = "//slot[@name='primaryField']//lightning-formatted-text"
 
 SELECTOR_NOMBRE = "//span[contains(@class,'test-id__field-label') and normalize-space(text())='Customer Name']/ancestor::div[contains(@class,'label-stacked') or (contains(@class,'slds-form-element') and not(contains(@class,'slds-form-element__')))]//lightning-formatted-text"
@@ -121,10 +105,210 @@ TIMEOUT_LISTA = 30  # espera para que cargue la lista
 PAUSA_FILTRO = 2.0  # pausa tras escribir en el buscador (SPA Aura)
 PAUSA_DETALLE = 1.5  # pausa tras clic en resultado
 
-# Selector para el dropdown MRU de la barra global de Salesforce
-# Confirmado en DOM: <a role="option" class="MRU_SCOPED ...">
+# ── Selectores para el dropdown MRU de la barra global de Salesforce ──
+# v4.0: Se añaden múltiples selectores alternativos para diagnosticar
+# por qué el dropdown no se detecta correctamente.
+
+# Selector original (puede no funcionar si el DOM cambia)
 SEL_MRU_DROPDOWN = "a.MRU_SCOPED"
 TIMEOUT_MRU = 10  # espera máxima para que el dropdown MRU aparezca
+
+# ── Selectores alternativos para el dropdown de búsqueda ──────────────
+# Estos cubren distintas variantes del DOM de Salesforce
+SEL_MRU_ALTERNATIVOS = [
+    'a[role="option"]',  # genérico: cualquier option del autocomplete
+    "div.forceSearchInputDesktop ul li a",  # items dentro del autocomplete list
+    "div.uiAutocompleteList a",  # el list completo de autocomplete
+    "div.listContent a",  # contenido del list
+    "div.autocompleteWrapper a",  # wrapper del autocomplete
+    "li.uiAutocompleteOption a",  # opciones individuales
+    "a.MRU_SCOPED",  # selector original
+    'a[class*="MRU"]',  # clase que contenga MRU
+    'a[class*="mru"]',  # case insensitive (lower)
+    'div[class*="MRU"]',  # divs con MRU
+    'div[class*="mru"]',  # divs con mru
+    'a[class*="autocomplete"]',  # autocomplete class
+    "div.autocompleteWrapper",  # contenedor autocomplete
+    "div.forceSearchInputDesktop div.listContent",  # contenido directo del search
+]
+
+# ── Palabras clave para buscar en el DOM elementos relacionados ──────
+KEYWORDS_MRU = [
+    "MRU",
+    "mru",
+    "dropdown",
+    "recent",
+    "autocomplete",
+    "suggestion",
+    "search",
+    "option",
+    "combobox",
+]
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Funciones de diagnóstico MRU
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _debug_save_dom(driver, suffix: str = ""):
+    """Guarda el DOM actual en un archivo para diagnóstico."""
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"debug_dom_mru{suffix}_{ts}.html"
+    try:
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
+        return filename
+    except Exception as e:
+        return f"error: {e}"
+
+
+def _debug_save_screenshot(driver, suffix: str = ""):
+    """Guarda un screenshot para diagnóstico."""
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    Path("debug").mkdir(exist_ok=True)
+    filename = f"debug/debug_screenshot_mru{suffix}_{ts}.png"
+    try:
+        driver.save_screenshot(filename)
+        return filename
+    except Exception as e:
+        return f"error: {e}"
+
+
+def _debug_inspect_mru_candidates(driver, log_func):
+    """
+    Busca en el DOM todos los elementos que podrian ser el dropdown MRU
+    y registra su estado detallado (visible, tamaño, ubicación, texto).
+    """
+    log_func("  · [DIAG] Inspeccionando candidatos a dropdown MRU...")
+    found_any = False
+
+    for selector in SEL_MRU_ALTERNATIVOS:
+        try:
+            elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            if elements:
+                found_any = True
+                log_func(
+                    f"  · [DIAG] Selector '{selector}' → {len(elements)} elemento(s):"
+                )
+                for i, el in enumerate(elements[:5]):  # mostrar max 5
+                    try:
+                        is_disp = el.is_displayed()
+                        size = el.size
+                        loc = el.location
+                        text = (el.text or "")[:60]
+                        class_attr = el.get_attribute("class") or ""
+                        role = el.get_attribute("role") or ""
+                        log_func(
+                            f"    [{i}] display={is_disp} "
+                            f"size=({size['width']}x{size['height']}) "
+                            f"loc=({loc['x']},{loc['y']}) "
+                            f"role='{role}' "
+                            f"class='{class_attr[:50]}' "
+                            f"text='{text}'"
+                        )
+                    except StaleElementReferenceException:
+                        log_func(f"    [{i}] STALE (elemento obsoleto)")
+                    except Exception as e:
+                        log_func(f"    [{i}] Error: {e}")
+        except Exception as e:
+            log_func(f"  · [DIAG] Error con selector '{selector}': {e}")
+
+    if not found_any:
+        log_func(
+            "  · [DIAG] NO se encontró ningún candidato con los selectores listados."
+        )
+
+    # ── Buscar por keywords en todo el DOM ──
+    log_func("  · [DIAG] Buscando elementos por keywords en el DOM...")
+    for keyword in KEYWORDS_MRU:
+        try:
+            # Buscar en atributos class, id, role, aria-label
+            xpath_keyword = (
+                f"//*[contains(@class, '{keyword}')"
+                f" or contains(@id, '{keyword}')"
+                f" or contains(@role, '{keyword}')"
+                f" or contains(@aria-label, '{keyword}')"
+                f" or contains(text(), '{keyword}')]"
+            )
+            elements = driver.find_elements(By.XPATH, xpath_keyword)
+            if elements:
+                for i, el in enumerate(elements[:3]):
+                    try:
+                        tag = el.tag_name
+                        is_disp = el.is_displayed()
+                        text = (el.text or "")[:40]
+                        log_func(
+                            f"  · [DIAG] keyword='{keyword}' → "
+                            f"<{tag}> display={is_disp} text='{text}'"
+                        )
+                    except StaleElementReferenceException:
+                        pass
+        except Exception:
+            pass
+
+
+def _debug_check_search_input_state(driver, log_func):
+    """Verifica el estado del input de búsqueda global."""
+    try:
+        search_input = driver.find_element(By.CSS_SELECTOR, SEL_BUSQUEDA_GLOBAL)
+        is_disp = search_input.is_displayed()
+        is_enabled = search_input.is_enabled()
+        current_value = search_input.get_attribute("value") or ""
+        placeholder = search_input.get_attribute("placeholder") or ""
+        aria_expanded = search_input.get_attribute("aria-expanded") or "none"
+        aria_owns = search_input.get_attribute("aria-owns") or "none"
+        log_func(
+            f"  · [DIAG] Input búsqueda: display={is_disp} "
+            f"enabled={is_enabled} "
+            f"value='{current_value}' "
+            f"placeholder='{placeholder}' "
+            f"aria-expanded='{aria_expanded}' "
+            f"aria-owns='{aria_owns}'"
+        )
+    except NoSuchElementException:
+        log_func("  · [DIAG] Input de búsqueda NO ENCONTRADO en el DOM.")
+    except Exception as e:
+        log_func(f"  · [DIAG] Error al inspeccionar input: {e}")
+
+
+def _debug_full_diagnosis(driver, log_func, fsd_display: str = ""):
+    """
+    Realiza un diagnóstico completo del estado del dropdown MRU.
+    Se llama cuando la detección del MRU falla.
+    """
+    import traceback
+
+    log_func("  ═══════════════════════════════════════════")
+    log_func("  ⚠ [DIAG] INICIANDO DIAGNÓSTICO COMPLETO MRU")
+    log_func("  ═══════════════════════════════════════════")
+
+    # 1. URL y título actual
+    try:
+        log_func(f"  · [DIAG] URL: {driver.current_url}")
+        log_func(f"  · [DIAG] Título: {driver.title}")
+    except Exception as e:
+        log_func(f"  · [DIAG] Error obteniendo URL/título: {e}")
+
+    # 2. Estado del input de búsqueda
+    _debug_check_search_input_state(driver, log_func)
+
+    # 3. Buscar candidatos MRU en el DOM
+    _debug_inspect_mru_candidates(driver, log_func)
+
+    # 4. Guardar DOM y screenshot
+    dom_file = _debug_save_dom(driver, "_diagnosis")
+    log_func(f"  · [DIAG] DOM guardado en: {dom_file}")
+    ss_file = _debug_save_screenshot(driver, "_diagnosis")
+    log_func(f"  · [DIAG] Screenshot guardado en: {ss_file}")
+
+    # 5. Stack trace para saber desde dónde se llamó
+    stack = traceback.format_stack()[-3:-1]
+    log_func(f"  · [DIAG] Call stack: {''.join(stack)}")
+
+    log_func("  ═══════════════════════════════════════════")
+    log_func("  ⚠ [DIAG] DIAGNÓSTICO COMPLETADO")
+    log_func("  ═══════════════════════════════════════════")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -210,6 +394,140 @@ def _cambiar_a_pestana_por_url(driver, subcadena_url: str, log_func) -> bool:
     except Exception as e:
         log_func(f"  ⚠ Error al buscar pestaña: {e}")
         return False
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Ayudante de espera con diagnóstico MRU
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _esperar_dropdown_mru(driver, log_func, fsd_display: str = "") -> bool:
+    """
+    Espera a que aparezca el dropdown MRU después de escribir en la barra
+    global de búsqueda de Salesforce.
+
+    v4.0 — Estrategia mejorada con diagnóstico y selectores alternativos:
+      1. Espera visibilidad del selector original (a.MRU_SCOPED)
+      2. Si falla, ejecuta diagnóstico completo
+      3. Intenta selectores alternativos
+      4. Verifica estado del elemento (is_displayed, size, location)
+
+    Returns
+    -------
+    bool : True si se detectó el dropdown MRU, False en caso contrario.
+    """
+    # ── Estrategia 1: Esperar el selector principal ────────────────
+    log_func(
+        f"  → [MRU] Esperando dropdown (timeout={TIMEOUT_MRU}s) "
+        f"con selector: '{SEL_MRU_DROPDOWN}'..."
+    )
+    try:
+        wait_local = WebDriverWait(driver, TIMEOUT_MRU)
+        elemento = wait_local.until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, SEL_MRU_DROPDOWN))
+        )
+        # Verificar que realmente es visible y tiene tamaño
+        if elemento.is_displayed():
+            size = elemento.size
+            loc = elemento.location
+            log_func(
+                f"  ✓ [MRU] Dropdown detectado con selector original. "
+                f"Size: {size['width']}x{size['height']}, "
+                f"Loc: ({loc['x']},{loc['y']})"
+            )
+            return True
+        else:
+            log_func("  · [MRU] Elemento encontrado pero NO es visible.")
+    except TimeoutException:
+        log_func(
+            f"  · [MRU] Timeout ({TIMEOUT_MRU}s) esperando selector "
+            f"'{SEL_MRU_DROPDOWN}'."
+        )
+    except NoSuchElementException:
+        log_func(f"  · [MRU] Selector '{SEL_MRU_DROPDOWN}' no existe en DOM.")
+    except Exception as e:
+        log_func(f"  · [MRU] Error inesperado con selector original: {e}")
+
+    # ── Diagnóstico: ejecutar inspección completa ──────────────────
+    _debug_full_diagnosis(driver, log_func, fsd_display)
+
+    # ── Estrategia 2: Intentar selectores alternativos ─────────────
+    log_func("  → [MRU] Intentando selectores alternativos...")
+    for alt_sel in SEL_MRU_ALTERNATIVOS:
+        try:
+            elements = driver.find_elements(By.CSS_SELECTOR, alt_sel)
+            # Filtrar solo los visibles
+            visible_elements = [e for e in elements if e.is_displayed()]
+            if visible_elements:
+                log_func(
+                    f"  ✓ [MRU] Selector alternativo '{alt_sel}' → "
+                    f"{len(visible_elements)} visible(s) de {len(elements)} total"
+                )
+                # Mostrar info del primer elemento visible
+                el = visible_elements[0]
+                size = el.size
+                loc = el.location
+                text = (el.text or "")[:60]
+                log_func(
+                    f"    Primer elemento: size=({size['width']}x{size['height']}) "
+                    f"loc=({loc['x']},{loc['y']}) text='{text}'"
+                )
+                return True
+        except Exception as e:
+            log_func(f"  · [MRU] Error con selector alternativo '{alt_sel}': {e}")
+
+    # ── Estrategia 3: Buscar por role="option" visible ─────────────
+    log_func("  → [MRU] Buscando elementos con role='option'...")
+    try:
+        options = driver.find_elements(By.CSS_SELECTOR, '[role="option"]')
+        visible_options = [o for o in options if o.is_displayed()]
+        if visible_options:
+            log_func(
+                f"  ✓ [MRU] Se encontraron {len(visible_options)} "
+                f"opción(es) visible(es) con role='option'."
+            )
+            for i, opt in enumerate(visible_options[:3]):
+                text = (opt.text or "")[:50]
+                log_func(f"    [{i}] text='{text}'")
+            return True
+        else:
+            log_func(
+                f"  · [MRU] {len(options)} option(s) encontrada(s) pero ninguna visible."
+            )
+    except Exception as e:
+        log_func(f"  · [MRU] Error buscando role='option': {e}")
+
+    # ── Estrategia 4: Buscar por aria-owns del input ────────────────
+    log_func("  → [MRU] Buscando contenedor vía aria-owns...")
+    try:
+        search_input = driver.find_element(By.CSS_SELECTOR, SEL_BUSQUEDA_GLOBAL)
+        aria_owns = search_input.get_attribute("aria-owns")
+        if aria_owns:
+            log_func(f"  · [MRU] aria-owns apunta a: '{aria_owns}'")
+            try:
+                owned = driver.find_element(By.ID, aria_owns)
+                if owned.is_displayed():
+                    log_func(f"  ✓ [MRU] Contenedor aria-owns visible!")
+                    return True
+                else:
+                    log_func("  · [MRU] Contenedor aria-owns existe pero NO visible.")
+            except NoSuchElementException:
+                log_func(
+                    f"  · [MRU] Elemento aria-owns '{aria_owns}' no existe en DOM."
+                )
+    except Exception as e:
+        log_func(f"  · [MRU] Error buscando aria-owns: {e}")
+
+    log_func(f"  · [MRU] Dropdown NO detectado después de todas las estrategias.")
+    return False
+
+
+def _obtener_texto_elemento_seguro(element, max_len: int = 60) -> str:
+    """Obtiene el texto de un elemento con manejo de stale element."""
+    try:
+        return (element.text or "")[:max_len]
+    except StaleElementReferenceException:
+        return "[STALE]"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -385,6 +703,7 @@ class ScraperSunrun:
         # ── Paso 1b: intentar con la barra global de búsqueda ────────
         self._log(f"  → Buscando via barra global: {fsd_display}")
         try:
+            self._log("  → [MRU] Localizando barra de búsqueda global...")
             campo = wait_lista.until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, SEL_BUSQUEDA_GLOBAL))
             )
@@ -406,64 +725,56 @@ class ScraperSunrun:
             # Pausa para que Aura renderice el dropdown de sugerencias
             time.sleep(PAUSA_FILTRO)
 
-            # ── Estrategia 1: clic en cualquier item del dropdown que
-            # contenga el FSD buscado.
-            #
-            # Salesforce puede mostrar dos tipos de items:
-            #   A) Item de resultado de búsqueda textual:
-            #      <a role="option"> con texto exacto "FSD-XXXXXXX" (icono lupa)
-            #   B) Item MRU (Most Recently Used):
-            #      <a class="MRU_SCOPED" role="option"> con icono morado
-            #
-            # El XPath unificado detecta CUALQUIERA de los dos.
-            # Siempre se intenta primero el dropdown antes de esperar TIMEOUT_MRU,
-            # usando una espera corta (3s). Si no aparece en 3s, se espera hasta
-            # TIMEOUT_MRU para dar tiempo al SPA de renderizar el MRU.
-            try:
-                # XPath unificado: cualquier <a role="option"> que contenga
-                # el texto del FSD, independientemente de su clase o estructura.
-                XPATH_DROPDOWN_FSD = (
-                    f"//a[@role='option' and ("
-                    f"  .//span[@title='{fsd_display}'] or"
-                    f"  .//*[normalize-space(text())='{fsd_display}'] or"
-                    f"  contains(normalize-space(.), '{fsd_display}')"
-                    f")]"
-                )
+            # ── Estrategia 1: clic en el item MRU_SCOPED del dropdown ──
+            # v4.0: Se reemplaza la espera simple por _esperar_dropdown_mru()
+            # que incluye diagnóstico detallado si falla.
+            self._log("  → [MRU] Esperando dropdown de sugerencias...")
+            dropdown_detectado = _esperar_dropdown_mru(
+                self._driver, self._log, fsd_display
+            )
 
-                # Intento rápido primero (3s) — cubre el caso del item
-                # de búsqueda textual que aparece casi inmediatamente.
+            if dropdown_detectado:
+                self._log("  ✓ [MRU] Dropdown detectado — buscando item específico...")
                 try:
-                    dropdown_fsd = WebDriverWait(self._driver, 3).until(
-                        EC.element_to_be_clickable((By.XPATH, XPATH_DROPDOWN_FSD))
+                    dropdown_fsd = WebDriverWait(self._driver, 5).until(
+                        EC.element_to_be_clickable(
+                            (
+                                By.XPATH,
+                                f"//a[contains(@class,'MRU_SCOPED')]"
+                                f"[.//span[@title='{fsd_display}']]"
+                                f" | //a[contains(@class,'MRU_SCOPED')]"
+                                f"[.//*[contains(text(),'{fsd_display}')]]"
+                                f" | //a[@role='option']"
+                                f"[.//*[contains(text(),'{fsd_display}')]]",
+                            )
+                        )
                     )
-                    self._log(f"  ✓ Item en dropdown (rápido): {fsd_display}")
-                except (TimeoutException, NoSuchElementException):
-                    # No apareció en 3s — esperar hasta TIMEOUT_MRU para el MRU
+                    self._log(f"  → Clic en dropdown MRU (FSD directo): {fsd_display}")
+                    dropdown_fsd.click()
+                    _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
+                    _log_estado_pagina(self._driver, self._log, "[detalle-dropdown] ")
+                    if fsd_numero.lower() in self._driver.current_url.lower():
+                        self._log(f"  ✓ Llegamos al detalle via dropdown MRU.")
+                        return True
+                    # A veces el SPA navega pero la URL tarda — esperar un poco más
+                    time.sleep(1.5)
+                    if fsd_numero.lower() in self._driver.current_url.lower():
+                        self._log(
+                            f"  ✓ Llegamos al detalle via dropdown MRU (espera extra)."
+                        )
+                        return True
                     self._log(
-                        f"  · Item no apareció en 3s, esperando hasta {TIMEOUT_MRU}s..."
+                        f"  · Dropdown clicado pero URL no cambió, continuando..."
                     )
-                    dropdown_fsd = WebDriverWait(self._driver, TIMEOUT_MRU).until(
-                        EC.element_to_be_clickable((By.XPATH, XPATH_DROPDOWN_FSD))
+                except (TimeoutException, NoSuchElementException):
+                    self._log(
+                        "  · [MRU] Item FSD específico no encontrado en dropdown. "
+                        "Enviando ENTER..."
                     )
-                    self._log(f"  ✓ Item en dropdown (MRU): {fsd_display}")
-
-                self._log(f"  → Clic en item del dropdown: {fsd_display}")
-                dropdown_fsd.click()
-                _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
-                _log_estado_pagina(self._driver, self._log, "[detalle-dropdown] ")
-                if fsd_numero.lower() in self._driver.current_url.lower():
-                    self._log(f"  ✓ Llegamos al detalle via dropdown.")
-                    return True
-                # URL puede tardar en actualizar en SPAs — esperar un poco más
-                time.sleep(1.5)
-                if fsd_numero.lower() in self._driver.current_url.lower():
-                    self._log(f"  ✓ Llegamos al detalle via dropdown (espera extra).")
-                    return True
-                self._log(f"  · Dropdown clicado pero URL no cambió, continuando...")
-            except (TimeoutException, NoSuchElementException):
+            else:
                 self._log(
-                    f"  · Ningún item del dropdown encontrado tras {TIMEOUT_MRU}s,"
-                    f" enviando ENTER..."
+                    "  · [MRU] Dropdown no detectado — "
+                    f"enviando ENTER como fallback..."
                 )
 
             # ── Estrategia 2: ENTER → página de resultados → clic en link ──
@@ -535,6 +846,7 @@ class ScraperSunrun:
 
         self._log(f"  → Búsqueda rápida via barra global: {fsd_display}")
         try:
+            self._log("  → [MRU] Localizando barra de búsqueda global (rápido)...")
             campo = wait_lista.until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, SEL_BUSQUEDA_GLOBAL))
             )
@@ -549,41 +861,46 @@ class ScraperSunrun:
 
             time.sleep(PAUSA_FILTRO)
 
-            # Intentar cualquier item del dropdown que contenga el FSD.
-            # Misma lógica unificada que en _buscar_en_lista:
-            # intento rápido (3s) primero, luego espera hasta TIMEOUT_MRU.
-            try:
-                XPATH_DROPDOWN_FSD = (
-                    f"//a[@role='option' and ("
-                    f"  .//span[@title='{fsd_display}'] or"
-                    f"  .//*[normalize-space(text())='{fsd_display}'] or"
-                    f"  contains(normalize-space(.), '{fsd_display}')"
-                    f")]"
+            # Intentar dropdown MRU primero
+            # v4.0: Usar la función de espera mejorada con diagnóstico
+            self._log("  → [MRU] Esperando dropdown de sugerencias (rápido)...")
+            dropdown_detectado = _esperar_dropdown_mru(
+                self._driver, self._log, fsd_display
+            )
+
+            if dropdown_detectado:
+                self._log(
+                    "  ✓ [MRU] Dropdown visible — buscando item específico (rápido)..."
                 )
                 try:
-                    dropdown_fsd = WebDriverWait(self._driver, 3).until(
-                        EC.element_to_be_clickable((By.XPATH, XPATH_DROPDOWN_FSD))
+                    dropdown_fsd = WebDriverWait(self._driver, 5).until(
+                        EC.element_to_be_clickable(
+                            (
+                                By.XPATH,
+                                f"//a[contains(@class,'MRU_SCOPED')]"
+                                f"[.//span[@title='{fsd_display}']]"
+                                f" | //a[contains(@class,'MRU_SCOPED')]"
+                                f"[.//*[contains(text(),'{fsd_display}')]]"
+                                f" | //a[@role='option']"
+                                f"[.//*[contains(text(),'{fsd_display}')]]",
+                            )
+                        )
                     )
-                    self._log(f"  ✓ Item en dropdown (rápido): {fsd_display}")
+                    dropdown_fsd.click()
+                    _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
+                    time.sleep(1.0)
+                    if fsd_numero.lower() in self._driver.current_url.lower():
+                        self._log(f"  ✓ Llegamos al detalle via dropdown MRU (rápido).")
+                        return True
                 except (TimeoutException, NoSuchElementException):
                     self._log(
-                        f"  · Item no apareció en 3s, esperando hasta {TIMEOUT_MRU}s..."
+                        "  · [MRU] Item FSD específico no encontrado "
+                        "(rápido), enviando ENTER..."
                     )
-                    dropdown_fsd = WebDriverWait(self._driver, TIMEOUT_MRU).until(
-                        EC.element_to_be_clickable((By.XPATH, XPATH_DROPDOWN_FSD))
-                    )
-                    self._log(f"  ✓ Item en dropdown (MRU): {fsd_display}")
-
-                dropdown_fsd.click()
-                _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
-                time.sleep(1.0)
-                if fsd_numero.lower() in self._driver.current_url.lower():
-                    self._log(f"  ✓ Llegamos al detalle via dropdown (rápido).")
-                    return True
-            except (TimeoutException, NoSuchElementException):
+            else:
                 self._log(
-                    f"  · Ningún item del dropdown encontrado tras {TIMEOUT_MRU}s,"
-                    f" enviando ENTER..."
+                    "  · [MRU] Dropdown no detectado (rápido) — "
+                    "enviando ENTER como fallback..."
                 )
 
             # ENTER → página de resultados

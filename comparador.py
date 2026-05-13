@@ -14,7 +14,7 @@ correspondientes (api2.py y scraping_sunrun.py).
 """
 
 import re
-from difflib import SequenceMatcher
+from rapidfuzz import fuzz
 
 # ══════════════════════════════════════════════════════════════════════
 #  Helpers de normalización
@@ -24,7 +24,7 @@ from difflib import SequenceMatcher
 def _norm(texto: str) -> str:
     """
     Normaliza un texto para comparación:
-      - minúsculas
+      - MAYÚSCULAS
       - sin tildes
       - sin espacios dobles
       - sin puntuación extra
@@ -34,12 +34,79 @@ def _norm(texto: str) -> str:
     if not texto or texto.strip() in ("No encontrado", "No detectado", ""):
         return ""
 
-    reemplazos = str.maketrans("áéíóúüñàèìòùÁÉÍÓÚÜÑ", "aeiouunaeioaAEIOUUN")
+    reemplazos = str.maketrans("áéíóúüñàèìòùÁÉÍÓÚÜÑ", "AEIOUUNAEIOUAEIOUUN")
     texto = texto.translate(reemplazos)
-    texto = texto.lower().strip()
+    texto = texto.upper().strip()
     texto = re.sub(r"\s{2,}", " ", texto)
     texto = re.sub(r"[.,;:'\"]", "", texto)
     return texto
+
+
+def _comparar_nombres(valor_hs: str, valor_sr: str, umbral: float = 0.70) -> dict:
+    """
+    Compara nombres usando lógica token-based con rapidfuzz.
+    Maneja nombres hispanos con segundos apellidos opcionales.
+
+    Devuelve:
+      similitud : float 0.0-1.0
+      estado    : "igual" | "similar" | "diferente"
+      nota      : string descriptivo
+
+    Estrategia:
+      1. Normalizar (MAYÚSCULAS, sin tildes, tokenizar).
+      2. Token containment: si todos los tokens del nombre más corto
+         aparecen en el más largo, es MATCH (caso hispano típico).
+      3. Si falla lo anterior, usar token_set_ratio / token_sort_ratio
+         / partial_ratio / WRatio de rapidfuzz y elegir el mejor.
+    """
+    na = _norm(valor_hs)
+    nb = _norm(valor_sr)
+
+    # Coincidencia exacta post-normalización
+    if na == nb:
+        return {"similitud": 1.0, "estado": "igual", "nota": "Coinciden exactamente."}
+
+    tokens_a = set(na.split())
+    tokens_b = set(nb.split())
+
+    # Token containment: todos los tokens del nombre más corto
+    # están presentes en el nombre más largo
+    shorter_tokens = tokens_a if len(tokens_a) <= len(tokens_b) else tokens_b
+    longer_tokens = tokens_b if len(tokens_a) <= len(tokens_b) else tokens_a
+
+    if shorter_tokens and shorter_tokens.issubset(longer_tokens):
+        # Puntaje basado en qué proporción de tokens únicos coinciden
+        overlap_ratio = len(shorter_tokens) / max(len(tokens_a | tokens_b), 1)
+        sim = max(overlap_ratio, 0.85)
+        return {
+            "similitud": sim,
+            "estado": "similar",
+            "nota": (
+                "Posible coincidencia: todos los tokens del nombre más corto "
+                "están contenidos en el nombre más largo."
+            ),
+        }
+
+    # Usar rapidfuzz con múltiples métricas token-based
+    token_set = fuzz.token_set_ratio(na, nb) / 100.0
+    token_sort = fuzz.token_sort_ratio(na, nb) / 100.0
+    partial = fuzz.partial_ratio(na, nb) / 100.0
+    wratio = fuzz.WRatio(na, nb) / 100.0
+
+    best = max(token_set, token_sort, partial, wratio)
+
+    if best >= 0.85:
+        return {
+            "similitud": best,
+            "estado": "similar",
+            "nota": f"Alta similitud en nombres ({best:.0%}).",
+        }
+    else:
+        return {
+            "similitud": best,
+            "estado": "diferente",
+            "nota": f"Nombres distintos ({best:.0%}).",
+        }
 
 
 def _similitud(a: str, b: str) -> float:
@@ -49,12 +116,33 @@ def _similitud(a: str, b: str) -> float:
 
     Útil para detectar errores tipográficos leves (ej: "Cruz" vs "Gruz").
     """
-    return SequenceMatcher(None, _norm(a), _norm(b)).ratio()
+    return fuzz.ratio(_norm(a), _norm(b)) / 100.0
 
 
 def _vacio(valor: str) -> bool:
     """Devuelve True si el valor es vacío, None o un placeholder de error."""
     return not valor or _norm(valor) == ""
+
+
+def _normalizar_telefono(telefono: str) -> str:
+    """
+    Normaliza un número de teléfono removiendo todo carácter no numérico
+    y el código de país '1' inicial si está presente.
+
+    Ejemplos:
+        "+17872979317"      → "7872979317"
+        "(787)297-9317"     → "7872979317"
+        "787-297-9317"      → "7872979317"
+        "1-787-297-9317"    → "7872979317"
+    """
+    if not telefono:
+        return ""
+    # Eliminar todos los caracteres no numéricos
+    limpio = re.sub(r"[^0-9]", "", telefono)
+    # Eliminar el código de país "1" al inicio si da 11 dígitos
+    if len(limpio) == 11 and limpio.startswith("1"):
+        limpio = limpio[1:]
+    return limpio
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -64,6 +152,10 @@ def _vacio(valor: str) -> bool:
 # Umbral de similitud para considerar dos valores como "similares" en vez de
 # "iguales". Por ejemplo 0.85 permite pequeñas diferencias tipográficas.
 UMBRAL_SIMILAR = 0.85
+
+# Conjunto de campos que representan números de teléfono.
+# Se comparan usando _normalizar_telefono() en lugar de _norm() genérico.
+CAMPOS_TELEFONO = {"Telefono", "Telefono Alterno"}
 
 
 def comparar_campo(campo: str, valor_hs: str, valor_sunrun: str) -> dict:
@@ -125,15 +217,39 @@ def comparar_campo(campo: str, valor_hs: str, valor_sunrun: str) -> dict:
     # Ambos tienen dato: calcular similitud
     sim = _similitud(valor_hs, valor_sunrun)
 
-    if _norm(valor_hs) == _norm(valor_sunrun):
-        estado = "igual"
-        nota = "Coinciden exactamente."
-    elif sim >= UMBRAL_SIMILAR:
-        estado = "similar"
-        nota = f"Valores muy similares (similitud {sim:.0%}). Verificar manualmente."
+    # Para nombres, usar lógica token-based especializada (tolera
+    # diferencias de mayúsculas, segundos apellidos faltantes, etc.)
+    if campo == "Nombre":
+        nombre_result = _comparar_nombres(valor_hs, valor_sunrun)
+        sim = nombre_result["similitud"]
+        estado = nombre_result["estado"]
+        nota = nombre_result["nota"]
+    # Para campos de teléfono, normalizar con _normalizar_telefono()
+    elif campo in CAMPOS_TELEFONO:
+        if _normalizar_telefono(valor_hs) == _normalizar_telefono(valor_sunrun):
+            estado = "igual"
+            sim = 1.0
+            nota = "Coinciden exactamente."
+        elif sim >= UMBRAL_SIMILAR:
+            estado = "similar"
+            nota = (
+                f"Valores muy similares (similitud {sim:.0%}). Verificar manualmente."
+            )
+        else:
+            estado = "diferente"
+            nota = f"Valores distintos (similitud {sim:.0%})."
     else:
-        estado = "diferente"
-        nota = f"Valores distintos (similitud {sim:.0%})."
+        if _norm(valor_hs) == _norm(valor_sunrun):
+            estado = "igual"
+            nota = "Coinciden exactamente."
+        elif sim >= UMBRAL_SIMILAR:
+            estado = "similar"
+            nota = (
+                f"Valores muy similares (similitud {sim:.0%}). Verificar manualmente."
+            )
+        else:
+            estado = "diferente"
+            nota = f"Valores distintos (similitud {sim:.0%})."
 
     return {
         "campo": campo,
@@ -180,12 +296,15 @@ def comparar(datos_hubspot: dict, datos_sunrun: dict) -> dict:
     # ── Campos comparables (existen en ambas fuentes) ─────────────────
     # clave_hs, clave_sr, etiqueta_visible
     CAMPOS_COMPARABLES = [
-        ("nombre", "nombre", "Nombre del cliente"),
-        (
-            "id_cliente",
-            "id_cliente",
-            "ID del cliente",
-        ),  # Sunrun → siempre "No encontrado"
+        ("nombre", "nombre", "Nombre"),
+        ("id_cliente", "id_cliente", "ID Cliente"),
+        ("direccion", "direccion", "Direccion"),
+        ("telefono", "telefono", "Telefono"),
+        ("telefono_alterno", "telefono_movil", "Telefono Alterno"),
+        ("email", "email", "Email"),
+        ("estado", "estado_pr", "Pais"),
+        ("municipio", "ciudad", "Ciudad / Municipio"),
+        ("zip", "codigo_postal", "Codigo Postal"),
     ]
 
     # ── Campos exclusivos de Sunrun (HubSpot no los tiene) ────────────
@@ -195,14 +314,7 @@ def comparar(datos_hubspot: dict, datos_sunrun: dict) -> dict:
     #   direccion, telefono, telefono_movil, email,
     #   estado_pr, condado, ciudad, codigo_postal
     CAMPOS_SOLO_SUNRUN = [
-        ("direccion", "Dirección"),
-        ("telefono", "Teléfono principal"),
-        ("telefono_movil", "Teléfono móvil"),
-        ("email", "Email"),
-        ("estado_pr", "Estado (State)"),
-        ("condado", "County"),
-        ("ciudad", "Ciudad / Municipio"),
-        ("codigo_postal", "Zip Code"),
+        ("condado", "Municipio"),
     ]
 
     resultados_campos = []
@@ -262,19 +374,28 @@ def comparar(datos_hubspot: dict, datos_sunrun: dict) -> dict:
 
 def datos_hs_desde_ticket(ticket_dict: dict) -> dict:
     """
-    Adapta el formato de salida de api2.py al formato que espera comparar().
-
-    api2.py devuelve:
-      {"fsd": "983316", "nombre": "David Cruz", "id_cliente": "250630",
-       "municipio": "San Juan", "ticket_id": "..."}
-
-    Esta función lo normaliza y agrega la clave 'error' si no está.
+    Adapta el dict devuelto por api2.extraer_datos_hubspot() al formato
+    interno que usa comparar(). Todas las claves se pasan directamente;
+    se garantiza que existan con valor vacío si faltaran.
     """
-    return {
-        "fsd": ticket_dict.get("fsd", ""),
-        "nombre": ticket_dict.get("nombre", ""),
-        "id_cliente": ticket_dict.get("id_cliente", ""),
-        "municipio": ticket_dict.get("municipio", ""),
-        "fuente": "HubSpot",
-        "error": ticket_dict.get("error", None),
-    }
+    campos = (
+        "fsd",
+        "ticket_id",
+        "contact_id",
+        "nombre",
+        "id_cliente",
+        "direccion",
+        "telefono",
+        "telefono_alterno",
+        "email",
+        "estado",
+        "municipio",
+        "zip",
+        "nota",
+        "fuente_nombre",
+        "fuente_id",
+    )
+    resultado = {c: ticket_dict.get(c, "") or "" for c in campos}
+    resultado["fuente"] = "HubSpot"
+    resultado["error"] = ticket_dict.get("error", None)
+    return resultado

@@ -281,46 +281,42 @@ class VentanaComparacion(ctk.CTkToplevel):
 
     def _obtener_hubspot(self, fsd: str, log) -> dict:
         """
-        Obtiene los datos del ticket de HubSpot usando la API existente (api2.py).
-
+        Obtiene los datos del ticket + contacto de HubSpot usando api2.py.
         Importa dinámicamente para no acoplar el módulo si la API no está disponible.
         """
+        _vacio = {
+            "fsd": fsd,
+            "ticket_id": None,
+            "contact_id": None,
+            "nombre": "",
+            "id_cliente": "",
+            "direccion": "",
+            "telefono": "",
+            "telefono_alterno": "",
+            "email": "",
+            "estado": "",
+            "municipio": "",
+            "zip": "",
+            "nota": "",
+            "fuente_nombre": "",
+            "fuente_id": "",
+            "fuente": "HubSpot",
+        }
         try:
-            from api2 import extraer_ticket_por_fsd  # función a agregar en api2.py
+            from api2 import extraer_datos_hubspot
 
-            ticket = extraer_ticket_por_fsd(fsd)
-            if ticket:
-                return datos_hs_desde_ticket(ticket)
-            else:
-                log(f"  ⚠ No se encontró el ticket {fsd} en HubSpot.")
-                return {
-                    "fsd": fsd,
-                    "nombre": "",
-                    "id_cliente": "",
-                    "municipio": "",
-                    "fuente": "HubSpot",
-                    "error": f"Ticket {fsd} no encontrado en HubSpot.",
-                }
+            datos = extraer_datos_hubspot(fsd)
+            if datos.get("error"):
+                log(f"  ⚠ HubSpot: {datos['error']}")
+            return datos_hs_desde_ticket(datos)
+
         except ImportError:
             log("  ⚠ api2.py no disponible. Usando datos vacíos para HubSpot.")
-            return {
-                "fsd": fsd,
-                "nombre": "",
-                "id_cliente": "",
-                "municipio": "",
-                "fuente": "HubSpot",
-                "error": "Módulo api2.py no disponible.",
-            }
+            return {**_vacio, "error": "Módulo api2.py no disponible."}
+
         except Exception as e:
             log(f"  ✗ Error al consultar HubSpot: {e}")
-            return {
-                "fsd": fsd,
-                "nombre": "",
-                "id_cliente": "",
-                "municipio": "",
-                "fuente": "HubSpot",
-                "error": str(e),
-            }
+            return {**_vacio, "error": str(e)}
 
     # ── Renderizado de resultados ──────────────────────────────────────
 
