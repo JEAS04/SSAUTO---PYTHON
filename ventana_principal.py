@@ -19,8 +19,26 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import ctypes
 import customtkinter as ctk
 from tkinter import messagebox
+
+# Decirle a Windows que esta app maneja el DPI por sí sola.
+# Esto evita que CTk redimensione la ventana al moverla entre
+# monitores con diferente escalado (100% ↔ 125% ↔ 150%).
+# Debe llamarse ANTES de crear cualquier ventana Tk/CTk.
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Per-monitor DPI aware v1
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()  # Fallback: system DPI aware
+    except Exception:
+        pass
+
+# Desactivar el auto-scaling interno de CustomTkinter.
+# Sin esto, CTk escala los widgets al detectar el nuevo DPI,
+# causando el redimensionado al mover entre monitores.
+ctk.deactivate_automatic_dpi_awareness()
 
 from automatizacion import capturar, subir
 from configuracion import (
@@ -51,6 +69,13 @@ class App(ctk.CTk):
         super().__init__()
         self.title("SSAuto — Automatización de capturas")
         self.resizable(True, True)
+
+        # Fijar la escala de CTk en 1.0 para esta ventana concretamente.
+        # Complementa el ctk.deactivate_automatic_dpi_awareness() global:
+        # ese desactiva la detección automática, este asegura que la escala
+        # interna de CTk esté en un valor fijo y no fluctúe.
+        # _set_scaling recibe (widget_scaling, window_scaling)
+        self._set_scaling(1.0, 1.0)
 
         # Estado interno de la sesión.
         self._credenciales_sesion = {}  # credenciales en memoria (no en disco)

@@ -18,7 +18,12 @@ IMPORTANTE — Selectores configurables:
   Todos los selectores están agrupados al inicio del módulo.
   Si el DOM de Sunrun cambia, solo actualiza esos valores.
 
-Mejoras aplicadas (v2.0):
+Mejoras aplicadas (v2.1):
+  - _clic_resultado() refactorizado: detecta si estamos en /global-search/
+    y aplica 6 estrategias XPath progresivas para encontrar el ticket
+    en la página de resultados (texto visible, href, title, tabla, etc.).
+  - Fallback mejorado para otras páginas de Sunrun (múltiples XPaths).
+  - Guardado de DOM de diagnóstico diferenciado por escenario.
   - Cambio automático a la pestaña correcta de Sunrun al conectar.
   - Logging detallado de URL, título y pestaña activa.
   - Esperas explícitas con WebDriverWait mejoradas.
@@ -175,6 +180,43 @@ def _esperar_renderizado_completo(driver, timeout: float = 10.0) -> bool:
         return True
     except (TimeoutException, WebDriverException):
         return False
+
+
+def _clic_con_nueva_pestana(driver, elemento, log_func, timeout: float = 15.0) -> bool:
+    """
+    Hace clic en un elemento que puede abrir una pestaña nueva (target="_blank").
+
+    Si el clic genera una pestaña nueva, cambia el driver a esa pestaña.
+    Si no genera pestaña nueva (navegación en la misma), no hace nada extra.
+
+    Devuelve True si después del clic el driver está en una pestaña con
+    contenido (readyState complete), False si hubo error.
+    """
+    handles_antes = set(driver.window_handles)
+    try:
+        elemento.click()
+    except Exception as e:
+        log_func(f"  ⚠ Error al hacer clic: {e}")
+        return False
+
+    # Esperar hasta 3s a ver si aparece una pestaña nueva
+    import time as _time
+
+    deadline = _time.time() + 3.0
+    while _time.time() < deadline:
+        handles_ahora = set(driver.window_handles)
+        nuevas = handles_ahora - handles_antes
+        if nuevas:
+            nueva = nuevas.pop()
+            driver.switch_to.window(nueva)
+            log_func(f"  ✓ Nueva pestaña detectada — cambiando a ella.")
+            _esperar_renderizado_completo(driver, timeout=timeout)
+            return True
+        _time.sleep(0.2)
+
+    # No se abrió pestaña nueva — navegación en la misma pestaña
+    _esperar_renderizado_completo(driver, timeout=timeout)
+    return True
 
 
 def _cambiar_a_pestana_por_url(driver, subcadena_url: str, log_func) -> bool:
@@ -486,8 +528,9 @@ class ScraperSunrun:
                     )
                 )
                 self._log(f"  → Clic en link de resultados: {fsd_display}")
-                link_resultado.click()
-                _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
+                _clic_con_nueva_pestana(
+                    self._driver, link_resultado, self._log, TIMEOUT
+                )
                 _log_estado_pagina(self._driver, self._log, "[detalle-resultados] ")
                 self._log(f"  ✓ Página de detalle cargada via página de resultados.")
                 return True
@@ -508,8 +551,7 @@ class ScraperSunrun:
                 )
             )
             self._log(f"  → Clic en link de tabla (fallback): {fsd_display}")
-            link_tabla.click()
-            _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
+            _clic_con_nueva_pestana(self._driver, link_tabla, self._log, TIMEOUT)
             _log_estado_pagina(self._driver, self._log, "[detalle-tabla] ")
             self._log(f"  ✓ Página de detalle cargada via tabla.")
             return True
@@ -599,8 +641,9 @@ class ScraperSunrun:
                         )
                     )
                 )
-                link_resultado.click()
-                _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
+                _clic_con_nueva_pestana(
+                    self._driver, link_resultado, self._log, TIMEOUT
+                )
                 self._log(f"  ✓ Detalle cargado via resultados (búsqueda rápida).")
                 return True
             except (TimeoutException, NoSuchElementException) as e:
@@ -615,49 +658,124 @@ class ScraperSunrun:
 
     def _clic_resultado(self, fsd_numero: str) -> bool:
         """
-        Confirma que la URL actual corresponde al detalle del FSD.
+        Navega al detalle del FSD desde la página actual.
 
-        Desde v3.0, _buscar_en_lista ya navega hasta el detalle del ticket.
-        Este método actúa como verificación: si la URL ya contiene el número,
-        retorna True inmediatamente. Si no, intenta hacer clic en el link
-        del FSD en la página actual como último recurso.
+        Soporta dos escenarios:
+          A) Página de resultados de búsqueda global (/global-search/):
+             Salesforce muestra los resultados en una tabla con links cuyo
+             texto visible es "FSD-XXXXXXX". Se intentan múltiples XPaths
+             para cubrir variaciones del DOM de Salesforce LWC.
+          B) Cualquier otra página con link por href (fsd{numero}):
+             Fallback clásico — href contiene fsd+número.
+
+        Desde v3.0 _buscar_en_lista ya intenta llegar al detalle directo,
+        así que si la URL ya es la del ticket, se retorna True inmediatamente.
         """
         fsd_display = _fsd_display(fsd_numero)
 
-        # Verificar si ya estamos en la URL del detalle
+        # ── ¿Ya estamos en la página de detalle? ─────────────────────
         url_actual = self._driver.current_url.lower()
-        if fsd_numero.lower() in url_actual or f"fsd{fsd_numero}" in url_actual:
+        if f"fsd{fsd_numero}" in url_actual and "/fs-dispatch/" in url_actual:
             self._log(f"  ✓ Ya en la página de detalle de {fsd_display}.")
             return True
 
-        # Último recurso: buscar link por href en la página actual
-        self._log(f"  · URL actual no corresponde al FSD, buscando link en página...")
-        try:
-            wait = WebDriverWait(self._driver, TIMEOUT)
-            link = wait.until(
-                EC.element_to_be_clickable(
-                    (By.XPATH, f"//a[contains(@href,'fsd{fsd_numero}')]")
-                )
+        wait = WebDriverWait(self._driver, TIMEOUT)
+
+        # ── Escenario A: página de resultados de búsqueda global ─────
+        # URL: /partners/s/global-search/FSD-XXXXXXX
+        # El DOM de resultados de Salesforce puede presentar el link con:
+        #   1. Texto visible exacto "FSD-XXXXXXX"
+        #   2. href que contiene fsd{numero} (el más fiable)
+        #   3. Atributo title o aria-label con el nombre del registro
+        #   4. Cualquier <a> dentro de la fila que contenga el número
+        if "/global-search/" in url_actual:
+            self._log(
+                f"  → Estamos en resultados globales, buscando link del ticket..."
             )
-            self._log(f"  → Clic en link de último recurso: {fsd_display}")
-            link.click()
-            _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
-            _log_estado_pagina(self._driver, self._log, "[detalle-last] ")
-            return True
-        except (
-            TimeoutException,
-            NoSuchElementException,
-            StaleElementReferenceException,
-        ) as e:
-            self._log(f"  ✗ No se encontró {fsd_display} en la página actual: {e}")
+            # Espera adicional para que Salesforce renderice los resultados
+            time.sleep(PAUSA_FILTRO)
+
+            # XPaths en orden de preferencia para la página de resultados
+            xpaths_resultados = [
+                # 1. href con fsd+numero (más específico y fiable)
+                f"//a[contains(@href,'/fs-dispatch/') and contains(@href,'fsd{fsd_numero}')]",
+                # 2. Texto visible exacto del link = "FSD-XXXXXXX"
+                f"//a[normalize-space(text())='{fsd_display}']",
+                # 3. Link con title o data-record-id que contenga el número
+                f"//a[@title='{fsd_display}' or contains(@title,'{fsd_numero}')]",
+                # 4. Cualquier <a> dentro de una celda/fila de resultado que
+                #    contenga el texto del FSD (cubre wrappers LWC con slots)
+                f"//table//a[contains(normalize-space(.), '{fsd_display}')]",
+                f"//tbody//a[contains(normalize-space(.), '{fsd_display}')]",
+                # 5. Genérico: cualquier <a> en la página que contenga el texto
+                f"//a[contains(normalize-space(.), '{fsd_display}')]",
+                # 6. Último recurso: href solo con el número (sin "fsd" prefix)
+                f"//a[contains(@href,'{fsd_numero}') and contains(@href,'/fs-dispatch/')]",
+            ]
+
+            for i, xpath in enumerate(xpaths_resultados, 1):
+                try:
+                    link = wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+                    self._log(
+                        f"  ✓ Link encontrado en resultados (estrategia {i}): {fsd_display}"
+                    )
+                    _clic_con_nueva_pestana(self._driver, link, self._log, TIMEOUT)
+                    _log_estado_pagina(self._driver, self._log, "[detalle-resultados] ")
+                    self._log(
+                        f"  ✓ Página de detalle cargada desde resultados globales."
+                    )
+                    return True
+                except (TimeoutException, NoSuchElementException):
+                    self._log(f"  · Estrategia {i} no encontró el link, siguiente...")
+                    continue
+                except StaleElementReferenceException:
+                    self._log(f"  · Elemento obsoleto en estrategia {i}, siguiente...")
+                    continue
+
+            self._log(
+                f"  ✗ No se encontró {fsd_display} en la página de resultados globales."
+            )
             # Guardar DOM para diagnóstico
             try:
-                with open("debug_dom_sunrun_busqueda.html", "w", encoding="utf-8") as f:
+                with open(
+                    "debug_dom_sunrun_resultados.html", "w", encoding="utf-8"
+                ) as f:
                     f.write(self._driver.page_source)
-                self._log("  → DOM guardado en debug_dom_sunrun_busqueda.html")
+                self._log("  → DOM guardado en debug_dom_sunrun_resultados.html")
             except Exception:
                 pass
             return False
+
+        # ── Escenario B: otra página de Sunrun (lista, home, etc.) ───
+        self._log(
+            f"  · URL no es de detalle ni de resultados globales, buscando link..."
+        )
+        xpaths_fallback = [
+            f"//a[contains(@href,'/fs-dispatch/') and contains(@href,'fsd{fsd_numero}')]",
+            f"//a[contains(@href,'fsd{fsd_numero}')]",
+            f"//a[normalize-space(text())='{fsd_display}']",
+        ]
+
+        for i, xpath in enumerate(xpaths_fallback, 1):
+            try:
+                link = wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+                self._log(f"  → Clic en link (fallback {i}): {fsd_display}")
+                _clic_con_nueva_pestana(self._driver, link, self._log, TIMEOUT)
+                _log_estado_pagina(self._driver, self._log, "[detalle-fallback] ")
+                return True
+            except (TimeoutException, NoSuchElementException):
+                continue
+            except StaleElementReferenceException:
+                continue
+
+        self._log(f"  ✗ No se encontró {fsd_display} en la página actual.")
+        try:
+            with open("debug_dom_sunrun_busqueda.html", "w", encoding="utf-8") as f:
+                f.write(self._driver.page_source)
+            self._log("  → DOM guardado en debug_dom_sunrun_busqueda.html")
+        except Exception:
+            pass
+        return False
 
     # ── Paso 3: extraer datos del detalle del ticket ──────────────────
 
