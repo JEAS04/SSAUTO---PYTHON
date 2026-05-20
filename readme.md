@@ -82,3 +82,4 @@ Asegúrate de que los selectores coincidan con los campos del formulario del sit
 Este README fue generado para documentar y facilitar el uso del proyecto SSAuto.
 
 # **Creado por Julian Esteban Alvarez Segura - PlanetSolar SAS**
+## Licencia seguido de Este proyecto está bajo la [Licencia MIT](LICENSE).
