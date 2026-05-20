@@ -310,3 +310,19 @@ Se creo `doku.md` para poner mi documentación y datos para tener contexto. (sol
 # **Comando para crear el .exe**
 
 pyinstaller --onefile --windowed --collect-all customtkinter --add-data "config.json;." --add-data ".env;." main.py
+
+* Se eliminaron los requierements.txt innecesarios, las carpetas que ya no utilizaba y se corrigieron errores en configuracion.py
+
+# version.py
+MAJOR.MINOR.PATCH
+
+Ejemplo:
+0.1.0
+* MAJOR → cambios grandes que rompen cosas
+* MINOR → nuevas funciones
+* PATCH → arreglos pequeños
+* 0.1.0  -> primera versión usable
+* 0.2.0  -> agregaste login
+* 0.2.1  -> arreglaste un bug
+* 1.0.0  -> versión estable
+* 2.0.0  -> cambiaste arquitectura/API

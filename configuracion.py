@@ -22,16 +22,13 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-ARCHIVO_CONFIG = resource_path("config.json")
 # ── Apariencia de la interfaz ─────────────────────────────────────────
 # Se definen aquí para aplicarlos antes de importar CustomTkinter en main.
 TEMA_APARIENCIA = "dark"
 TEMA_COLOR = "blue"
 
 # ── Archivos del proyecto ─────────────────────────────────────────────
-# Ruta del archivo donde se persiste el estado entre ejecuciones
-# (región de captura, atajo de teclado, etc.).
-ARCHIVO_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+ARCHIVO_CONFIG = resource_path("config.json")
 
 # Nombre clave usado en el llavero del sistema operativo para guardar
 # credenciales de forma segura (no en texto plano).
@@ -185,13 +182,13 @@ def guardar_config(datos: dict) -> None:
 
     Se llama cada vez que el usuario cambia el atajo de teclado o la
     región, para que esos valores persistan en la próxima ejecución.
+    En caso de error de escritura, lo reporta por consola sin lanzar excepción.
     """
     try:
         with open(ARCHIVO_CONFIG, "w") as f:
             json.dump(datos, f, indent=2)
     except Exception as e:
-        print(f"[✗] Error cargando config: {e}")
-    return {}
+        print(f"[✗] Error guardando config: {e}")
 
 
 # ── Perfiles de región ────────────────────────────────────────────────
@@ -259,7 +256,10 @@ def obtener_monitores() -> list:
         return []
 
 
-def obtener_nombres_monitores() -> list[str]:
+from typing import List
+
+
+def obtener_nombres_monitores() -> List[str]:
     """
     Devuelve una lista de nombres legibles para mostrar en la UI.
 
@@ -267,7 +267,7 @@ def obtener_nombres_monitores() -> list[str]:
 
     Returns
     -------
-    list[str] : nombres legibles para cada monitor detectado.
+    List[str] : nombres legibles para cada monitor detectado.
     """
     monitores = obtener_monitores()
     nombres = []

@@ -4,6 +4,7 @@ cookies/
 .venv
 .env
 debug/
+venv
 
 # PyInstaller
 build/
