@@ -9,8 +9,20 @@ leer un valor de configuración.
 """
 
 import os
+import sys
 import json
 
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
+ARCHIVO_CONFIG = resource_path("config.json")
 # ── Apariencia de la interfaz ─────────────────────────────────────────
 # Se definen aquí para aplicarlos antes de importar CustomTkinter en main.
 TEMA_APARIENCIA = "dark"

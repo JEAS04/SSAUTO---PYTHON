@@ -281,7 +281,7 @@ class VentanaComparacion(ctk.CTkToplevel):
 
     def _obtener_hubspot(self, fsd: str, log) -> dict:
         """
-        Obtiene los datos del ticket + contacto de HubSpot usando api2.py.
+        Obtiene los datos del ticket + contacto de HubSpot usando  api.py.
         Importa dinámicamente para no acoplar el módulo si la API no está disponible.
         """
         _vacio = {
@@ -303,7 +303,7 @@ class VentanaComparacion(ctk.CTkToplevel):
             "fuente": "HubSpot",
         }
         try:
-            from api2 import extraer_datos_hubspot
+            from api import extraer_datos_hubspot
 
             datos = extraer_datos_hubspot(fsd)
             if datos.get("error"):
@@ -311,8 +311,8 @@ class VentanaComparacion(ctk.CTkToplevel):
             return datos_hs_desde_ticket(datos)
 
         except ImportError:
-            log("  ⚠ api2.py no disponible. Usando datos vacíos para HubSpot.")
-            return {**_vacio, "error": "Módulo api2.py no disponible."}
+            log("  ⚠  api.py no disponible. Usando datos vacíos para HubSpot.")
+            return {**_vacio, "error": "Módulo  api.py no disponible."}
 
         except Exception as e:
             log(f"  ✗ Error al consultar HubSpot: {e}")

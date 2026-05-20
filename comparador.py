@@ -10,7 +10,7 @@ que clasifica cada campo en una de cuatro categorías:
 
 Este módulo es puro Python sin dependencias externas: solo recibe datos
 y devuelve el análisis. Toda la lógica de extracción vive en sus módulos
-correspondientes (api2.py y scraping_sunrun.py).
+correspondientes ( api.py y scraping_sunrun.py).
 """
 
 import re
@@ -272,7 +272,7 @@ def comparar(datos_hubspot: dict, datos_sunrun: dict) -> dict:
 
     Parámetros
     ----------
-    datos_hubspot : dict con datos de HubSpot (api2.py)
+    datos_hubspot : dict con datos de HubSpot ( api.py)
     datos_sunrun  : dict con datos de Sunrun  (scraping_sunrun.py)
 
     Devuelve
@@ -368,13 +368,13 @@ def comparar(datos_hubspot: dict, datos_sunrun: dict) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  Helper para construir datos de HubSpot desde el resultado de api2.py
+#  Helper para construir datos de HubSpot desde el resultado de  api.py
 # ══════════════════════════════════════════════════════════════════════
 
 
 def datos_hs_desde_ticket(ticket_dict: dict) -> dict:
     """
-    Adapta el dict devuelto por api2.extraer_datos_hubspot() al formato
+    Adapta el dict devuelto por  api.extraer_datos_hubspot() al formato
     interno que usa comparar(). Todas las claves se pasan directamente;
     se garantiza que existan con valor vacío si faltaran.
     """

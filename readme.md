@@ -1,92 +1,84 @@
-# SSAuto — Automatización de capturas
+﻿# SSAuto
 
-Herramienta de escritorio para tomar capturas de pantalla de una región definida y subirlas automáticamente a uno o varios sitios web mediante Selenium.
+## Descripción
 
----
+SSAuto es una herramienta de escritorio para automatizar capturas de pantalla de regiones específicas de la pantalla y subirlas a uno o varios sitios web.
 
-## Estructura del proyecto
+La aplicación combina una interfaz gráfica (`CustomTkinter`), captura de pantalla (`mss`) y automatización de navegador (`Selenium`).
 
-```
-ssauto/
-├── main.py                   ← Punto de entrada (ejecutar este archivo)
-├── configuracion.py          ← Constantes, lista de sitios y config.json
-├── credenciales.py           ← Cookies de sesión y llavero del SO (keyring)
-├── medidor.py                ← Código del selector visual de región
-├── automatizacion.py         ← Driver de Chrome, captura y subida (Selenium + mss)
-├── ventana_credenciales.py   ← Ventana modal de usuario/contraseña
-├── ventana_principal.py      ← Ventana principal (CustomTkinter)
-├── config.json               ← Generado automáticamente al guardar ajustes
-├── cookies/                  ← Generado automáticamente al hacer login
-└── screenshots/              ← Generado automáticamente al capturar
-```
+## Estructura principal del proyecto
 
----
+- `main.py` — punto de entrada principal.
+- `configuracion.py` — configuración general y definición de sitios.
+- `credenciales.py` — manejo de credenciales, cookies y llavero del sistema.
+- `medidor.py` — selector visual para definir la región de captura.
+- `automatizacion.py` — control de Chrome/Selenium, captura y subida.
+- `ventana_principal.py` — interfaz principal de la aplicación.
+- `ventana_credenciales.py` — ventana de login y credenciales.
+- `config.json` — archivo de configuración generado al guardar ajustes.
+- `cookies/` — cookies de sesión guardadas automáticamente.
+- `screenshots/` — capturas guardadas automáticamente.
 
-## Instalación
+## Requisitos
+
+Instala las dependencias con:
 
 ```bash
-pip install customtkinter selenium webdriver-manager mss keyring
+pip install -r requirements.txt
 ```
 
+### Dependencias clave
+
+- `customtkinter`
+- `selenium`
+- `webdriver-manager`
+- `mss`
+- `keyring`
+
 ## Uso
+
+Ejecuta la aplicación desde la carpeta raíz del proyecto:
 
 ```bash
 python main.py
 ```
 
----
+## Configuración
 
-## Agregar un sitio nuevo
+Al iniciar por primera vez, la aplicación crea o actualiza `config.json` con los ajustes de la región y la tecla rápida.
 
-Edita la lista `SITIOS` en `configuracion.py`. Copia uno de los bloques existentes y ajusta:
+### Cambiar la configuración de sitios
 
-- `nombre`: identificador único del sitio.
-- `necesita_login`: `True` o `False`.
-- `url_login` / `url_upload`: URLs del sitio.
-- `selector_*`: selectores CSS de los elementos del formulario.
+Edita `configuracion.py` para ajustar los sitios que usa la aplicación.
 
----
+Para agregar un sitio nuevo, copia un bloque existente en la lista `SITIOS` y modifica:
 
-## Mejoras necesarias (a corto plazo)
+- `nombre`
+- `necesita_login`
+- `url_login`
+- `url_upload`
+- `selector_*`
 
-### 1. Compatibilidad con macOS y Linux
-`_abrir_chrome_debug()` solo busca Chrome en rutas de Windows. Agregar detección del SO con `platform.system()` y las rutas correspondientes en cada sistema.
+Asegúrate de que los selectores coincidan con los campos del formulario del sitio destino.
 
-### 2. Gestión de errores más granular
-Actualmente los errores de subida se logean pero no se reintentan. Implementar reintentos automáticos (p. ej. 3 intentos con espera exponencial) para fallos de red.
+## Carpetas generadas automáticamente
 
-### 3. Validación de la región capturada
-Si `width` o `height` es 0, `mss` lanzará un error silencioso. Agregar validación antes de llamar a `capturar()` y mostrar un mensaje claro al usuario.
+- `cookies/`: cookies de sesión almacenadas en archivos.
+- `screenshots/`: capturas guardadas por la aplicación.
 
-### 4. Pruebas automáticas
-No hay ningún test. Agregar al menos pruebas unitarias para `parsear_region`, `_keybind_legible` y `cargar_config` con `pytest`.
+## Consideraciones importantes
 
----
+- Las cookies se almacenan localmente y no están cifradas por defecto.
+- Si no hay internet, `webdriver-manager` puede fallar al descargar `chromedriver`.
+- El proyecto está orientado a Windows; otros sistemas operativos pueden necesitar ajustes.
 
-## Mejoras futuras (a mediano plazo)
+## Sugerencias de mejora
 
-### 5. Soporte para múltiples perfiles de región
-Permitir guardar y cargar diferentes regiones con nombre (p. ej. "Monitor 1 - Panel izquierdo") en lugar de solo una.
+- Implementar reintentos automáticos en caso de fallos de subida.
+- Crear pruebas automatizadas con `pytest`.
 
-### 6. Programación por horario
-Agregar un campo de intervalo (en minutos) para que la captura y subida se ejecuten automáticamente de forma periódica usando `threading.Timer` o `schedule`.
+## Contacto
 
-### 7. Historial de capturas
-Mostrar en la UI las últimas N capturas realizadas con miniatura, fecha y estado de subida. Guardar el historial en un archivo JSON local.
+Este README fue generado para documentar y facilitar el uso del proyecto SSAuto.
 
-### 8. Notificaciones del sistema
-Usar `plyer` o `winotify` (Windows) para mostrar una notificación nativa cuando el proceso complete o falle, incluso si la ventana está minimizada.
-
-### 9. Modo de línea de comandos (CLI)
-Exponer `capturar()` y `subir()` como comandos de consola para poder integrar SSAuto en scripts o tareas programadas del SO sin abrir la UI.
-
-### 10. Empaquetado como ejecutable
-Configurar `PyInstaller` o `Nuitka` para distribuir la app como un `.exe` sin requerir Python instalado.
-
----
-
-## Cosas a considerar
-
-- **Seguridad de cookies**: Los archivos `.pkl` en la carpeta `cookies/` no están cifrados. Cualquiera con acceso al sistema puede leerlos. Para mayor seguridad, cifrarlos con `cryptography.fernet` usando una clave derivada del llavero del SO.
-- **Selector de confirmación**: `wait.until(EC.url_contains("secure"))` está hardcodeado para el sitio de demo de Herokuapp. Para sitios reales, cambiar esto a un selector configurable por sitio en `SITIOS`.
-- **WebDriverManager y offline**: Si la máquina no tiene internet, `ChromeDriverManager().install()` fallará. Considerar cachear el driver o permitir especificar la ruta manualmente.
+# **Creado por Julian Esteban Alvarez Segura - PlanetSolar SAS**

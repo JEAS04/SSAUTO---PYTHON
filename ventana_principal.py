@@ -641,17 +641,25 @@ class App(ctk.CTk):
 
         # Toggle: usar Chrome ya abierto por el usuario en puerto 9222
         self.chrome_existente_var = ctk.BooleanVar(value=True)
-        self._fila_toggle(
-            padre, "Usar Chrome ya abierto (puerto 9222)", self.chrome_existente_var
-        )
+        fila_chrome = ctk.CTkFrame(padre, fg_color="transparent")
+        fila_chrome.pack(fill="x", pady=(4, 0))
+
+        # Reutiliza _fila_toggle pero dentro del sub-frame
+        # (o crea el switch directamente aquí para tenerlo en fila_chrome)
+        ctk.CTkSwitch(
+            fila_chrome,
+            text="Usar Chrome ya abierto (puerto 9222)",
+            variable=self.chrome_existente_var,
+            font=ctk.CTkFont(size=11),
+        ).pack(side="left", expand=True, anchor="w")
 
         ctk.CTkButton(
-            padre,
+            fila_chrome,
             text="Abrir Chrome con depuración",
             command=self._abrir_chrome_debug,
             font=ctk.CTkFont(size=10),
             height=28,
-        ).pack(anchor="e", pady=(4, 0))
+        ).pack(side="right")
 
         self._separador(padre)
 

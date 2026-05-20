@@ -3,3 +3,16 @@ __pycache__/
 cookies/
 .venv
 .env
+debug/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Coverage
+.coverage
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover

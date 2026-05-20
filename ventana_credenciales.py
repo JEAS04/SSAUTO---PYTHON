@@ -12,7 +12,11 @@ Al confirmar, las credenciales quedan en:
 import customtkinter as ctk
 from tkinter import messagebox
 
-from credenciales import cargar_credenciales, guardar_credenciales, borrar_credenciales
+from credenciales import (
+    cargar_credenciales,
+    guardar_credenciales,
+    borrar_credenciales,
+)
 
 
 class VentanaCredenciales(ctk.CTkToplevel):
