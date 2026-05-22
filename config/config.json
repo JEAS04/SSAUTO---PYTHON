@@ -1,0 +1,20 @@
+{
+  "keybind": "<Control-z>",
+  "perfiles_region": {
+    "monitor 1": {
+      "top": 267,
+      "left": 91,
+      "width": 410,
+      "height": 220,
+      "monitor_index": 1
+    },
+    "monitor 2": {
+      "top": 81,
+      "left": -1885,
+      "width": 1416,
+      "height": 806,
+      "monitor_index": 2
+    }
+  },
+  "auto_submit_nota": false
+}

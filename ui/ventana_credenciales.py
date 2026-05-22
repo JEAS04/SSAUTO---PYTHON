@@ -11,8 +11,8 @@ Al confirmar, las credenciales quedan en:
 
 import customtkinter as ctk
 from tkinter import messagebox
-
-from credenciales import (
+from config.configuracion import cargar_config
+from config.credenciales import (
     cargar_credenciales,
     guardar_credenciales,
     borrar_credenciales,
@@ -48,6 +48,9 @@ class VentanaCredenciales(ctk.CTkToplevel):
         self.transient(parent)
         # wait_window() pausa la ejecución hasta que esta ventana se cierre.
         self.wait_window()
+        self._config = cargar_config()
+        config = cargar_config()
+        ctk.set_appearance_mode(config.get("tema", "dark"))
 
     def _construir_ui(self):
         """Construye el formulario con un bloque por cada sitio con login."""

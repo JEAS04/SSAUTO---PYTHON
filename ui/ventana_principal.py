@@ -18,10 +18,10 @@ import tkinter.font
 import time
 from datetime import datetime
 from pathlib import Path
-
 import ctypes
 import customtkinter as ctk
 from tkinter import messagebox
+from config.configuracion import cargar_auto_submit, guardar_auto_submit
 
 # Decirle a Windows que esta app maneja el DPI por sí sola.
 # Esto evita que CTk redimensione la ventana al moverla entre
@@ -40,8 +40,8 @@ except Exception:
 # causando el redimensionado al mover entre monitores.
 ctk.deactivate_automatic_dpi_awareness()
 
-from automatizacion import capturar, subir
-from configuracion import (
+from core.automatizacion import capturar, subir
+from config.configuracion import (
     SITIOS,
     PERFIL_POR_DEFECTO,
     cargar_config,
@@ -51,9 +51,9 @@ from configuracion import (
     obtener_monitores,
     obtener_nombres_monitores,
 )
-from credenciales import cargar_credenciales
+from config.credenciales import cargar_credenciales
 from medidor import MEDIDOR_CODE
-from ventana_credenciales import VentanaCredenciales
+from ui.ventana_credenciales import VentanaCredenciales
 
 
 class App(ctk.CTk):
@@ -81,11 +81,8 @@ class App(ctk.CTk):
         self._credenciales_sesion = {}  # credenciales en memoria (no en disco)
         self._keybind_actual = None
         self._config = cargar_config()
-
-        # Índice del monitor seleccionado para el medidor / captura.
-        # Por defecto: 1 (primer monitor físico) para mantener compatibilidad.
-        self._monitor_seleccionado = 1
-
+        config = cargar_config()
+        ctk.set_appearance_mode(config.get("tema", "dark"))
         self._construir_ui()
 
         # Interceptar el cierre para guardar la config antes de salir.
@@ -109,7 +106,7 @@ class App(ctk.CTk):
             self.after(100, self._abrir_login_inicial)
 
     def _abrir_comparacion(self):
-        from ventana_comparacion import VentanaComparacion
+        from ui.ventana_comparacion import VentanaComparacion
 
         VentanaComparacion(self, log_callback=self._log)
 
@@ -517,7 +514,7 @@ class App(ctk.CTk):
         self._perfiles = perfiles
         self._actualizar_menu_perfiles()
         self._perfil_var.set(nombre)  # Dejar seleccionado el perfil recién guardado.
-
+        self._log(f"✓ Perfil eliminado: «{nombre}»")
         accion = "guardado" if es_nuevo else "actualizado"
         self._log(f"✓ Perfil {accion}: «{nombre}» → {region}")
 
@@ -545,6 +542,8 @@ class App(ctk.CTk):
             del perfiles[nombre]
         guardar_perfiles(perfiles)
         self._perfiles = perfiles
+        self._actualizar_menu_perfiles()
+        self._log(f"✓ Perfil eliminado: «{nombre}»")
 
     def _crear_coordenadas(self, padre):
         """
@@ -664,7 +663,6 @@ class App(ctk.CTk):
         self._separador(padre)
 
         # Toggle: auto-submit de nota en HubSpot
-        from configuracion import cargar_auto_submit, guardar_auto_submit
 
         self.auto_submit_var = ctk.BooleanVar(value=cargar_auto_submit())
 
@@ -887,7 +885,6 @@ class App(ctk.CTk):
         La reabre al recibir el resultado.
         """
         monitor_idx = self._monitor_var_indice()
-        self._monitor_seleccionado = monitor_idx
         self._log(
             f"→ Abre el medidor en {self._monitor_var.get()} — haz clic y arrastra en pantalla..."
         )
@@ -937,6 +934,44 @@ class App(ctk.CTk):
         self._log(f"✓ Región actualizada: {region}")
         self.btn.configure(state="normal")
 
+    def _obtener_region_validada(self) -> dict:
+        """
+        Lee y valida los campos de región.
+
+        Returns
+        -------
+        dict
+            Región válida con top/left/width/height enteros.
+
+        Raises
+        ------
+        ValueError
+            Si algún campo está vacío o contiene valores inválidos.
+        """
+
+        region = {}
+
+        for clave, var in self.region_vars.items():
+            texto = var.get().strip()
+
+            if not texto:
+                raise ValueError(f"El campo '{clave}' está vacío.")
+
+            try:
+                valor = int(texto)
+            except ValueError:
+                raise ValueError(f"El campo '{clave}' debe ser un número entero.")
+
+            region[clave] = valor
+
+        if region["width"] <= 0:
+            raise ValueError("Width debe ser mayor que 0.")
+
+        if region["height"] <= 0:
+            raise ValueError("Height debe ser mayor que 0.")
+
+        return region
+
     def _parsear_region(self, event=None):
         """
         Parsea el contenido del campo 'Pegar región' y actualiza los campos individuales.
@@ -974,14 +1009,17 @@ class App(ctk.CTk):
     def _abrir_login_inicial(self):
         """Abre el diálogo de credenciales automáticamente al iniciar si faltan datos."""
         win = VentanaCredenciales(self, SITIOS)
-        if win.confirmado:
+        self.wait_window(win)
+
+        if getattr(win, "confirmado", False):
             self._credenciales_sesion = win.credenciales_sesion
             self._log("✓ Credenciales actualizadas en sesión.")
 
     def _abrir_credenciales(self):
         """Abre el diálogo de credenciales desde el botón 'Credenciales'."""
         win = VentanaCredenciales(self, SITIOS)
-        if win.confirmado:
+        self.wait_window(win)
+        if getattr(win, "confirmado", False):
             self._credenciales_sesion = win.credenciales_sesion
             self._log("✓ Credenciales actualizadas en sesión.")
         self._actualizar_sitios_status()
@@ -1067,12 +1105,7 @@ class App(ctk.CTk):
                 text=f"Combinación activa: {legible}",
                 text_color=("green", "#3fb950"),
             )
-
-            config = cargar_config()
-            config["keybind"] = nuevo
-            guardar_config(config)
-
-            self._config = config
+            self._config["keybind"] = nuevo
 
         except Exception as e:
             self.keybind_label.configure(
@@ -1134,7 +1167,7 @@ class App(ctk.CTk):
             self.after(0, lambda m=msg: self._log(m))
 
         try:
-            region = {k: int(v.get()) for k, v in self.region_vars.items()}
+            region = self._obtener_region_validada()
 
             # Mostrar en qué monitor se está capturando.
             monitor_nombre = self._monitor_var.get()
@@ -1204,12 +1237,20 @@ class App(ctk.CTk):
 
     def _al_cerrar(self):
         """Guarda la configuración en disco antes de cerrar la ventana."""
-        config_actual = cargar_config()
 
-        for k, v in self._config.items():
-            config_actual[k] = v
+        self._config["ultimo_monitor"] = self._monitor_var_indice()
 
-        # Guardar el último monitor seleccionado para restaurarlo al iniciar.
-        config_actual["ultimo_monitor"] = self._monitor_var_indice()
+        guardar_config(self._config)
 
         self.destroy()
+
+
+if __name__ == "__main__":
+    try:
+        app = App()
+        app.mainloop()
+    except Exception as e:
+        print("ERROR:", e)
+        import traceback
+
+        traceback.print_exc()

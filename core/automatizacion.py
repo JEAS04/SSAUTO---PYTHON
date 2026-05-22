@@ -44,7 +44,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-from credenciales import cargar_cookies, guardar_cookies, cargar_credenciales
+from config.credenciales import cargar_cookies, guardar_cookies, cargar_credenciales
 
 # ── Logger interno ─────────────────────────────────────────────────────
 # Prepara mensajes con timestamp, emoji y contexto para que el callable

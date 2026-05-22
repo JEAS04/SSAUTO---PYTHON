@@ -12,7 +12,7 @@ import pickle
 import keyring
 from pathlib import Path
 
-from configuracion import KEYRING_APP
+from config.configuracion import KEYRING_APP
 
 # ── Cookies de sesión ─────────────────────────────────────────────────
 

@@ -17,9 +17,10 @@ la comparación desde aquí, sin necesidad de ir a la ventana principal.
 import threading
 import customtkinter as ctk
 from tkinter import messagebox
-
-from comparador import comparar, datos_hs_desde_ticket
+from ui.ventana_principal import App
+from core.comparador import comparar, datos_hs_desde_ticket
 from scraping_sunrun import ScraperSunrun
+from config.configuracion import cargar_config
 
 # ══════════════════════════════════════════════════════════════════════
 #  Colores por estado (modo oscuro / modo claro)
@@ -303,7 +304,7 @@ class VentanaComparacion(ctk.CTkToplevel):
             "fuente": "HubSpot",
         }
         try:
-            from api import extraer_datos_hubspot
+            from data.api import extraer_datos_hubspot
 
             datos = extraer_datos_hubspot(fsd)
             if datos.get("error"):
@@ -494,3 +495,16 @@ class VentanaComparacion(ctk.CTkToplevel):
             text_color=("red", "#f85149"),
             wraplength=600,
         ).grid(row=0, column=0, pady=40)
+
+
+if __name__ == "__main__":
+    config = cargar_config()
+
+    ctk.set_appearance_mode(config.get("tema", "dark"))
+
+    root = ctk.CTk()
+    root.withdraw()
+
+    app = VentanaComparacion(root)
+
+    root.mainloop()
