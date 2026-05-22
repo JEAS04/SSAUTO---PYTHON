@@ -74,7 +74,7 @@ ETIQUETAS_ESTADO = {
 # ══════════════════════════════════════════════════════════════════════
 
 
-class VentanaComparacion(ctk.CTkToplevel):
+class VentanaComparacion(ctk.CTkFrame):
     """
     Ventana modal que muestra la comparación de datos entre Sunrun y HubSpot.
 
@@ -98,8 +98,8 @@ class VentanaComparacion(ctk.CTkToplevel):
         log_callback=None,
     ):
         super().__init__(parent)
-        self.title("Comparación HubSpot ↔ Sunrun")
-        self.resizable(True, True)
+        # self.title("Comparación HubSpot ↔ Sunrun")
+        # self.resizable(True, True)
         # grab_set() removido: causaba bloqueo de la ventana principal.
         # transient() removido: causaba que la ventana desapareciera al usar
         # "Mostrar escritorio" de Windows y no se pudiera recuperar.
@@ -114,13 +114,13 @@ class VentanaComparacion(ctk.CTkToplevel):
         ancho, alto = 820, 560
         px = max(0, (self.winfo_screenwidth() - ancho) // 2)
         py = max(0, (self.winfo_screenheight() - alto) // 2)
-        self.geometry(f"{ancho}x{alto}+{px}+{py}")
-        self.minsize(600, 400)
+        # self.geometry(f"{ancho}x{alto}+{px}+{py}")
+        # self.minsize(600, 400)
 
         self._construir_ui()
 
         # Manejar cierre con X correctamente
-        self.protocol("WM_DELETE_WINDOW", self._cerrar)
+        # self.protocol("WM_DELETE_WINDOW", self._cerrar)
 
         # Traer al frente al abrir
         self.after(50, self._traer_al_frente)

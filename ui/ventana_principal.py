@@ -56,7 +56,7 @@ from medidor import MEDIDOR_CODE
 from ui.ventana_credenciales import VentanaCredenciales
 
 
-class App(ctk.CTk):
+class App(ctk.CTkFrame):
     """
     Ventana principal de la aplicación SSAuto.
 
@@ -65,10 +65,10 @@ class App(ctk.CTk):
     para evitar problemas de concurrencia con Tkinter.
     """
 
-    def __init__(self):
-        super().__init__()
-        self.title("SSAuto — Automatización de capturas")
-        self.resizable(True, True)
+    def __init__(self, parent):
+        super().__init__(parent)
+        # self.title("SSAuto — Automatización de capturas")
+        # self.resizable(True, True)
 
         # Fijar la escala de CTk en 1.0 para esta ventana concretamente.
         # Complementa el ctk.deactivate_automatic_dpi_awareness() global:
@@ -86,7 +86,7 @@ class App(ctk.CTk):
         self._construir_ui()
 
         # Interceptar el cierre para guardar la config antes de salir.
-        self.protocol("WM_DELETE_WINDOW", self._al_cerrar)
+        # self.protocol("WM_DELETE_WINDOW", self._al_cerrar)
 
         # Centrar la ventana en la pantalla.
         self.update_idletasks()
@@ -94,8 +94,8 @@ class App(ctk.CTk):
         alto = min(760, self.winfo_screenheight() - 80)
         pos_x = max(0, (self.winfo_screenwidth() - ancho) // 2)
         pos_y = max(0, (self.winfo_screenheight() - alto) // 2)
-        self.geometry(f"{ancho}x{alto}+{pos_x}+{pos_y}")
-        self.minsize(480, 400)
+        # self.geometry(f"{ancho}x{alto}+{pos_x}+{pos_y}")
+        # self.minsize(480, 400)
 
         # Si falta alguna credencial, abrir el diálogo de login al iniciar.
         faltan_creds = any(
@@ -625,10 +625,57 @@ class App(ctk.CTk):
             hover_color=("#144e7a", "#144e7a"),
         ).pack(side="left", padx=(8, 0))
 
+    def _seleccionar_destino(self, opcion: str):
+        """Resalta el botón seleccionado y guarda la elección en destino_var."""
+        self.destino_var.set(opcion)
+        for nombre, btn in self._btns_destino.items():
+            if nombre == opcion:
+                btn.configure(
+                    fg_color=("#238636", "#2ea043"), hover_color=("#1e7a30", "#26963a")
+                )
+            else:
+                btn.configure(
+                    fg_color=("gray70", "gray30"), hover_color=("gray60", "gray40")
+                )
+
     def _crear_opciones(self, padre):
         """
         Crea los toggles de modo headless, Chrome existente y el atajo de teclado.
         """
+        # Selector de destino: SUNRUN, HUBSPOT o AMBOS
+        self.destino_var = ctk.StringVar(value="AMBOS")
+
+        fila_destino = ctk.CTkFrame(padre, fg_color="transparent")
+        fila_destino.pack(fill="x", pady=(0, 6))
+
+        ctk.CTkLabel(
+            fila_destino,
+            text="Subir a:",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray60"),
+            width=60,
+            anchor="w",
+        ).pack(side="left", padx=(0, 8))
+
+        self._btns_destino = {}
+        for opcion in ("SUNRUN", "HUBSPOT", "AMBOS"):
+            btn = ctk.CTkButton(
+                fila_destino,
+                text=opcion,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                width=88,
+                height=28,
+                corner_radius=6,
+                fg_color=("#1f6aa5", "#1f6aa5"),
+                hover_color=("#144e7a", "#144e7a"),
+            )
+            btn.pack(side="left", padx=(0, 4))
+            self._btns_destino[opcion] = btn
+            btn.configure(command=lambda o=opcion: self._seleccionar_destino(o))
+
+        self._seleccionar_destino("AMBOS")  # Estado inicial
+        self._separador(padre)
+
         # Toggle: modo headless (Chrome sin ventana visible)
         self.headless_var = ctk.BooleanVar(value=False)
         self._fila_toggle(
@@ -1184,24 +1231,15 @@ class App(ctk.CTk):
             headless = self.headless_var.get()
             usar_chrome_existente = self.chrome_existente_var.get()
 
-            for sitio in SITIOS:
-                # ── SUNRUN upload temporarily disabled ────────────────
-                # The SUNRUN upload logic (scraping_sunrun.py) remains intact in
-                # the codebase and can be re-enabled by removing this condition.
-                # When re-enabling, uncomment the subir() call below.
-                if sitio["nombre"] == "SUNRUN":
-                    ui(f"→ SUNRUN: subida deshabilitada temporalmente.")
-                    ui(
-                        "  · La lógica de SUNRUN permanece en el código "
-                        "(scraping_sunrun.py)."
-                    )
-                    ui(
-                        "  · Los datos de SUNRUN siguen disponibles vía "
-                        "Comparador (ScraperSunrun)."
-                    )
-                    ui("")
-                    continue
+            destino = self.destino_var.get()
+            sitios_a_subir = [
+                s for s in SITIOS if destino == "AMBOS" or s["nombre"] == destino
+            ]
 
+            if not sitios_a_subir:
+                ui(f"✗ No hay sitios configurados para: {destino}")
+
+            for sitio in sitios_a_subir:
                 auto_submit = self.auto_submit_var.get()
                 ui(f"→ Subiendo a: {sitio['nombre']}")
                 ui(f"  · Auto-submit nota: {'ON' if auto_submit else 'OFF'}")
