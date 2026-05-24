@@ -1,40 +1,57 @@
 """
-main.py — Punto de entrada de SSAuto.
+main.py — Punto de entrada de SSAuto (refactorizado).
 
-Este es el único archivo que se ejecuta directamente:
-    python main.py
+Responsabilidades de este archivo:
+  1. Registrar los plugins de sitios en PluginRegistry.
+  2. Aplicar tema visual.
+  3. Construir la ventana raíz y montar las vistas.
 
-Solo aplica el tema visual e instancia la ventana principal.
-Toda la lógica está en los módulos del proyecto.
+Para agregar un sitio nuevo:
+  1. Crear plugins/mi_sitio.py heredando de SitioPlugin.
+  2. Agregar las dos líneas de import + registrar() aquí abajo.
+  3. Nada más.
 """
 
 import customtkinter as ctk
+
 from config.configuracion import (
     TEMA_APARIENCIA,
     TEMA_COLOR,
-    guardar_config,
     cargar_config,
+    guardar_config,
     SITIOS,
 )
+
+# ── Registro de plugins ───────────────────────────────────────────────
+# Único lugar donde se declaran los sitios disponibles.
+# Para agregar uno nuevo: import + registrar(), sin tocar nada más.
+
+from core.plugin_registry import PluginRegistry
+from plugins.hubspot import HubSpotPlugin
+from plugins.sunrun import SunrunPlugin
+
+PluginRegistry.registrar(HubSpotPlugin())
+PluginRegistry.registrar(SunrunPlugin())
+# PluginRegistry.registrar(NuevoSitioPlugin())  ← así de fácil
+
+# ── Imports de UI ─────────────────────────────────────────────────────
 from ui.ventana_principal import App
 from ui.ventana_comparacion import VentanaComparacion
 from ui.ventana_credenciales import VentanaCredenciales
 from ui.ventana_plantillas import VentanaPlantillas
 
-# ── Tema ──────────────────────────────────────────────────────────────────────
+# ── Tema ──────────────────────────────────────────────────────────────
 config = cargar_config()
 ctk.set_appearance_mode(config.get("tema", TEMA_APARIENCIA))
 ctk.set_default_color_theme(TEMA_COLOR)
 
-
-# ── Ventana raíz ──────────────────────────────────────────────────────────────
+# ── Ventana raíz ──────────────────────────────────────────────────────
 launcher = ctk.CTk()
 launcher.geometry("900x620")
 launcher.title("SSAuto")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
+# ── Helpers ───────────────────────────────────────────────────────────
 
 def mostrar_frame(frame):
     frame.tkraise()
@@ -58,17 +75,14 @@ def cambiar_tema(opcion: str):
     guardar_config(cfg)
 
 
-# ── Barra de menú CTk (compatible con Windows) ────────────────────────────────
+# ── Barra superior ────────────────────────────────────────────────────
 
-# Frame que actúa como barra — alto fijo de 30 px, ancho completo.
 barra = ctk.CTkFrame(launcher, height=30, corner_radius=0)
 barra.pack(fill="x", side="top")
 barra.pack_propagate(False)
 
 
-# Rastreo del dropdown activo y el botón que lo abrió.
 def _btn_barra(texto: str, comando, lado="left", acento=False) -> ctk.CTkButton:
-    """Crea un botón directo en la barra superior."""
     btn = ctk.CTkButton(
         barra,
         text=texto,
@@ -85,21 +99,14 @@ def _btn_barra(texto: str, comando, lado="left", acento=False) -> ctk.CTkButton:
     return btn
 
 
-# ── Separador vertical en la barra ───────────────────────────────────────────
 def _sep_barra():
     ctk.CTkFrame(barra, width=1, fg_color=("gray70", "gray40")).pack(
         side="left", fill="y", padx=4, pady=4
     )
 
 
-# ── Botones de navegación (izquierda) ─────────────────────────────────────────
-# Se definen DESPUÉS de las funciones helpers para poder referenciarlas.
+# ── Layout principal ──────────────────────────────────────────────────
 
-
-# Los botones de nav se crean después del layout (necesitan frame_principal etc.)
-# Ver más abajo tras la creación de frames.
-
-# ── Layout principal ──────────────────────────────────────────────────────────
 contenedor = ctk.CTkFrame(launcher)
 contenedor.pack(fill="both", expand=True)
 contenedor.grid_rowconfigure(0, weight=1)
@@ -119,7 +126,8 @@ vista_comparacion.pack(fill="both", expand=True)
 
 mostrar_frame(frame_principal)
 
-# ── Botones de la barra (se crean aquí porque necesitan los frames) ───────────
+# ── Botones de navegación ─────────────────────────────────────────────
+
 _btn_barra("Principal", lambda: mostrar_frame(frame_principal))
 _btn_barra("Comparación", lambda: mostrar_frame(frame_comparacion))
 _sep_barra()
@@ -127,7 +135,8 @@ _btn_barra("Credenciales", abrir_credenciales)
 _btn_barra("Plantillas", abrir_plantillas)
 
 
-# ── Minimizar: ocultar barra para que no flote sobre otras ventanas ─────────────
+# ── Minimizar: ocultar barra para que no flote ───────────────────────
+
 def _al_minimizar(event):
     if launcher.state() == "iconic":
         barra.pack_forget()
@@ -138,7 +147,8 @@ def _al_minimizar(event):
 launcher.bind("<Unmap>", _al_minimizar)
 launcher.bind("<Map>", _al_minimizar)
 
-# ── Arranque ──────────────────────────────────────────────────────────────────
+# ── Arranque ──────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     try:
         launcher.mainloop()
