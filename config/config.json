@@ -1,5 +1,39 @@
 {
-  "keybind": "<Control-z>",
+  "tema": "dark",
+  "ultimo_monitor": 1,
+  "regiones_apps": {
+    "Wolkbox": {
+      "top": 52,
+      "left": 18,
+      "width": 1901,
+      "height": 966
+    },
+    "App 2": {
+      "top": 448,
+      "left": 826,
+      "width": 97,
+      "height": 76
+    },
+    "App 3": {
+      "top": 249,
+      "left": 546,
+      "width": 752,
+      "height": 459
+    },
+    "App 4": {
+      "top": 232,
+      "left": 292,
+      "width": 1509,
+      "height": 674
+    },
+    "App 5": {
+      "top": 288,
+      "left": 186,
+      "width": 1415,
+      "height": 529
+    }
+  },
+  "keybind": "<Control-p>",
   "perfiles_region": {
     "monitor 1": {
       "top": 267,

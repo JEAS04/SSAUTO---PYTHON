@@ -18,6 +18,7 @@ import threading
 import customtkinter as ctk
 from tkinter import messagebox
 from ui.ventana_principal import App
+from ui.custom_ctkframe import CustomCTkFrame
 from core.comparador import comparar, datos_hs_desde_ticket
 from scraping_sunrun import ScraperSunrun
 from config.configuracion import cargar_config
@@ -74,7 +75,7 @@ ETIQUETAS_ESTADO = {
 # ══════════════════════════════════════════════════════════════════════
 
 
-class VentanaComparacion(ctk.CTkFrame):
+class VentanaComparacion(CustomCTkFrame):
     """
     Ventana modal que muestra la comparación de datos entre Sunrun y HubSpot.
 

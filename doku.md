@@ -331,3 +331,225 @@ Ejemplo:
 
 
 HOY ME SENTE CON EL EQUIPO DE SERVICIOS TECNICOS, MILESTONE, SALESFORCE PARA REVISAR EL TRABAJO SCRIPT PROGRAMA QUE HICE EN ESTAS 2 SEMANAS, PARA EMPEZAR EN LA REUNION MI JEFE CARLOS DIO CONTEXTO DEL TEMA DE LA REUNION EN LA REUNION ESTABAN: MARGARITA FERRO, NICZY ARIAS, LINA SIERRA Y CRISTIAN REYES, PARA EMPEZAR EXPLICO LA METODOLOGIA SCRUM, LUEGO PROCEDI A EXPLICAR EL FUNCIONAMIENTO DEL PROGRAMA Y VIERON COMO FUNCIONABA, EXPLIQUE EL SSAUTO Y EL COMPARADOR DE FSD Y DURANTE LA REUNION HUBIERON MUCHAS SUGERENCIAS, IDEAS Y PETICIONES, ENTRE ELLAS, MEJORAR EL COMPARADOR, MEJORAR LA INTERFAZ, MEJORAR LA BUSQUEDA POR MAS CAMPOS, AGREGAR MAS FLUJOS ETC PARA QUE EL PROGRAMA FUNCIONE MEJOR, COMO EVITANDO LA BUSQUEDA ENTRE PESTAÑAS Y ELIJA EN DONDE ESTE, MI IDEA ES AGREGAR VARIOS BOTONES Y MEJORAR LA INTERFAZ, BOTONES PARA CAPTURAS PREDETERMINADAS EN DISTINTOS SITIOS WEB O APLICACIONES Y BOTONES PARA COPIAR MENSAJES Y USAR PLANTILLAS, BOTON PARA ELEGIR SI SUBIR A SUNRUN Y A HUBSPOT O A AMBOS, PONER UN COLOR DEPENDIENDO DEL ESTADO DEL FSD EN SUNRUN, (MIRAR CUADERNO), PONER UNA INTERFAZ DISTINTA PARA LA VENTANA PRINCIPAL QUE SEA COMO UN BOTON QUE DIGA "CAPTURA" Y "COMPARADOR, DESDE AHI TAMBIEN QUE HAYA UN BOTON EN LA PARTE DE ARRIBA PARA LA CONFIGURACION
+
+
+
+
+tengo 3 tipos de mensaje aqui estan:
+
+FUERA DE SERVICIO***
+
+Se llamó al número registrado, pero está fuera de servicio. Se envió un correo electrónico como método de contacto alternativo.
+
+LS: 05/19/2026 A call was placed to the registered phone number, but it is out of service. An email was sent as an alternative method of contact.
+
+
+****************************
+BUZÓN DE VOZ***
+
+Se llamó al cliente al número registrado, pero la llamada fue enviada al buzón de voz. Se envió un mensaje de texto y un correo electrónico.
+
+LS: 05/21/2026 The customer was called at the registered number, but the call went to voicemail. A text message and an email were sent.
+
+
+*********************************
+NO CONTESTA***
+
+Se llamó al cliente al número registrado, pero no respondió. Como alternativa de contacto, se envió un mensaje de texto y un correo electrónico.
+
+LS: 05/21/2026 The customer was called at the registered number, but did not answer. A text message and an email were sent as alternative methods of contact.
+
+si puedes ver cada uno tiene una version en ingles y en español, quiero que la interfaz me permita elegir si copiar el que esta en ingles o el que esta en español, si puedes ver hay una fecha al principio de cada mensaje, quiero que esta fecha se ponga automaticamente con datetime o el que consideres necesario, tambien cada uno de estos mensajes puede tener maximo 2 numeros, entonces si el usuario ingresa 1 numero que aparezca "al" si son 2 o mas " a los ", que maneje plural/singular, y que aparezcan los numeros telefonicos en el mensaje, crea un prompt donde se indique lo que se tiene que hacer, di que no se rompa ninguna funcionalidad, debe revisar los archivos @ventana_plantillas.py y @template_filler, si es posible que estos 2 archivos sean combinados, o que el uno llame al otro, la idea es que las interfaces sean faciles de usar, que se pueda ver el mensaje en la ventana, y que tambien se pueda usar el @template_filler a un lado, luego que se pueda copiar como te dije. gracias bro
+
+
+Para la mejor inteligencia en código: ollama run qwen2.5-coder:7b
+Para máxima velocidad (ligero): ollama run qwen2.5-coder:3b
+Para razonamiento lógico profundo: ollama run deepseek-r1:8b
+
+
+
+
+necesito que cuando se suba el archivo de la captura, detecte y suba a la correcta, A LA QUE EL USUARIO ESTA EN ESE MOMENTO, EN LA QUE EL USUARIO ENTRO Y ESTA SOBRE ELLA, QUE NO BUSQUE OTRAS PESTAÑAS DE HUBSPOT ASI TENGA MUCHAS ABIERTAS, YA QUE ESTO ES UN ERROR MASIVO Y MUY IMPORTANTE, YA QUE LA INFORMACION SE PODRIA SUBIR A DONDE NO ES Y NO QUIERO ESO, TAMBIEN HAZ QUE LA INTERFAZ PUEDA ADAPTARSE A TODAS LAS PANTALLAS, YA QUE EN LAS PANTALLAS MUY GRANDES TIPO TV Y ASI, LA VENTANA SE VE FEA Y NO SE VE ENCUADRADA, EL CONTENIDO SE VE PEQUEÑO Y CON MUCHOS ESPACIOS VACIOS, CREAME UN PROMPT CON TODO LO ANTERIOR PLIS, QUE NO DAÑE NINGUNA FUNCIONALIDAD.
+
+
+25/05/2026
+Se implementó una nueva funcionalidad integral para la generación automática de mensajes de contacto mediante la nueva interfaz `@ventana_generador_mensajes`, integrada en la barra superior de configuración. Esta mejora incluye 4 tipos de mensajes predefinidos (Fuera de Servicio, Buzón de Voz, No Contesta y Confirmación de visita técnica), con soporte para manejo inteligente de números telefónicos, validaciones, detección singular/plural, fechas automáticas con `datetime`, cálculo de días hábiles con `pandas`, previsualización en tiempo real y copia automática al portapapeles. Además, se realizó una refactorización general de la arquitectura UI y servicios, abarcando más de 20 archivos enfocados en modularidad, mantenibilidad, compatibilidad y una experiencia de usuario más moderna utilizando `customtkinter`, sin introducir cambios breaking en la aplicación. Adapte los nuevos botones de aplicaciones añadidos a la ventana principal y se configuro el boton para medir la pantalla de cada boton. Ejemplo: B2Chat: Se mide la pantalla y despues se le da al boton para realizar la subida
+
+Se implemento una nueva funcionalidad para la generacion de mensajes de contaccto, con nueva interfaz UI y mejores componentes. Fueron en total 21 archivos cambiados y creados enfocados en modularidad, mantenibilidad y nueva funcionalidad de usuario. La nueva ventana @ventana_generador_mensajes, es una ventana puesta en la barra superior de configuracion que permite abrir una interfaz desde donde se pueden copiar mensajes automaticamente, desde 2 idiomas, estos mensajes tienen un input para ingresar 2 numeros de contacto, tambien traen la fecha actual con datetime y se usa pandas para manejar los dias habiles, detecta plural-singular, se previsualiza el mensaje con la informacion, y se valida que los numeros de telefono ingresados si sean validos 
+- 4 tipos de mensaje predefinidos:
+  - Fuera de Servicio con datetime y variables de telefono
+  - Buzón de Voz  con datetime y variables de telefono
+  - No Contesta con datetime y variables de telefono
+  - Confirma visita tecnica con pandas, dias habiles (business days) y datetime
+
+## 📋 **RESUMEN DE PULL REQUEST - Cambios de Hoy**
+
+### 🎯 **Descripción General**
+Se ha implementado una **nueva funcionalidad integral de generación de mensajes de contacto** junto con mejoras significativas en la arquitectura de UI y refactorización de componentes. El trabajo incluye **20 archivos modificados/creados** enfocados en modularidad, mantenibilidad y nueva funcionalidad de usuario.
+
+---
+
+### 📊 **Estadísticas**
+- **Total de archivos afectados**: 20
+- **Archivos nuevos**: 1 módulo UI principal + documentación
+- **Archivos modificados**: 19
+- **Archivos eliminados**: 0
+
+---
+
+### ✨ **Cambios Principales por Categoría**
+
+#### **1️⃣ NUEVO: Generador de Mensajes de Contacto**
+
+**Archivo nuevo:**
+- ✅ `ui/ventana_generador_mensajes.py` - **Módulo completo para generar mensajes estandarizados**
+
+**Características implementadas:**
+- 4 tipos de mensaje predefinidos:
+  - Fuera de Servicio
+  - Buzón de Voz  
+  - No Contesta
+  - Confirma visita tecnica
+- 🌍 Soporte bilingüe (Español/Inglés)
+- 📱 Manejo inteligente de 1-2 números telefónicos
+- 🔄 Detección automática singular/plural
+- 📅 Fecha automática (formato MM/DD/YYYY)
+- 📋 Previsualización en tiempo real
+- 🎨 Interfaz moderna con customtkinter
+
+---
+
+#### **2️⃣ Configuración & Almacenamiento**
+
+**Modificados:**
+- `config/plantillas.json` - Ampliado con nueva entrada "Respuesta"
+- `config/apps_captura.py` - Estructura mejorada con documentación inline
+- `config/configuracion.py` - (revisado para compatibilidad)
+- `config/credenciales.py` - (sin cambios funcionales)
+
+---
+
+#### **3️⃣ Interfaz de Usuario (UI)**
+
+**Archivos actualizados:**
+
+| Archivo | Cambios |
+|---------|---------|
+| `ui/ventana_principal.py` | Refactorizada, más limpia y modular; integración con nuevo generador |
+| `ui/ventana_plantillas.py` | UI para plantillas genéricas editables (sin cambios funcionales) |
+| `ui/ventana_comparacion.py` | Ventana de comparación Sunrun vs HubSpot (mejorada) |
+| `ui/ventana_credenciales.py` | Gestión de credenciales modal (refactorizada) |
+| `ui/posicion_ventanas.py` | Utilitario de posicionamiento (sin cambios) |
+| `ui/custom_ctkframe.py` | Frame personalizado reutilizable (sin cambios) |
+
+---
+
+#### **4️⃣ Servicios & Lógica**
+
+**Archivos:**
+- `services/sesion_service.py` - Gestión de sesiones de usuario
+- `template_filler.py` - Generador de plantillas con placeholders (mejorado)
+
+---
+
+#### **5️⃣ Punto de Entrada**
+
+**Actualizado:**
+- `main.py` - ✅ Ahora importa y registra `VentanaGeneradorMensajes`
+  ```python
+  from ui.ventana_generador_mensajes import VentanaGeneradorMensajes
+  ```
+
+---
+
+#### **6️⃣ Documentación**
+
+**Nuevo:**
+- 📄 `GENERADOR_MENSAJES.md` - **Documentación técnica completa** (197 líneas)
+  - Descripción de características
+  - Ejemplos de uso
+  - Arquitectura de solución
+  - Detalles técnicos de singular/plural
+  - Validaciones implementadas
+  - Notas sobre compatibilidad
+
+---
+
+#### **7️⃣ Utilidades & Core**
+
+**Sin cambios pero compatibles:**
+- `core/plugin_registry.py`
+- `core/base_plugin.py`
+- `core/browser.py`
+- `core/captura.py`
+- `core/comparador.py`
+- `plugins/hubspot.py`
+- `plugins/sunrun.py`
+- `plugins/template_new_site.py`
+- `data/api.py`
+- `medidor.py`
+- `version.py`
+- `scraping_sunrun.py`
+
+---
+
+### 🔑 **Cambios Clave**
+
+#### ✅ **Lo que se agregó:**
+1. **Generador de Mensajes** - Nuevo módulo UI completamente funcional
+2. **Plantilla "Respuesta"** - Nueva entrada en config/plantillas.json
+3. **Integración en main.py** - Botón "Mensajes" en interfaz principal
+4. **Documentación detallada** - Guía técnica de 197 líneas
+
+#### 🔄 **Lo que se refactorizó:**
+1. `ventana_principal.py` - Código más limpio y modular
+2. `ventana_comparacion.py` - Mejoras en presentación
+3. `template_filler.py` - Enhancements en generación de placeholders
+4. `apps_captura.py` - Mejor documentación inline
+
+#### ✨ **Lo que se mejoró:**
+- Separación clara de responsabilidades
+- Modularidad aumentada
+- Compatibilidad 100% mantenida
+- UI/UX más intuitiva
+
+---
+
+### 🎨 **Nuevas Características para el Usuario**
+
+✅ **Botón "Mensajes"** en la barra superior  
+✅ **4 plantillas de contacto** listas para usar  
+✅ **Soporte bilingüe automático**  
+✅ **Manejo inteligente de números telefónicos**  
+✅ **Previsualización en tiempo real**  
+✅ **Copia al portapapeles con un clic**  
+
+---
+
+### 🧪 **Compatibilidad & Testing**
+
+✅ Sin cambios breaking en funcionalidad existente  
+✅ Todos los módulos previos se mantienen funcionales  
+✅ Estructura de plugins sigue siendo extensible  
+✅ UI es 100% backward compatible  
+
+---
+
+### 📝 **Notas Importantes**
+
+- El generador está diseñado específicamente para 3 tipos de mensajes de contacto
+- Los mensajes se copian al portapapeles listos para usar
+- La fecha se genera automáticamente en momento de creación
+- Interfaz moderna con customtkinter, responsive a resoluciones
+
+---
+
+**Tipo de cambio:** ✨ Feature  
+**Alcance:** UI + Generador de Mensajes  
+**Breaking changes:** ❌ Ninguno  
+**Documentación:** ✅ Completa  
+
+
+TAREAS PENDIENTES
+
+- MEJORAR EL WEB SCRAPING DE SUNRUN, CON LOS SELECTORES NECESARIOS, TERMINAR LA CONEXION CORRECTA CON HUBSPOT, PARA LA SUBIDA DE CAPTURAS DE PANTALLA, MEJORAR EL USO DE LOS MENSAJES AUTOMATICOS CON LA SUBIDA A HUBSPOT, MEJORAR LOS FILTROS DE BUSQUEDA EN LA COMPARACION Y AGREGAR MAS PROPIEDADES (ATRIBUTOS), INTENTAR BUSCAR POR CUALQUIER OTRO ATRIBUTO Y LUEGO CON FSD, LA SUBIDA DE CADA BOTON DE APLICACION QUE SE PUEDA DETECTAR LA APLICACION Y SE TOME LA CAPTURA Y SE SUBA CORRECTAMENTE

@@ -28,7 +28,10 @@ TEMA_APARIENCIA = "dark"
 TEMA_COLOR = "blue"
 
 # ── Archivos del proyecto ─────────────────────────────────────────────
-ARCHIVO_CONFIG = resource_path("config.json")
+# Archivo canónico de configuración de la app.
+# Mantenerlo dentro de la carpeta config/ evita duplicidad y deja claro
+# dónde vive la configuración editable de la aplicación.
+ARCHIVO_CONFIG = resource_path(os.path.join("config", "config.json"))
 
 # Nombre clave usado en el llavero del sistema operativo para guardar
 # credenciales de forma segura (no en texto plano).
@@ -169,10 +172,12 @@ def cargar_config() -> dict:
     para que la app arranque con valores por defecto sin fallar.
     """
     try:
-        with open(ARCHIVO_CONFIG, "r") as f:
+        with open(ARCHIVO_CONFIG, "r", encoding="utf-8") as f:
             return json.load(f)
+    except FileNotFoundError:
+        pass
     except Exception as e:
-        print(f"[✗] Error cargando config: {e}")
+        print(f"[✗] Error cargando config desde {ARCHIVO_CONFIG}: {e}")
     return {}
 
 
@@ -185,8 +190,9 @@ def guardar_config(datos: dict) -> None:
     En caso de error de escritura, lo reporta por consola sin lanzar excepción.
     """
     try:
-        with open(ARCHIVO_CONFIG, "w") as f:
-            json.dump(datos, f, indent=2)
+        os.makedirs(os.path.dirname(ARCHIVO_CONFIG), exist_ok=True)
+        with open(ARCHIVO_CONFIG, "w", encoding="utf-8") as f:
+            json.dump(datos, f, indent=2, ensure_ascii=False)
     except Exception as e:
         print(f"[✗] Error guardando config: {e}")
 

@@ -17,6 +17,7 @@ from config.credenciales import (
     guardar_credenciales,
     borrar_credenciales,
 )
+from ui.posicion_ventanas import ubicar_junto_a_padre
 
 
 class VentanaCredenciales(ctk.CTkToplevel):
@@ -44,6 +45,7 @@ class VentanaCredenciales(ctk.CTkToplevel):
         self.grab_set()
         self.confirmado = False
         self._construir_ui()
+        ubicar_junto_a_padre(self, parent)
         # transient() la mantiene siempre encima de la ventana principal.
         self.transient(parent)
         # wait_window() pausa la ejecución hasta que esta ventana se cierre.

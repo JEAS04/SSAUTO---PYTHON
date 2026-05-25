@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable
 
 from core.base_plugin import ContextoSubida, ResultadoSubida, SitioPlugin
-from core.browser import BrowserFactory, encontrar_pestana, esperar_carga, puerto_activo
+from core.browser import BrowserFactory, esperar_carga, puerto_activo
 from core.plugin_registry import PluginRegistry
 from config.credenciales import cargar_cookies, cargar_credenciales
 
@@ -63,16 +63,20 @@ class SesionService:
 
         try:
             # ── 1. Obtener driver ──────────────────────────────────────
-            driver, driver_propio = cls._obtener_driver(log, headless, usar_chrome_existente)
+            driver, driver_propio = cls._obtener_driver(
+                log, headless, usar_chrome_existente
+            )
 
-            # ── 2. Posicionar en la pestaña correcta ──────────────────
+            # ── 2. Validar pestaña actual ─────────────────────────────
             cls._posicionar_pestana(driver, plugin, log)
 
             # ── 3. Verificar / establecer sesión ──────────────────────
             cls._asegurar_sesion(driver, plugin, log, credenciales_sesion or {})
 
             # ── 4. Llamar al plugin ───────────────────────────────────
-            credenciales = cls._obtener_credenciales(plugin.nombre, credenciales_sesion or {})
+            credenciales = cls._obtener_credenciales(
+                plugin.nombre, credenciales_sesion or {}
+            )
             ctx = ContextoSubida(
                 ruta_imagen=ruta_imagen,
                 log=log,
@@ -127,16 +131,32 @@ class SesionService:
 
     @staticmethod
     def _posicionar_pestana(driver, plugin: SitioPlugin, log: Callable) -> None:
-        """Cambia a la pestaña del sitio si el plugin declara un dominio."""
+        """Valida SOLO la pestaña actual; nunca recorre ni cambia tabs del usuario."""
         if plugin.usar_pagina_actual and plugin.dominio:
-            log(f"  → Buscando pestaña de {plugin.nombre}…")
-            if encontrar_pestana(driver, plugin.dominio, log):
-                log(f"  ✓ Pestaña encontrada.")
-            else:
-                log(f"  ⚠ No se encontró pestaña con '{plugin.dominio}'.")
-                log(f"  → Asegurate de tener {plugin.nombre} abierto en el navegador.")
+            log(f"  → Validando pestaña activa de {plugin.nombre}…")
+            handle = driver.current_window_handle
+            url = driver.current_url.lower()
+            if plugin.dominio.lower() not in url:
+                raise RuntimeError(
+                    f"La pestaña activa no es {plugin.nombre}. "
+                    f"Ubicate en la pestaña visible/enfocada de {plugin.nombre} y reintentá."
+                )
+            try:
+                mismo_handle = driver.current_window_handle == handle
+                visible = driver.execute_script(
+                    "return document.visibilityState === 'visible'"
+                )
+                focused = driver.execute_script("return document.hasFocus()")
+            except Exception:
+                mismo_handle = visible = focused = False
+            if not mismo_handle or not visible or not focused:
+                raise RuntimeError(
+                    "Subida cancelada: la pestaña/ventana activa perdió foco. "
+                    "No se subió información."
+                )
+            log(f"  ✓ Pestaña activa validada.")
         elif not plugin.usar_pagina_actual and plugin.dominio:
-            encontrar_pestana(driver, plugin.dominio, log)
+            log(f"  · [{plugin.nombre}] No se cambia de pestaña automáticamente.")
 
     @staticmethod
     def _asegurar_sesion(
@@ -167,7 +187,9 @@ class SesionService:
                     log(f"  · Error restaurando cookies: {e}")
 
         # Login automático
-        credenciales = SesionService._obtener_credenciales(plugin.nombre, credenciales_sesion)
+        credenciales = SesionService._obtener_credenciales(
+            plugin.nombre, credenciales_sesion
+        )
         if credenciales:
             if plugin.hacer_login(driver, credenciales, log):
                 return

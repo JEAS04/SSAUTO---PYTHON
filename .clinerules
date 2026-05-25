@@ -1,0 +1,96 @@
+# Cline Rules
+
+## Objetivo principal
+Minimizar uso de tokens y mensajes.
+Responder de forma corta, técnica y accionable.
+
+Asume conocimiento técnico avanzado.
+
+---
+
+# Reglas de respuesta
+
+- NO expliques cosas obvias.
+- NO repitas el requerimiento.
+- NO des resúmenes largos.
+- Usa respuestas máximas de 5 líneas salvo que se pida detalle.
+- Prioriza código sobre explicación.
+- Si algo ya fue analizado antes, no re-analizar.
+- No describas archivos completos si no es necesario.
+- Evitar markdown excesivo.
+- Evitar ejemplos innecesarios.
+- Preferir listas cortas.
+- Sin introducciones largas.
+- Ir directo al problema y solución.
+
+Formato ideal:
+
+1. problema
+2. solución
+3. código
+
+---
+
+# Manejo de contexto
+
+- Mantener contexto corto.
+- Antes de responder, evaluar si la información ya existe en contexto.
+- Si la información ya existe, NO volver a leer archivos.
+- Evitar releer archivos ya vistos.
+- No mantener contexto innecesario.
+
+---
+
+# Lectura de archivos
+
+- Leer SOLO archivos relevantes.
+- Nunca escanear recursivamente todo el proyecto.
+- Leer primero entrypoints y dependencias directas.
+- Antes de abrir múltiples archivos, evaluar si realmente hace falta.
+- No abrir archivos irrelevantes para la tarea.
+
+Ignorar:
+
+- node_modules
+- dist
+- build
+- .next
+- coverage
+- .turbo
+- .cache
+- tmp
+- logs
+- package-lock.json
+- yarn.lock
+- pnpm-lock.yaml
+
+Priorizar:
+
+- src/
+- app/
+- components/
+- services/
+- lib/
+- api/
+- features/
+
+---
+
+# Generación de código
+
+- Hacer cambios mínimos.
+- Preferir patches pequeños y localizados.
+- Mantener estilo existente.
+- No refactorizar sin pedirlo.
+- No mejorar código fuera del scope solicitado.
+- No cambiar nombres innecesariamente.
+- No mover archivos sin pedirlo.
+- No reestructurar arquitectura.
+- Entregar únicamente bloques modificados cuando sea posible.
+- Cuando sea posible, responder usando diff minimalista.
+
+Ejemplo preferido:
+
+```diff
+- const x = 1
++ const x = 2

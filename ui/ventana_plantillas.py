@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox
+from ui.posicion_ventanas import ubicar_junto_a_padre
 
 PLANTILLAS_PATH = Path("config/plantillas.json")
 
@@ -83,6 +84,7 @@ class VentanaPlantillas(ctk.CTkToplevel):
         self._indice_actual: int | None = None
 
         self._construir_ui()
+        ubicar_junto_a_padre(self, parent)
         self._poblar_lista()
 
     # ── UI ────────────────────────────────────────────────────────────────────

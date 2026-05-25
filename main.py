@@ -39,6 +39,7 @@ from ui.ventana_principal import App
 from ui.ventana_comparacion import VentanaComparacion
 from ui.ventana_credenciales import VentanaCredenciales
 from ui.ventana_plantillas import VentanaPlantillas
+from ui.ventana_generador_mensajes import VentanaGeneradorMensajes
 
 # ── Tema ──────────────────────────────────────────────────────────────
 config = cargar_config()
@@ -47,11 +48,32 @@ ctk.set_default_color_theme(TEMA_COLOR)
 
 # ── Ventana raíz ──────────────────────────────────────────────────────
 launcher = ctk.CTk()
-launcher.geometry("900x620")
 launcher.title("SSAuto")
 
 
+def _clamp(valor: int, minimo: int, maximo: int) -> int:
+    return max(minimo, min(valor, maximo))
+
+
+def _configurar_ventana_responsive():
+    sw, sh = launcher.winfo_screenwidth(), launcher.winfo_screenheight()
+    escala = _clamp(int(min(sw / 1920, sh / 1080) * 100), 100, 165) / 100
+    ctk.set_widget_scaling(escala)
+    ctk.set_window_scaling(escala)
+
+    ancho = _clamp(int(sw * 0.68), 900, 2560)
+    alto = _clamp(int(sh * 0.78), 620, 1700)
+    x = max(0, (sw - ancho) // 2)
+    y = max(0, (sh - alto) // 2)
+    launcher.geometry(f"{ancho}x{alto}+{x}+{y}")
+    launcher.minsize(860, 560)
+
+
+_configurar_ventana_responsive()
+
+
 # ── Helpers ───────────────────────────────────────────────────────────
+
 
 def mostrar_frame(frame):
     frame.tkraise()
@@ -59,6 +81,10 @@ def mostrar_frame(frame):
 
 def abrir_plantillas():
     VentanaPlantillas(launcher)
+
+
+def abrir_generador():
+    VentanaGeneradorMensajes(launcher)
 
 
 def abrir_credenciales():
@@ -73,6 +99,10 @@ def cambiar_tema(opcion: str):
     cfg = cargar_config()
     cfg["tema"] = tema
     guardar_config(cfg)
+
+
+tema_actual = config.get("tema", TEMA_APARIENCIA)
+tema_var = ctk.StringVar(value="Oscuro" if tema_actual == "dark" else "Claro")
 
 
 # ── Barra superior ────────────────────────────────────────────────────
@@ -133,9 +163,29 @@ _btn_barra("Comparación", lambda: mostrar_frame(frame_comparacion))
 _sep_barra()
 _btn_barra("Credenciales", abrir_credenciales)
 _btn_barra("Plantillas", abrir_plantillas)
+_btn_barra("Mensajes", abrir_generador)
+
+ctk.CTkOptionMenu(
+    barra,
+    variable=tema_var,
+    values=["Oscuro", "Claro"],
+    command=cambiar_tema,
+    font=ctk.CTkFont(size=12),
+    width=92,
+    height=26,
+    dynamic_resizing=False,
+).pack(side="right", padx=6, pady=2)
+
+ctk.CTkLabel(
+    barra,
+    text="Tema:",
+    font=ctk.CTkFont(size=12),
+    text_color=("gray10", "gray90"),
+).pack(side="right", padx=(0, 2), pady=2)
 
 
 # ── Minimizar: ocultar barra para que no flote ───────────────────────
+
 
 def _al_minimizar(event):
     if launcher.state() == "iconic":

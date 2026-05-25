@@ -1,0 +1,37 @@
+[
+  {
+    "titulo": "Saludo inicial",
+    "categoria": "HubSpot",
+    "texto": "Hola [Nombre], espero que estés muy bien. Me comunico para hacerte seguimiento sobre tu solicitud. ¿Tienes alguna duda o necesitas información adicional?"
+  },
+  {
+    "titulo": "Nota de seguimiento",
+    "categoria": "HubSpot",
+    "texto": "Se realizó llamada al cliente [Nombre] el [Fecha]. Se discutió [Tema]. Próximo paso: [Acción]. Fecha estimada: [Fecha siguiente]."
+  },
+  {
+    "titulo": "Confirmación de cita",
+    "categoria": "HubSpot",
+    "texto": "Hola [Nombre], confirmamos tu cita para el día [Fecha] a las [Hora]. Por favor avísanos con anticipación si necesitas reagendar."
+  },
+  {
+    "titulo": "Actualización de estado",
+    "categoria": "Sunrun",
+    "texto": "Actualización de estado para el caso [ID]: El sistema se encuentra en etapa [Estado]. Tiempo estimado de resolución: [Tiempo]."
+  },
+  {
+    "titulo": "Cierre de caso",
+    "categoria": "Sunrun",
+    "texto": "El caso [ID] ha sido cerrado exitosamente el [Fecha]. Motivo de cierre: [Motivo]. Si tiene alguna consulta adicional no dude en contactarnos."
+  },
+  {
+    "titulo": "Sin respuesta",
+    "categoria": "General",
+    "texto": "Hola [Nombre], intentamos comunicarnos contigo sin éxito. Por favor contáctanos al [Teléfono] o responde este mensaje para continuar con tu proceso."
+  },
+  {
+    "titulo": "Respuesta",
+    "categoria": "General",
+    "texto": "El cliente [cliente] a aceptado su visita."
+  }
+]
