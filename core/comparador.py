@@ -46,21 +46,13 @@ def _comparar_nombres(valor_hs: str, valor_sr: str, umbral: float = 0.70) -> dic
     """
     Compara nombres usando lógica token-based con rapidfuzz.
     Maneja nombres hispanos con segundos apellidos opcionales.
-
-    Devuelve:
-      similitud : float 0.0-1.0
-      estado    : "igual" | "similar" | "diferente"
-      nota      : string descriptivo
-
-    Estrategia:
-      1. Normalizar (MAYÚSCULAS, sin tildes, tokenizar).
-      2. Token containment: si todos los tokens del nombre más corto
-         aparecen en el más largo, es MATCH (caso hispano típico).
-      3. Si falla lo anterior, usar token_set_ratio / token_sort_ratio
-         / partial_ratio / WRatio de rapidfuzz y elegir el mejor.
     """
     na = _norm(valor_hs)
     nb = _norm(valor_sr)
+
+    # NUEVO: Normalizar separadores como espacios antes de tokenizar
+    na = re.sub(r"[-/\\|]+", " ", na)
+    nb = re.sub(r"[-/\\|]+", " ", nb)
 
     # Coincidencia exacta post-normalización
     if na == nb:

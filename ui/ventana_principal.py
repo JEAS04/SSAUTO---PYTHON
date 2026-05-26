@@ -189,6 +189,40 @@ class App(CustomCTkFrame):
     def _fs(self, base: int) -> int:
         return max(base, int(round(base * min(self._ui_scale, 1.28))))
 
+    def _obtener_monitor_app(self, app: dict) -> int:
+        """
+        Devuelve el índice del monitor para una app.
+        Primero busca en config guardada, si no existe usa el por defecto del app.
+        """
+        nombre = app["nombre"]
+        config = cargar_config()
+        monitores_guardados = config.get("monitores_apps", {})
+
+        return monitores_guardados.get(nombre, app.get("monitor", 1))
+
+    def _cambiar_monitor_app(self, app: dict, nombre_monitor: str):
+        """
+        Guarda el monitor elegido para una app en config.json.
+        Se dispara cuando el usuario cambia el dropdown.
+        """
+        nombre = app["nombre"]
+        nombres = obtener_nombres_monitores()
+
+        try:
+            indice = nombres.index(nombre_monitor)
+        except ValueError:
+            self._log(f"[✗] Monitor no válido: {nombre_monitor}")
+            return
+
+        config = cargar_config()
+        if "monitores_apps" not in config:
+            config["monitores_apps"] = {}
+
+        config["monitores_apps"][nombre] = indice
+        guardar_config(config)
+
+        self._log(f"✓ Monitor de '{nombre}' → {nombre_monitor}")
+
     def _crear_panel_perfiles(self, padre):
         self._perfiles = cargar_perfiles()
 
@@ -436,19 +470,8 @@ class App(CustomCTkFrame):
             width=110,
             height=28,
         ).pack(side="left")
-        # ctk.CTkButton(
-        #     fila_botones,
-        #     text="🔍 Comparar",
-        #     command=self._abrir_comparacion,
-        #     font=ctk.CTkFont(size=10),
-        #     width=110,
-        #     height=28,
-        #     fg_color=("#1f6aa5", "#1f6aa5"),
-        #     hover_color=("#144e7a", "#144e7a"),
-        # ).pack(side="left", padx=(8, 0))
 
     def _crear_opciones(self, padre):
-        # Selector de destino — construido dinámicamente desde el registro
         self.destino_var = ctk.StringVar(value="AMBOS")
         fila_destino = ctk.CTkFrame(padre, fg_color="transparent")
         fila_destino.pack(fill="x", pady=(0, 6))
@@ -564,26 +587,6 @@ class App(CustomCTkFrame):
     # ── Panel de aplicaciones de captura ─────────────────────────────
 
     def _crear_panel_apps(self, padre):
-        """
-        Crea un lanzador por cada app definida en APPS_CAPTURA.
-
-        Cada app tiene dos controles en su fila:
-          [  📦 Wolkbox  ▶ Capturar y subir  ]  [ ⚙ ]
-
-          Botón principal → captura la región de esa app y la sube
-                            al destino activo en "Subir a:".
-                            Usa la región guardada para esa app
-                            (por defecto la que está en apps_captura.py,
-                            pero editable con el botón ⚙).
-
-          Botón ⚙        → abre el medidor para medir una nueva región
-                            para ESA app y la guarda en config.json.
-                            La próxima vez que la uses, se usa la nueva región.
-
-        Nota: el botón principal NO toca los campos de región de la sección
-        "REGIÓN DE CAPTURA" — opera con su propia región guardada internamente.
-        Así podés tener los campos manuales en un valor diferente al mismo tiempo.
-        """
         ctk.CTkLabel(
             padre,
             text="Un clic → captura la región de esa app y la sube al destino activo:",
@@ -592,30 +595,24 @@ class App(CustomCTkFrame):
             anchor="w",
         ).pack(fill="x", pady=(0, 10))
 
-        self._btns_apps = {}  # {nombre: btn_principal}
-        self._regiones_apps = (
-            {}
-        )  # {nombre: dict region} — sobreescribe apps_captura.py si el usuario midió
+        self._btns_apps = {}
+        self._regiones_apps = {}
 
-        # Cargar regiones guardadas por el usuario desde config.json
         config_actual = cargar_config()
         regiones_guardadas = config_actual.get("regiones_apps", {})
-
         for app in APPS_CAPTURA:
             nombre = app["nombre"]
             icono = app.get("icono", "")
             color_base = app.get("color", ("#1f6aa5", "#1a5496"))
 
-            # Región efectiva: la guardada en config gana sobre la del código
             region_efectiva = regiones_guardadas.get(nombre, app["region"])
             self._regiones_apps[nombre] = region_efectiva
 
-            # Contenedor de la fila
             fila = ctk.CTkFrame(padre, fg_color=("gray90", "gray22"), corner_radius=8)
             fila.pack(fill="x", pady=3)
-            fila.grid_columnconfigure(0, weight=1)
+            fila.grid_columnconfigure(0, weight=1)  # El botón main ocupa lo máximo
 
-            # ── Botón principal: captura + sube ───────────────────────
+            # ═══ FILA 1: Botón principal (full width) ═══
             r = region_efectiva
             tooltip = f"{r['width']}×{r['height']} px"
             btn_main = ctk.CTkButton(
@@ -632,47 +629,125 @@ class App(CustomCTkFrame):
                 ),
                 command=lambda a=app: self._ejecutar_app(a),
             )
-            btn_main.grid(row=0, column=0, padx=(6, 4), pady=5, sticky="ew")
+            btn_main.grid(
+                row=0, column=0, columnspan=3, padx=6, pady=(5, 2), sticky="ew"
+            )
             self._btns_apps[nombre] = btn_main
 
-            # ── Botón ⚙: medir nueva región para esta app ────────────
+            # ═══ FILA 2: Dropdown + Botón ⚙ ═══
+            nombres_monitores = obtener_nombres_monitores()
+            monitor_actual = self._obtener_monitor_app(app)
+            nombre_monitor_actual = (
+                nombres_monitores[monitor_actual]
+                if 0 <= monitor_actual < len(nombres_monitores)
+                else nombres_monitores[0]
+            )
+
+            dropdown_monitor = ctk.CTkComboBox(
+                fila,
+                values=nombres_monitores,
+                variable=ctk.StringVar(value=nombre_monitor_actual),
+                command=lambda sel, a=app: self._cambiar_monitor_app(a, sel),
+                width=160,
+                height=34,
+                corner_radius=7,
+                font=ctk.CTkFont(size=9),
+                dropdown_font=ctk.CTkFont(size=9),
+                state="readonly",
+            )
+            dropdown_monitor.grid(
+                row=1, column=0, padx=(6, 4), pady=(2, 5), sticky="ew"
+            )
+
             btn_cfg = ctk.CTkButton(
                 fila,
                 text="⚙",
                 font=ctk.CTkFont(size=14),
                 width=36,
-                height=38,
+                height=34,
                 corner_radius=7,
                 fg_color=("gray70", "gray35"),
                 hover_color=("gray60", "gray45"),
                 command=lambda a=app: self._medir_region_app(a),
             )
-            btn_cfg.grid(row=0, column=1, padx=(0, 6), pady=5)
+            btn_cfg.grid(row=1, column=2, padx=(0, 6), pady=(2, 5))
 
-        # Barra de progreso/estado para las apps (se muestra solo durante ejecución)
-        self._label_estado_app = ctk.CTkLabel(
-            padre,
-            text="",
-            font=ctk.CTkFont(size=10),
-            text_color=("gray40", "gray60"),
-            anchor="w",
-        )
-        self._label_estado_app.pack(fill="x", pady=(4, 0))
+        # todos los botones en la misma fila :
+        # for app in APPS_CAPTURA:
+        #     nombre = app["nombre"]
+        #     icono = app.get("icono", "")
+        #     color_base = app.get("color", ("#1f6aa5", "#1a5496"))
+
+        #     region_efectiva = regiones_guardadas.get(nombre, app["region"])
+        #     self._regiones_apps[nombre] = region_efectiva
+
+        #     fila = ctk.CTkFrame(padre, fg_color=("gray90", "gray22"), corner_radius=8)
+        #     fila.pack(fill="x", pady=3)
+        #     fila.grid_columnconfigure(0, weight=1)  # Botón main ocupa espacio restante
+
+        #     r = region_efectiva
+        #     tooltip = f"{r['width']}×{r['height']} px"
+        #     btn_main = ctk.CTkButton(
+        #         fila,
+        #         text=f"{icono}  {nombre}   ▶  Capturar y subir   ({tooltip})",
+        #         font=ctk.CTkFont(size=12, weight="bold"),
+        #         height=38,
+        #         corner_radius=7,
+        #         anchor="w",
+        #         fg_color=color_base,
+        #         hover_color=(
+        #             self._oscurecer(color_base[0]),
+        #             self._oscurecer(color_base[1]),
+        #         ),
+        #         command=lambda a=app: self._ejecutar_app(a),
+        #     )
+        #     btn_main.grid(row=0, column=0, padx=(6, 4), pady=5, sticky="ew")
+        #     self._btns_apps[nombre] = btn_main
+
+        #     # Dropdown de monitor
+        #     nombres_monitores = obtener_nombres_monitores()
+        #     monitor_actual = self._obtener_monitor_app(app)
+        #     nombre_monitor_actual = (
+        #         nombres_monitores[monitor_actual]
+        #         if 0 <= monitor_actual < len(nombres_monitores)
+        #         else nombres_monitores[0]
+        #     )
+
+        #     dropdown_monitor = ctk.CTkComboBox(
+        #         fila,
+        #         values=nombres_monitores,
+        #         variable=ctk.StringVar(value=nombre_monitor_actual),
+        #         command=lambda sel, a=app: self._cambiar_monitor_app(a, sel),
+        #         width=160,
+        #         height=38,
+        #         corner_radius=7,
+        #         font=ctk.CTkFont(size=9),
+        #         dropdown_font=ctk.CTkFont(size=9),
+        #         state="readonly",
+        #     )
+        #     dropdown_monitor.grid(row=0, column=1, padx=4, pady=5)
+
+        #     # Botón ⚙
+        #     btn_cfg = ctk.CTkButton(
+        #         fila,
+        #         text="⚙",
+        #         font=ctk.CTkFont(size=14),
+        #         width=36,
+        #         height=38,
+        #         corner_radius=7,
+        #         fg_color=("gray70", "gray35"),
+        #         hover_color=("gray60", "gray45"),
+        #         command=lambda a=app: self._medir_region_app(a),
+        #     )
+        #     btn_cfg.grid(row=0, column=2, padx=(0, 6), pady=5)
 
     # ── Lanzador de app ───────────────────────────────────────────────
 
     def _ejecutar_app(self, app: dict):
-        """
-        Captura la región de la app y la sube usando el destino activo.
-
-        Usa la región guardada en self._regiones_apps (que puede haber
-        sido actualizada por el usuario con ⚙), no la de apps_captura.py.
-        No modifica los campos manuales de "REGIÓN DE CAPTURA".
-        """
         nombre = app["nombre"]
         region = self._regiones_apps.get(nombre, app["region"])
+        monitor_idx = self._obtener_monitor_app(app)
 
-        # Deshabilitar todos los botones de app mientras corre
         for btn in self._btns_apps.values():
             btn.configure(state="disabled")
         self.btn.configure(state="disabled")
@@ -687,17 +762,11 @@ class App(CustomCTkFrame):
 
         threading.Thread(
             target=self._proceso_app,
-            args=(app, region),
+            args=(app, region, monitor_idx),
             daemon=True,
         ).start()
 
-    def _proceso_app(self, app: dict, region: dict):
-        """
-        Hilo secundario: captura la región de la app y sube al destino activo.
-
-        Idéntico a _proceso() pero con la región de la app en lugar de la
-        región manual, y sin tocar los campos de la sección REGIÓN DE CAPTURA.
-        """
+    def _proceso_app(self, app: dict, region: dict, monitor_idx: int):
         nombre = app["nombre"]
 
         def ui(msg):
@@ -706,11 +775,13 @@ class App(CustomCTkFrame):
         try:
             ui(f"→ [{nombre}] Capturando {region['width']}×{region['height']} px…")
 
-            # Minimizar para que la app sea visible durante la captura
-            self.after(0, self.iconify)
+            # FIX #3: usar iconify_window() en lugar de self.iconify()
+            # self.iconify() en un Frame lanza AttributeError; el wrapper
+            # del CustomCTkFrame delega correctamente a winfo_toplevel().
+            self.after(0, self.iconify_window)
             time.sleep(0.4)
 
-            ruta = CapturaService.capturar(region)
+            ruta = CapturaService.capturar(region, monitor=monitor_idx)
             ui(f"✓ [{nombre}] Imagen guardada: {ruta}")
             ui("")
 
@@ -780,38 +851,34 @@ class App(CustomCTkFrame):
                 lambda: self._label_estado_app.configure(text=f"  ✗ {nombre} — error"),
             )
         finally:
-            self.after(0, self.deiconify)
+            self.after(0, self.deiconify_window)
             self.after(0, lambda: self.btn.configure(state="normal"))
             self.after(0, self._rehabilitar_btns_apps)
 
     def _rehabilitar_btns_apps(self):
-        """Vuelve a habilitar todos los botones de app al terminar."""
         for btn in self._btns_apps.values():
             btn.configure(state="normal")
 
     # ── Medidor de región por app ─────────────────────────────────────
 
     def _medir_region_app(self, app: dict):
-        """
-        Lanza el medidor para capturar una nueva región para esta app.
-
-        La región medida se guarda en config.json bajo "regiones_apps"
-        y reemplaza la del código para ese nombre de app. La entrada en
-        apps_captura.py no se toca — es el valor por defecto de fallback.
-        """
         nombre = app["nombre"]
-        monitor_idx = app.get("monitor", self._monitor_var_indice())
+        monitor_idx = self._obtener_monitor_app(app)
 
         self._log(f"→ Midiendo región para {nombre}…")
         self._label_estado_app.configure(
             text=f"  ⏳ Medí la región de {nombre} en pantalla…"
         )
 
-        # Deshabilitar botones mientras se mide
         for btn in self._btns_apps.values():
             btn.configure(state="disabled")
         self.btn.configure(state="disabled")
-        self.winfo_toplevel().iconify()
+
+        # FIX #2: usar el wrapper iconify_window() en vez de
+        # winfo_toplevel().iconify() directamente (que no va por after
+        # y se llama en el hilo principal, lo cual estaba bien, pero
+        # ahora es consistente con el resto de la clase).
+        self.iconify_window()
 
         def _esperar():
             proc = subprocess.Popen(
@@ -827,16 +894,13 @@ class App(CustomCTkFrame):
                     try:
                         nueva_region = ast.literal_eval(linea.split("=", 1)[1].strip())
 
-                        # Guardar en memoria
                         self._regiones_apps[nombre] = nueva_region
 
-                        # Guardar en config.json para que persista entre sesiones
                         cfg = cargar_config()
                         cfg.setdefault("regiones_apps", {})[nombre] = nueva_region
                         guardar_config(cfg)
 
                         def _actualizar_ui(n=nombre, r=nueva_region):
-                            # Actualizar texto del botón con la nueva región
                             if n in self._btns_apps:
                                 tooltip = f"{r['width']}×{r['height']} px"
                                 btn = self._btns_apps[n]
@@ -866,7 +930,7 @@ class App(CustomCTkFrame):
                             self._log(f"✓ Región de {n} actualizada: {r}")
 
                         self.after(0, _actualizar_ui)
-                        self.after(0, self.deiconify)
+                        self.after(0, self.deiconify_window)  # FIX #1: sin ()
                         self.after(0, self._rehabilitar_btns_apps)
                         self.after(0, lambda: self.btn.configure(state="normal"))
                         return
@@ -878,7 +942,9 @@ class App(CustomCTkFrame):
 
             self.after(0, lambda: self._log(f"✗ Medición cancelada para {nombre}."))
             self.after(0, lambda: self._label_estado_app.configure(text=""))
-            self.after(0, self.deiconify_window())
+            self.after(
+                0, self.deiconify_window
+            )  # FIX #1: sin () — antes era deiconify_window()
             self.after(0, self._rehabilitar_btns_apps)
             self.after(0, lambda: self.btn.configure(state="normal"))
 
@@ -886,7 +952,6 @@ class App(CustomCTkFrame):
 
     @staticmethod
     def _oscurecer(color_hex: str, factor: float = 0.80) -> str:
-        """Versión ligeramente más oscura de un color hex para el hover."""
         try:
             h = color_hex.lstrip("#")
             r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
@@ -952,7 +1017,6 @@ class App(CustomCTkFrame):
     # ── Sitios status ─────────────────────────────────────────────────
 
     def _actualizar_sitios_status(self):
-        """Construye la lista de sitios desde PluginRegistry (no desde SITIOS dict)."""
         for widget in self._frame_sitios.winfo_children():
             widget.destroy()
 
@@ -1094,7 +1158,6 @@ class App(CustomCTkFrame):
     # ── Sesión ────────────────────────────────────────────────────────
 
     def _abrir_login_inicial(self):
-        # Construir lista de sitios compatible con VentanaCredenciales
         sitios_compat = [
             {"nombre": p.nombre, "necesita_login": p.necesita_login}
             for p in PluginRegistry.con_login()
@@ -1222,7 +1285,6 @@ class App(CustomCTkFrame):
             auto_submit = self.auto_submit_var.get()
             destino = self.destino_var.get()
 
-            # Seleccionar plugins según destino
             if destino == "AMBOS":
                 plugins = PluginRegistry.todos()
             else:

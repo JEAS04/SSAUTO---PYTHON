@@ -178,6 +178,30 @@ _MUNICIPIOS_PR = [
     "Yabucoa",
     "Yauco",
 ]
+
+_COMENTARIOS_KEYWORDS = [
+    "sininfo",
+    "sin info",
+    "sin produccion",
+    "sin producción",
+    "verificar",
+    "metering",
+    "upgrade",
+    "bateria",
+    "batería",
+    "gateway",
+    "not reporting",
+    "down",
+    "error",
+    "issue",
+    "problema",
+    "falla",
+    "reparacion",
+    "reparación",
+    "mantenimiento",
+    "pendiente",
+]
+
 # Ordenados largo→corto para que "San Juan" gane sobre "Juan"
 _MUNICIPIOS_SORTED = sorted(_MUNICIPIOS_PR, key=len, reverse=True)
 
@@ -203,26 +227,19 @@ def _detectar_municipio(asunto: str) -> str:
 
 
 def _parsear_asunto(asunto: str) -> dict:
-    """
-    Extrae del subject:
-      - fsd        : número FSD (sin prefijo)
-      - nombre     : nombre del cliente
-      - id_cliente : ID GoFormz
-      - municipio  : municipio detectado
-
-    Regla: estos valores solo se usan como FALLBACK si el atributo
-    directo de HubSpot está vacío.
-    """
+    """..."""
     texto = asunto
+    print(f"\n[DEBUG] Input: {asunto}")
 
-    # 1. Extraer FSD ("FSD983316" → "983316")
+    # 1. Extraer FSD
     fsd_parsed = ""
     m_fsd = re.search(r"\bFSD[-\s]*(\d+)\b", texto, re.IGNORECASE)
     if m_fsd:
         fsd_parsed = m_fsd.group(1)
         texto = texto[: m_fsd.start()] + texto[m_fsd.end() :]
+        print(f"[DEBUG] Tras quitar FSD: {texto}")
 
-    # 2. Extraer ID cliente ("ID 245565" o número ≥4 dígitos)
+    # 2. Extraer ID cliente
     id_cliente = ""
     m_id = re.search(r"\bID\s*(\d{4,})\b", texto, re.IGNORECASE)
     if m_id:
@@ -233,20 +250,38 @@ def _parsear_asunto(asunto: str) -> dict:
         if m_num:
             id_cliente = m_num.group(1)
             texto = texto[: m_num.start()] + texto[m_num.end() :]
+    print(f"[DEBUG] Tras quitar ID {id_cliente}: {texto}")
 
-    # 3. Detectar y quitar municipio
+    # 3. Detectar municipio
     municipio = _detectar_municipio(texto)
     if municipio:
-        texto = re.sub(re.escape(_norm(municipio)), "", _norm(texto))
-    else:
-        texto = _norm(texto)
+        texto = re.sub(
+            r"\b" + re.escape(municipio) + r"\b", "", texto, flags=re.IGNORECASE
+        )
+    print(f"[DEBUG] Tras quitar municipio: {texto}")
 
-    # 4. Limpiar separadores y dígitos residuales
-    texto = re.sub(r"[-|/\\]+", " ", texto)
+    # 4. Quitar comentarios
+    for keyword in _COMENTARIOS_KEYWORDS:
+        patron = r"\b" + re.escape(keyword) + r"\b"
+        m = re.search(patron, texto, re.IGNORECASE)
+        if m:
+            print(f"[DEBUG] Encontrado keyword '{keyword}' en posición {m.start()}")
+            texto = texto[: m.start()]
+            break
+    print(f"[DEBUG] Tras quitar comentarios: {texto}")
+
+    # 5. Limpiar
+    texto = re.sub(r"[-\\|]+", " ", texto)
+    print(f"[DEBUG] Tras limpiar separadores: {texto}")
+
     texto = re.sub(r"\b\d+\b", "", texto)
-    texto = re.sub(r"\s{2,}", " ", texto).strip()
+    print(f"[DEBUG] Tras quitar números: {texto}")
+
+    texto = re.sub(r"\s+", " ", texto).strip()
+    print(f"[DEBUG] Tras colapsar espacios: {texto}")
 
     nombre = texto.title() if texto else ""
+    print(f"[DEBUG] Nombre final: {nombre}\n")
 
     return {
         "fsd_parsed": fsd_parsed,
@@ -389,6 +424,24 @@ def _buscar_contacto_por_id_goformz(id_goformz: str) -> dict | None:
         return None
 
 
+def _limpiar_nombre_hubspot(nombre: str) -> str:
+    """
+    Limpia nombres que vienen de HubSpot con formatos raros.
+    Ej: "Dennis Ayala / DENIS AYALA" → "Dennis Ayala"
+        "Juan / Perez" → "Juan Perez"
+    """
+    if not nombre:
+        return ""
+
+    # Si hay barra, tomar la PRIMERA parte (nombre principal)
+    if " / " in nombre:
+        nombre = nombre.split(" / ")[0].strip()
+    elif "/" in nombre:
+        nombre = nombre.split("/")[0].strip()
+
+    return nombre
+
+
 # ──────────────────────────────────────────────
 # Función pública principal
 # ──────────────────────────────────────────────
@@ -476,7 +529,7 @@ def extraer_datos_hubspot(fsd: str) -> dict:
         (nombre_ticket, "ticket"),
         (parsed["nombre"], "subject"),
     )
-
+    nombre = _limpiar_nombre_hubspot(nombre)
     # ── 7. Construir id_cliente ───────────────────────────────────────────
     id_cliente, fuente_id = primero(
         (_val(cp, _C_ID_GOFORMZ), "contacto"),

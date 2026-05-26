@@ -3,10 +3,10 @@
   "ultimo_monitor": 1,
   "regiones_apps": {
     "Wolkbox": {
-      "top": 52,
-      "left": 18,
-      "width": 1901,
-      "height": 966
+      "top": 55,
+      "left": -1705,
+      "width": 265,
+      "height": 561
     },
     "App 2": {
       "top": 448,
@@ -31,6 +31,12 @@
       "left": 186,
       "width": 1415,
       "height": 529
+    },
+    "B2Chat": {
+      "top": 375,
+      "left": 1109,
+      "width": 0,
+      "height": 0
     }
   },
   "keybind": "<Control-p>",
@@ -50,5 +56,9 @@
       "monitor_index": 2
     }
   },
-  "auto_submit_nota": false
+  "auto_submit_nota": false,
+  "monitores_apps": {
+    "Wolkbox": 0,
+    "App 5": 0
+  }
 }

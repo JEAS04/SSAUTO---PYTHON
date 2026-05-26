@@ -22,6 +22,7 @@ import mss.tools
 
 class ErrorCaptura(Exception):
     """Error específico de captura para distinguirlo de errores genéricos."""
+
     pass
 
 
@@ -41,6 +42,7 @@ class CapturaService:
         cls,
         region: Union[dict, "RegionCaptura"],  # type: ignore[name-defined]
         carpeta: Path | None = None,
+        monitor: int = 1,  # ← NUEVO: parámetro con default
     ) -> str:
         """
         Toma una captura de la región indicada y la guarda en disco.
@@ -49,6 +51,7 @@ class CapturaService:
         ----------
         region  : dict con top/left/width/height, o instancia de RegionCaptura.
         carpeta : dónde guardar. Por defecto: ./screenshots/
+        monitor : índice del monitor (0=todos, 1=principal, 2=secundario, etc.)
 
         Devuelve
         --------
@@ -58,8 +61,24 @@ class CapturaService:
         -----
         ErrorCaptura si la región es inválida o falla mss.
         """
+        from config.configuracion import obtener_monitor_por_indice
+
         region_dict = cls._normalizar_region(region)
         cls._validar_region(region_dict)
+
+        # NUEVO: ajustar coordenadas al monitor elegido
+        mon_info = obtener_monitor_por_indice(monitor)
+        if mon_info:
+            # Desplazar la región según la posición del monitor
+            region_ajustada = {
+                "top": region_dict["top"] + mon_info.get("top", 0),
+                "left": region_dict["left"] + mon_info.get("left", 0),
+                "width": region_dict["width"],
+                "height": region_dict["height"],
+            }
+        else:
+            # Si no existe el monitor, usar la región tal cual (fallback)
+            region_ajustada = region_dict
 
         destino = carpeta or cls.CARPETA_CAPTURAS
         destino.mkdir(parents=True, exist_ok=True)
@@ -69,10 +88,12 @@ class CapturaService:
 
         try:
             with mss.MSS() as sct:
-                captura = sct.grab(region_dict)
+                captura = sct.grab(region_ajustada)  # ← usar región ajustada
                 mss.tools.to_png(captura.rgb, captura.size, output=str(ruta))
         except Exception as e:
-            raise ErrorCaptura(f"Error al capturar región {region_dict}: {e}") from e
+            raise ErrorCaptura(
+                f"Error al capturar región {region_ajustada}: {e}"
+            ) from e
 
         return str(ruta.resolve())
 
@@ -83,7 +104,11 @@ class CapturaService:
         """Acepta dict o RegionCaptura y devuelve siempre un dict con ints."""
         if hasattr(region, "as_dict"):
             region = region.as_dict()
-        return {k: int(v) for k, v in region.items() if k in ("top", "left", "width", "height")}
+        return {
+            k: int(v)
+            for k, v in region.items()
+            if k in ("top", "left", "width", "height")
+        }
 
     @staticmethod
     def _validar_region(region: dict) -> None:

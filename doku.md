@@ -553,3 +553,131 @@ Se ha implementado una **nueva funcionalidad integral de generación de mensajes
 TAREAS PENDIENTES
 
 - MEJORAR EL WEB SCRAPING DE SUNRUN, CON LOS SELECTORES NECESARIOS, TERMINAR LA CONEXION CORRECTA CON HUBSPOT, PARA LA SUBIDA DE CAPTURAS DE PANTALLA, MEJORAR EL USO DE LOS MENSAJES AUTOMATICOS CON LA SUBIDA A HUBSPOT, MEJORAR LOS FILTROS DE BUSQUEDA EN LA COMPARACION Y AGREGAR MAS PROPIEDADES (ATRIBUTOS), INTENTAR BUSCAR POR CUALQUIER OTRO ATRIBUTO Y LUEGO CON FSD, LA SUBIDA DE CADA BOTON DE APLICACION QUE SE PUEDA DETECTAR LA APLICACION Y SE TOME LA CAPTURA Y SE SUBA CORRECTAMENTE
+
+
+---
+
+## Correcciones aplicadas — 26/05/2026 (revisión de bugs)
+
+### BUG #1 — `deiconify_window()` con paréntesis en callbacks de `after()`
+**Archivo:** `ui/ventana_principal.py` — método `_medir_region_app`, función interna `_esperar`  
+**Problema:** En los dos paths de error del hilo (`except` del `literal_eval` y el bloque final de cancelación), se usaba `self.after(0, self.deiconify_window())`. Los paréntesis ejecutaban `deiconify_window()` inmediatamente en el hilo secundario (thread-unsafe), y pasaban `None` como callback a `after()`, así que la ventana nunca se restauraba si la medición fallaba o se cancelaba.  
+**Fix:** `self.after(0, self.deiconify_window)` sin paréntesis en ambas ocurrencias del path de error.
+
+---
+
+### BUG #2 — `winfo_toplevel().iconify()` en lugar del wrapper del frame
+**Archivo:** `ui/ventana_principal.py` — método `_medir_region_app`, bloque antes de lanzar el hilo  
+**Problema:** Se llamaba `self.winfo_toplevel().iconify()` directamente en el hilo principal, salteando el wrapper `iconify_window()` definido en `CustomCTkFrame`. Aunque en la práctica funcionaba (el hilo principal puede tocar Tk), era inconsistente con el resto de la clase y potencialmente frágil si en el futuro `iconify_window` añade lógica extra.  
+**Fix:** Reemplazado por `self.iconify_window()` para consistencia con el patrón del resto de la clase.
+
+---
+
+### BUG #3 — `self.iconify` en un Frame dentro de `_proceso_app`
+**Archivo:** `ui/ventana_principal.py` — método `_proceso_app`, línea `self.after(0, self.iconify)`  
+**Problema:** `App` hereda de `CustomCTkFrame` (un `CTkFrame`), no de un `Toplevel`. Los frames no tienen método `iconify()`. La llamada lanzaba `AttributeError` que era silenciada por el `try/except` general, dejando la ventana visible durante la captura de la app (la captura incluía la propia interfaz).  
+**Fix:** Cambiado a `self.after(0, self.iconify_window)` que usa el wrapper correcto que delega a `winfo_toplevel().iconify()`.
+
+---
+
+### BUG #4 — `self.state()` y `self.deiconify()` sobre un Frame en `VentanaComparacion`
+**Archivo:** `ui/ventana_comparacion.py` — métodos `_traer_al_frente` y `_mostrar_resultado`  
+**Problema:** `VentanaComparacion` hereda de `CustomCTkFrame` (un Frame), no de `CTkToplevel`. Llamar `self.state()` sobre un Frame lanza `AttributeError` que el `try/except Exception: pass` silenciaba, haciendo que toda la lógica de "restaurar si estaba minimizado y traer al frente" simplemente nunca se ejecutara. El mismo problema en `_mostrar_resultado`.  
+**Fix:** En ambos métodos se reemplazó `self.state()` y `self.deiconify()` por `root = self.winfo_toplevel()` seguido de `root.state()` y `root.deiconify()`, que apuntan correctamente al Toplevel real que contiene al frame.
+
+---
+
+### BUG #5 — Import de `pandas` a nivel de módulo en `ventana_generador_mensajes.py`
+**Archivo:** `ui/ventana_generador_mensajes.py`  
+**Problema:** `import pandas as pd` estaba al tope del archivo. Si `pandas` no está instalado (o falla al importar), toda la ventana de generador de mensajes crashea con `ImportError` al arrancar `main.py`, aunque `pandas` solo se use en la función `_obtener_fecha_habil_siguiente()`.  
+**Fix:** Import lazy dentro de la función: `import pandas as pd` se movió adentro de `_obtener_fecha_habil_siguiente()`, y se añadió un fallback puro con `datetime` y `date.weekday()` por si `pandas` no está disponible. Así la ventana funciona completa incluso sin pandas (solo el cálculo de día hábil usa el fallback).
+
+
+26/05/2026
+Dispatch Cancelled -> No es trabajable aparece en color rojo
+Dispatch Reported -> No es trabajable aparece en color rojo
+Dispatch Approved -> No es trabajable aparece en color rojo
+Dispatch Accepted -> Es trabajable aparece en color verde con letra diferente
+Dispatch Rejected -> Es trabajable aparece en color verde con letra diferente
+
+Que aparezca en la parte de arriba de los resultados de busqueda y justo debajo aparezca la "Appointment Date" junto al "Case Reason"
+Toda esta informacion solo aparece en Sunrun asi que se vea de forma organizada en la ventana de comparacion
+
+repomix --ignore "doku.md"
+repomix --compress --style markdown
+repomix --compress --ignore "doku.md"
+
+
+Tareas realizadas hoy, se puso el Estado del dispatch de sunrun en la ventana de comparacion, para esto se tuvo que extraer cada uno de los selectores correctos para cada variable en formato XPATH, ademas unos extra para el bot de selenium, los selectores estan en @scraping_sunrun.py y son:
+
+SELECTOR_DISPATCH_STATE = (
+    "//span[contains(@class,'test-id__field-label') "
+    "and normalize-space(text())='Dispatch State']"
+    "/ancestor::div[contains(@class,'label-stacked') "
+    "or (contains(@class,'slds-form-element') "
+    "and not(contains(@class,'slds-form-element__')))]"
+    "//lightning-formatted-text"
+)
+
+SELECTOR_APPOINTMENT_DATE = (
+    "//span[contains(@class,'test-id__field-label') "
+    "and normalize-space(text())='Appointment Date']"
+    "/ancestor::div[contains(@class,'label-stacked') "
+    "or (contains(@class,'slds-form-element') "
+    "and not(contains(@class,'slds-form-element__')))]"
+    "//lightning-formatted-text"
+)
+
+SELECTOR_CASE_REASON = (
+    "//span[contains(@class,'test-id__field-label') "
+    "and normalize-space(text())='Case Reason']"
+    "/ancestor::div[contains(@class,'label-stacked') "
+    "or (contains(@class,'slds-form-element') "
+    "and not(contains(@class,'slds-form-element__')))]"
+    "//lightning-formatted-text"
+)
+
+SELECTOR_RELATED = "//a[@role='tab' " "and contains(normalize-space(.),'Related')]"
+
+SELECTOR_UPLOAD_FILES_INPUT = (
+    "//input[@type='file' " "and contains(@class,'slds-file-selector__input')]"
+)
+
+SELECTOR_UPLOAD_FILES_BUTTON = (
+    "//span[normalize-space(text())='Upload Files']" "/ancestor::label"
+)
+
+SELECTOR_DROP_FILES = (
+    "//span[contains(normalize-space(.),'Drop Files')]"
+    "/ancestor::*[contains(@class,'slds-file-selector')]"
+)
+
+Con estos selectores se pudo hacer el web scraping correctamente y sacar toda la informacion de Sunrun, en la ventana de comparacion debajo de la barra de busqueda, estan los resultados de esta busqueda y se pueden ver con los colores verde para los trabajable y rojo para los no trabajables, tambien se arreglo el puerto 9222 que no estaba funcionando, no estaba abriendo la sesion abierta anteriormente y abria otra pestaña, se uso repomix para el uso de IA.
+Se le puso un dropdown a cada boton de captura de aplicacion para guardar el tamaño tomado de la pantalla despues de realizar la medicion.
+
+
+
+
+Hay que arreglar el nombre en el comparador
+ejemplos de nombre:
+
+FSD1251074 - FRANCES BARCELO - ID 245852
+FSD1251053 - MARLA SANTIAGO - ID 252735
+FSD1251006 - Lillian Lee - ID 271098
+FSD1223020 - Evelissette Carrion-261284-sin produccion
+FSD1220201 - Ernesto Ivan suarez rivera - SININFO - Paneles solares
+FSD1220222 - Aurea Santiago Torres - 229613 -Gateway Not Reporting
+FSD1221131 - PATRICIA QUINTANA - 238096 - VERIFICAR SISTEMA
+FSD1219280 - MARIA RIVERA VAZQUEZ - 227535 - METERING
+FSD1219870 - MAYRA ACOSTA - 267923 - VERIFICAR SISTEMA
+FSD1198643 - DENNIS AYALA/ HEIDI TORRES- 220484-UPGRADE BATERIA
+FSD1205902 - LUIS MELENDEZ - 265580 - METERING
+FSD1208393 - EDUARDO CORREA DIAZ - 256836 - VERIFICAR SISTEMA
+FSD1205910- ANGEL L MACHIN RIVERA- 212826- UPGRADE BATERIA
+FSD1208909 - JOSE VIDAL - 265025 - METERING
+FSD1205223 - BENJAMIN GAUTHIER RODRIGUEZ - 216093 - METERING
+
+
+Se arreglo el nombre en el comparador, ahora se parsea el fsd - nombre - id - y se quitan los comentarios.
+TAMBIEN SE PARSEAN SIMBOLOS RAROS COMO [-/\\|] ETC.
+PROXIMO: HACER QUE SE VEA TODO EL SUBJECT MEJOR PARA MAS CLARIDAD. BUSQUEDA POR DEMAS ATRIBUTOS Y SUBIDA A SUNRUN Y A AMBAS PLATAFORMAS. ORC IMPLEMENTADO, CAPTURA DE EXCEL Y RECORTE AUTOMATICO DE CELDAS PARA UNA MEJOR CAPTURA

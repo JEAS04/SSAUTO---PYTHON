@@ -1,0 +1,39 @@
+# Dispatch State
+SELECTOR_DISPATCH_STATE = (
+    "//*[@data-target-selection-name="
+    "'sfdc:RecordField.FS_Dispatch__c.FS_Dispatch_State__c']"
+    "//lightning-formatted-text"
+)
+
+# Appointment Date
+SELECTOR_APPOINTMENT_DATE = (
+    "//*[contains(@data-target-selection-name,'Appointment_Date')]"
+    "//lightning-formatted-text"
+)
+
+# Case Reason
+SELECTOR_CASE_REASON = (
+    "//*[@data-target-selection-name="
+    "'sfdc:RecordField.FS_Dispatch__c.Case_Reason__c']"
+    "//lightning-formatted-text"
+)
+
+# Related tab/button
+SELECTOR_RELATED = (
+    "//a[@role='tab' and @data-tab-name='related']"
+)
+
+# Upload Files (REAL input principal)
+SELECTOR_UPLOAD_FILES_MAIN = (
+    "//input[@type='file' and @name='fileInput']"
+)
+
+# Upload Files (botón visual secundario)
+SELECTOR_UPLOAD_FILES_SECONDARY = (
+    "//span[contains(text(),'Upload Files')]"
+)
+
+# Drop Files zone
+SELECTOR_DROP_FILES = (
+    "//*[contains(@class,'slds-file-selector__dropzone')]"
+)

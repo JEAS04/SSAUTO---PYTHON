@@ -17,9 +17,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from typing import Callable
-
 from core.base_plugin import ContextoSubida, ResultadoSubida, SitioPlugin
-from core.browser import BrowserFactory, esperar_carga, puerto_activo
+from core.browser import BrowserFactory, ErrorBrowser, esperar_carga, puerto_activo
 from core.plugin_registry import PluginRegistry
 from config.credenciales import cargar_cookies, cargar_credenciales
 
@@ -111,7 +110,6 @@ class SesionService:
     @staticmethod
     def _obtener_driver(log: Callable, headless: bool, usar_existente: bool):
         """Crea o conecta el driver. Devuelve (driver, es_propio)."""
-        from core.browser import ErrorBrowser
 
         if usar_existente:
             if not puerto_activo():

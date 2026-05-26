@@ -36,20 +36,18 @@ Mejoras aplicadas (v2.1):
 import re
 import time
 
-from selenium import webdriver
 from selenium.common.exceptions import (
     NoSuchElementException,
     StaleElementReferenceException,
     TimeoutException,
     WebDriverException,
 )
-
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+
+from core.browser import BrowserFactory, encontrar_pestana, esperar_carga, ErrorBrowser
 
 # ══════════════════════════════════════════════════════════════════════
 #  SELECTORES SUNRUN — actualiza aquí si el DOM cambia
@@ -120,6 +118,48 @@ SELECTOR_CIUDAD = "//span[contains(@class,'test-id__field-label') and normalize-
 
 SELECTOR_ZIP = "//span[contains(@class,'test-id__field-label') and normalize-space(text())='Zip Code']/ancestor::div[contains(@class,'label-stacked') or (contains(@class,'slds-form-element') and not(contains(@class,'slds-form-element__')))]//lightning-formatted-text"
 
+SELECTOR_DISPATCH_STATE = (
+    "//span[contains(@class,'test-id__field-label') "
+    "and normalize-space(text())='Dispatch State']"
+    "/ancestor::div[contains(@class,'label-stacked') "
+    "or (contains(@class,'slds-form-element') "
+    "and not(contains(@class,'slds-form-element__')))]"
+    "//lightning-formatted-text"
+)
+
+SELECTOR_APPOINTMENT_DATE = (
+    "//span[contains(@class,'test-id__field-label') "
+    "and normalize-space(text())='Appointment Date']"
+    "/ancestor::div[contains(@class,'label-stacked') "
+    "or (contains(@class,'slds-form-element') "
+    "and not(contains(@class,'slds-form-element__')))]"
+    "//lightning-formatted-text"
+)
+
+SELECTOR_CASE_REASON = (
+    "//span[contains(@class,'test-id__field-label') "
+    "and normalize-space(text())='Case Reason']"
+    "/ancestor::div[contains(@class,'label-stacked') "
+    "or (contains(@class,'slds-form-element') "
+    "and not(contains(@class,'slds-form-element__')))]"
+    "//lightning-formatted-text"
+)
+
+SELECTOR_RELATED = "//a[@role='tab' " "and contains(normalize-space(.),'Related')]"
+
+SELECTOR_UPLOAD_FILES_INPUT = (
+    "//input[@type='file' " "and contains(@class,'slds-file-selector__input')]"
+)
+
+SELECTOR_UPLOAD_FILES_BUTTON = (
+    "//span[normalize-space(text())='Upload Files']" "/ancestor::label"
+)
+
+SELECTOR_DROP_FILES = (
+    "//span[contains(normalize-space(.),'Drop Files')]"
+    "/ancestor::*[contains(@class,'slds-file-selector')]"
+)
+
 # Tiempos de espera
 TIMEOUT = 15  # espera normal por elemento
 TIMEOUT_LISTA = 30  # espera para que cargue la lista
@@ -169,19 +209,6 @@ def _log_estado_pagina(driver, log_func, prefix: str = ""):
         pass
 
 
-def _esperar_renderizado_completo(driver, timeout: float = 10.0) -> bool:
-    """Espera a que document.readyState sea 'complete' (SPA/React/Vue)."""
-    try:
-        wait_local = WebDriverWait(driver, timeout)
-        wait_local.until(
-            lambda d: d.execute_script("return document.readyState") == "complete"
-        )
-        time.sleep(0.5)  # Pausa adicional para frameworks SPA
-        return True
-    except (TimeoutException, WebDriverException):
-        return False
-
-
 def _clic_con_nueva_pestana(driver, elemento, log_func, timeout: float = 15.0) -> bool:
     """
     Hace clic en un elemento que puede abrir una pestaña nueva (target="_blank").
@@ -210,48 +237,13 @@ def _clic_con_nueva_pestana(driver, elemento, log_func, timeout: float = 15.0) -
             nueva = nuevas.pop()
             driver.switch_to.window(nueva)
             log_func(f"  ✓ Nueva pestaña detectada — cambiando a ella.")
-            _esperar_renderizado_completo(driver, timeout=timeout)
+            esperar_carga(driver, timeout)
             return True
         _time.sleep(0.2)
 
     # No se abrió pestaña nueva — navegación en la misma pestaña
-    _esperar_renderizado_completo(driver, timeout=timeout)
+    esperar_carga(driver, timeout)
     return True
-
-
-def _cambiar_a_pestana_por_url(driver, subcadena_url: str, log_func) -> bool:
-    """Cambia a la primera pestaña/ventana cuya URL contenga 'subcadena_url'."""
-    try:
-        handles = driver.window_handles
-        log_func(
-            f"  · Buscando pestaña que contenga '{subcadena_url}' "
-            f"({len(handles)} disponibles)"
-        )
-
-        for handle in handles:
-            try:
-                driver.switch_to.window(handle)
-                time.sleep(0.3)
-                url_actual = driver.current_url.lower()
-                if subcadena_url.lower() in url_actual:
-                    log_func(
-                        f"  ✓ Cambiado a pestaña: {driver.title} — "
-                        f"{driver.current_url}"
-                    )
-                    return True
-            except Exception:
-                continue
-
-        log_func(
-            f"  ⚠ No se encontró pestaña con '{subcadena_url}'. "
-            f"Usando pestaña activa actual."
-        )
-        if handles:
-            driver.switch_to.window(handles[0])
-        return False
-    except Exception as e:
-        log_func(f"  ⚠ Error al buscar pestaña: {e}")
-        return False
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -279,70 +271,18 @@ class ScraperSunrun:
 
     def _conectar(self) -> bool:
         """
-        Se conecta al Chrome abierto en puerto 9222.
+        Se conecta al Chrome abierto en puerto 9222 via BrowserFactory.
         Devuelve True si la conexión fue exitosa.
-
-        NOTA: Se evitan opciones experimentales obsoletas (excludeSwitches,
-        useAutomationExtension) que causan errores con ChromeDriver moderno.
         """
         try:
-            opts = webdriver.ChromeOptions()
-
-            # ── Antifingerprinting: solo --disable-blink-features ────────
-            # excludeSwitches y useAutomationExtension ya no son compatibles
-            # con ChromeDriver moderno (causan "invalid argument: unrecognized
-            # chrome option"). Se reemplazan por --disable-blink-features.
-            opts.add_argument("--disable-blink-features=AutomationControlled")
-
-            # Conectar al Chrome ya abierto en puerto 9222
-            opts.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
-
-            self._driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
-                options=opts,
-            )
-
-            # ── Opcional: ocultar navigator.webdriver ─────────────────
-            # En Chrome 147+ esta propiedad ya no es redefinible cuando se
-            # conecta a una sesión real de usuario (remote debugging 9222).
-            # Se envuelve en try/catch para evitar el error:
-            #   "Cannot redefine property: webdriver"
-            try:
-                self._driver.execute_script("""
-                try {
-                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                } catch(e) {
-                    // Chrome 147+ no permite redefinir navigator.webdriver
-                    // en sesiones de depuración reales. Esto es normal y seguro.
-                }
-                """)
-            except Exception as _js_err:
-                import logging as _logging
-
-                _logging.getLogger("ssauto.driver").debug(
-                    f"Script de navigator.webdriver no se pudo inyectar "
-                    f"(esperado en Chrome moderno): {_js_err}"
-                )
-
-            # ── Verificar que la conexión es funcional ─────────────────
+            self._driver = BrowserFactory.conectar_existente()
             self._log("  ✓ Conectado al Chrome existente (puerto 9222).")
-
-            # ── Logging del estado actual ──────────────────────────────
             _log_estado_pagina(self._driver, self._log, "[conexión] ")
-
-            # ── Cambiar a pestaña de Sunrun si existe ──────────────────
-            _cambiar_a_pestana_por_url(self._driver, "sunrun.my.site.com", self._log)
-
+            encontrar_pestana(self._driver, "sunrun.my.site.com", self._log)
             return True
-
-        except Exception as e:
+        except ErrorBrowser as e:
             self._log(f"  ✗ No se pudo conectar al Chrome: {e}")
             self._log("  → Abre Chrome con depuración desde el botón en SSAuto.")
-            import logging
-
-            logging.getLogger("ssauto.driver").error(
-                f"Error al conectar Chrome en scraping_sunrun: {e}"
-            )
             return False
 
     # ── Detección de estado actual del navegador ────────────────────────
@@ -416,7 +356,7 @@ class ScraperSunrun:
         # ── Paso 1a: navegar a la lista para asegurar sesión ─────────
         self._log("  → Navegando a la lista de FS Dispatch...")
         self._driver.get(URL_LISTA_SUNRUN)
-        _esperar_renderizado_completo(self._driver, timeout=TIMEOUT_LISTA)
+        esperar_carga(self._driver, TIMEOUT_LISTA)
         _log_estado_pagina(self._driver, self._log, "[lista] ")
 
         if "login" in self._driver.current_url.lower():
@@ -491,7 +431,7 @@ class ScraperSunrun:
 
                 self._log(f"  → Clic en item del dropdown: {fsd_display}")
                 dropdown_fsd.click()
-                _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
+                esperar_carga(self._driver, TIMEOUT)
                 _log_estado_pagina(self._driver, self._log, "[detalle-dropdown] ")
                 if fsd_numero.lower() in self._driver.current_url.lower():
                     self._log(f"  ✓ Llegamos al detalle via dropdown.")
@@ -513,7 +453,7 @@ class ScraperSunrun:
             # El link del FSD en la tabla tiene href con patrón:
             #   /partners/s/fs-dispatch/{RECORD_ID}/fsd{NUMERO}
             campo.send_keys(Keys.RETURN)
-            _esperar_renderizado_completo(self._driver, timeout=TIMEOUT_LISTA)
+            esperar_carga(self._driver, TIMEOUT_LISTA)
             _log_estado_pagina(self._driver, self._log, "[resultados-global] ")
 
             try:
@@ -617,7 +557,7 @@ class ScraperSunrun:
                     self._log(f"  ✓ Item en dropdown (MRU): {fsd_display}")
 
                 dropdown_fsd.click()
-                _esperar_renderizado_completo(self._driver, timeout=TIMEOUT)
+                esperar_carga(self._driver, TIMEOUT)
                 time.sleep(1.0)
                 if fsd_numero.lower() in self._driver.current_url.lower():
                     self._log(f"  ✓ Llegamos al detalle via dropdown (rápido).")
@@ -630,7 +570,7 @@ class ScraperSunrun:
 
             # ENTER → página de resultados
             campo.send_keys(Keys.RETURN)
-            _esperar_renderizado_completo(self._driver, timeout=TIMEOUT_LISTA)
+            esperar_carga(self._driver, TIMEOUT_LISTA)
             try:
                 link_resultado = wait_normal.until(
                     EC.element_to_be_clickable(
@@ -872,6 +812,11 @@ class ScraperSunrun:
         telefono = self._extraer_campo(SELECTOR_TELEFONO, "Customer Phone")
         movil = self._extraer_campo(SELECTOR_MOVIL, "Mobile Phone")
         email = self._extraer_campo(SELECTOR_EMAIL, "Customer Email")
+        dispatch_state = self._extraer_campo(SELECTOR_DISPATCH_STATE, "Dispatch State")
+        appointment_date = self._extraer_campo(
+            SELECTOR_APPOINTMENT_DATE, "Appointment Date"
+        )
+        case_reason = self._extraer_campo(SELECTOR_CASE_REASON, "Case Reason")
 
         # ── Pausa extra: State/City/Zip están en la sección Address que
         # Salesforce LWC renderiza en un segundo ciclo después de los
@@ -948,6 +893,9 @@ class ScraperSunrun:
             "condado": county,
             "ciudad": ciudad,
             "codigo_postal": zip_code,
+            "dispatch_state": dispatch_state,
+            "appointment_date": appointment_date,
+            "case_reason": case_reason,
             "error": None,
         }
 
@@ -1065,5 +1013,8 @@ class ScraperSunrun:
             "condado": "",
             "ciudad": "",
             "codigo_postal": "",
+            "dispatch_state": "",
+            "appointment_date": "",
+            "case_reason": "",
             "error": mensaje,
         }

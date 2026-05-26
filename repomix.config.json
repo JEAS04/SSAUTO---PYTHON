@@ -1,0 +1,14 @@
+{
+  "output": {
+    "style": "markdown",
+    "removeComments": true
+  },
+  "ignore": {
+    "customPatterns": [
+      "node_modules/**",
+      "dist/**",
+      ".next/**",
+      "doms/**"
+    ]
+  }
+}

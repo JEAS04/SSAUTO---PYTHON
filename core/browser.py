@@ -18,17 +18,23 @@ import time
 from typing import Callable
 
 from selenium import webdriver
+from subprocess import Popen
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from pathlib import Path
+import socket
+import time
 
 logger = logging.getLogger("ssauto.browser")
 
 # Puerto estándar de Chrome remote debugging
 PUERTO_DEBUG = 9222
+CHROME_USER_DATA = r"C:\chrome_sesion_ssauto"
 
 
 class ErrorBrowser(Exception):
     """Error al crear o conectar el driver de Chrome."""
+
     pass
 
 
@@ -50,8 +56,41 @@ class BrowserFactory:
 
         Lanza ErrorBrowser si no hay Chrome con debugging en ese puerto.
         """
+
+        def puerto_activo_local():
+            try:
+                with socket.create_connection(("127.0.0.1", puerto), timeout=1):
+                    return True
+            except:
+                return False
+
+        if not puerto_activo_local():
+            chrome_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                str(Path.home() / "AppData/Local/Google/Chrome/Application/chrome.exe"),
+            ]
+
+            chrome_path = next((p for p in chrome_paths if Path(p).exists()), None)
+            if not chrome_path:
+                raise ErrorBrowser(f"Chrome no encontrado en el puerto: {puerto}.")
+
+            Popen(
+                [
+                    chrome_path,
+                    f"--remote-debugging-port={puerto}",
+                    f"--user-data-dir={CHROME_USER_DATA}",
+                    "--disable-popup-blocking",
+                    "--disable-default-apps",
+                ]
+            )
+
+            for _ in range(20):
+                if puerto_activo_local():
+                    break
+                time.sleep(0.5)
+
         opciones = webdriver.ChromeOptions()
-        opciones.add_argument("--disable-blink-features=AutomationControlled")
         opciones.add_experimental_option("debuggerAddress", f"127.0.0.1:{puerto}")
 
         try:
@@ -95,7 +134,9 @@ class BrowserFactory:
             raise ErrorBrowser(f"No se pudo abrir Chrome nuevo: {e}") from e
 
     @classmethod
-    def crear(cls, headless: bool, usar_existente: bool, puerto: int = PUERTO_DEBUG) -> webdriver.Chrome:
+    def crear(
+        cls, headless: bool, usar_existente: bool, puerto: int = PUERTO_DEBUG
+    ) -> webdriver.Chrome:
         """
         Punto de entrada unificado — elige el modo según los flags.
 
@@ -124,7 +165,9 @@ class BrowserFactory:
             }
             """)
         except Exception as e:
-            logger.debug(f"Script antidetección no aplicado (esperado en Chrome moderno): {e}")
+            logger.debug(
+                f"Script antidetección no aplicado (esperado en Chrome moderno): {e}"
+            )
 
 
 # ── Helpers de pestañas ───────────────────────────────────────────────
@@ -162,6 +205,7 @@ def esperar_carga(driver, timeout: float = 10.0) -> bool:
     import time as _time
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.common.exceptions import TimeoutException, WebDriverException
+
     try:
         WebDriverWait(driver, timeout).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
@@ -175,6 +219,7 @@ def esperar_carga(driver, timeout: float = 10.0) -> bool:
 def puerto_activo(host: str = "127.0.0.1", puerto: int = PUERTO_DEBUG) -> bool:
     """Devuelve True si hay algo escuchando en host:puerto."""
     import socket
+
     try:
         with socket.create_connection((host, puerto), timeout=1):
             return True

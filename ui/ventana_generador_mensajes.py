@@ -11,9 +11,8 @@ de singular/plural según la cantidad de números telefónicos ingresados.
 """
 
 import customtkinter as ctk
-import pandas as pd
 from tkinter import messagebox
-from datetime import datetime
+from datetime import datetime, date as date_type
 import re
 from ui.posicion_ventanas import ubicar_junto_a_padre
 
@@ -50,10 +49,25 @@ def _obtener_fecha() -> str:
 
 
 def _obtener_fecha_habil_siguiente() -> str:
-    """Retorna el próximo día hábil (lunes a viernes) en formato MM/DD/YYYY."""
-    fecha_actual = pd.Timestamp(datetime.now().date())
-    fecha_habil_siguiente = fecha_actual + pd.offsets.BusinessDay(1)
-    return fecha_habil_siguiente.strftime("%m/%d/%Y")
+    """
+    Retorna el próximo día hábil (lunes a viernes) en formato MM/DD/YYYY.
+
+    FIX #5: import lazy de pandas — si pandas no está disponible se usa
+    una implementación pura con datetime para no romper toda la ventana.
+    """
+    try:
+        import pandas as pd  # import lazy: solo cuando se necesita
+
+        fecha_actual = pd.Timestamp(datetime.now().date())
+        fecha_habil_siguiente = fecha_actual + pd.offsets.BusinessDay(1)
+        return fecha_habil_siguiente.strftime("%m/%d/%Y")
+    except ImportError:
+        # Fallback sin pandas: avanza días hasta encontrar lunes-viernes
+        dia = datetime.now().date()
+        dia_siguiente = date_type.fromordinal(dia.toordinal() + 1)
+        while dia_siguiente.weekday() >= 5:  # 5=sábado, 6=domingo
+            dia_siguiente = date_type.fromordinal(dia_siguiente.toordinal() + 1)
+        return dia_siguiente.strftime("%m/%d/%Y")
 
 
 CODIGOS_AREA_PR = {"787", "939"}
@@ -111,18 +125,15 @@ def _procesar_texto(
     Procesa una plantilla reemplazando:
     - {singular|plural} según la cantidad de números
     - {telefonos} con la lista de números
-    - {fecha} con la fecha actual (solo para inglés)
+    - {fecha} con la fecha actual
+    - {fecha_habil_siguiente} con el próximo día hábil
     """
     texto = plantilla
 
-    # Reemplazar fecha (solo en plantillas en inglés)
     texto = texto.replace("{fecha}", _obtener_fecha())
     texto = texto.replace("{fecha_habil_siguiente}", _obtener_fecha_habil_siguiente())
-
-    # Reemplazar teléfonos
     texto = texto.replace("{telefonos}", telefonos_str)
 
-    # Reemplazar patrones {singular|plural}
     def reemplazar_plural(match: re.Match) -> str:
         singular = match.group(1)
         plural = match.group(2)
@@ -149,7 +160,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         self.transient(parent)
         self.grab_set()
 
-        # Variables de estado
         self._tipo_mensaje_var = ctk.StringVar(value="fuera_servicio")
         self._idioma_var = ctk.StringVar(value="es")
 
@@ -160,7 +170,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _construir_ui(self):
-        """Construye la interfaz de usuario."""
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(4, weight=1)
 
@@ -192,7 +201,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         )
         panel_config.grid_columnconfigure(1, weight=1)
 
-        # Tipo de mensaje
         ctk.CTkLabel(
             panel_config,
             text="Tipo de mensaje:",
@@ -212,7 +220,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         )
         self._combo_tipo.grid(row=0, column=1, sticky="w", padx=12, pady=(12, 4))
 
-        # Idioma
         ctk.CTkLabel(
             panel_config,
             text="Idioma:",
@@ -263,7 +270,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         )
         lbl_info.grid(row=0, column=1, sticky="w", padx=4, pady=(12, 4))
 
-        # Primer número
         ctk.CTkLabel(
             panel_telefonos,
             text="Número 1:",
@@ -278,7 +284,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         self._entry_tel1.grid(row=1, column=1, sticky="ew", padx=12, pady=4)
         self._entry_tel1.bind("<KeyRelease>", lambda e: self._actualizar_preview())
 
-        # Segundo número
         ctk.CTkLabel(
             panel_telefonos,
             text="Número 2:",
@@ -347,7 +352,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         )
         self._btn_generar.pack(side="right")
 
-        # Label de confirmación
         self._label_estado = ctk.CTkLabel(
             self,
             text="",
@@ -359,7 +363,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
     # ── Lógica ────────────────────────────────────────────────────────────────
 
     def _obtener_telefonos(self) -> tuple[list[str], list[str]]:
-        """Obtiene, valida y normaliza los números telefónicos ingresados."""
         telefonos = []
         errores = []
 
@@ -382,7 +385,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         return telefonos, errores
 
     def _formatear_telefonos(self, telefonos: list[str]) -> str:
-        """Formatea la lista de teléfonos como string legible."""
         if len(telefonos) == 1:
             return telefonos[0]
         elif len(telefonos) == 2:
@@ -390,25 +392,20 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         return ", ".join(telefonos)
 
     def _requiere_telefonos(self) -> bool:
-        """Indica si el tipo de mensaje seleccionado necesita teléfonos."""
         tipo = self._tipo_mensaje_var.get()
         return PLANTILLAS_MENSAJES[tipo].get("requiere_telefonos", True)
 
     def _al_cambiar_tipo_mensaje(self, *_):
-        """Actualiza la UI cuando cambia el tipo de mensaje seleccionado."""
         self._actualizar_estado_telefonos()
         self._actualizar_preview()
 
     def _actualizar_estado_telefonos(self):
-        """Habilita o deshabilita los campos de teléfono según la plantilla."""
         requiere_telefonos = self._requiere_telefonos()
         estado = "normal" if requiere_telefonos else "disabled"
         self._entry_tel1.configure(state=estado)
         self._entry_tel2.configure(state=estado)
 
     def _actualizar_preview(self, *_):
-        """Genera y muestra la previsualización del mensaje."""
-        # Obtener datos
         tipo = self._tipo_mensaje_var.get()
         idioma = self._idioma_var.get()
         telefonos, errores = self._obtener_telefonos()
@@ -416,7 +413,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         requiere_telefonos = self._requiere_telefonos()
         self._preview_valido = False
 
-        # Validar formato NANP de Puerto Rico
         if requiere_telefonos and errores:
             self._textbox_preview.configure(state="normal")
             self._textbox_preview.delete("0.0", "end")
@@ -429,7 +425,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
             self._textbox_preview.configure(state="disabled")
             return
 
-        # Validar que haya al menos un número
         if requiere_telefonos and not telefonos:
             self._textbox_preview.configure(state="normal")
             self._textbox_preview.delete("0.0", "end")
@@ -439,7 +434,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
             self._textbox_preview.configure(state="disabled")
             return
 
-        # Validar máximo 2 números
         if requiere_telefonos and len(telefonos) > 2:
             self._textbox_preview.configure(state="normal")
             self._textbox_preview.delete("0.0", "end")
@@ -449,10 +443,7 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
             self._textbox_preview.configure(state="disabled")
             return
 
-        # Obtener plantilla
         texto_plantilla = plantilla[idioma]
-
-        # Procesar mensaje
         telefonos_str = (
             self._formatear_telefonos(telefonos) if requiere_telefonos else ""
         )
@@ -460,7 +451,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
             texto_plantilla, len(telefonos), telefonos_str, idioma
         )
 
-        # Mostrar en preview
         self._textbox_preview.configure(state="normal")
         self._textbox_preview.delete("0.0", "end")
         self._textbox_preview.insert("0.0", mensaje)
@@ -468,7 +458,6 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         self._preview_valido = True
 
     def _copiar_mensaje(self):
-        """Copia el mensaje generado al portapapeles."""
         mensaje = self._textbox_preview.get("0.0", "end").strip()
 
         if not mensaje or not getattr(self, "_preview_valido", False):

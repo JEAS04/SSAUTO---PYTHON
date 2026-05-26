@@ -17,7 +17,6 @@ la comparación desde aquí, sin necesidad de ir a la ventana principal.
 import threading
 import customtkinter as ctk
 from tkinter import messagebox
-from ui.ventana_principal import App
 from ui.custom_ctkframe import CustomCTkFrame
 from core.comparador import comparar, datos_hs_desde_ticket
 from scraping_sunrun import ScraperSunrun
@@ -69,6 +68,33 @@ ETIQUETAS_ESTADO = {
     "ambos_vacios": "SIN DATOS",
 }
 
+DISPATCH_STATES = {
+    "DISPATCH CANCELLED": {
+        "trabajable": False,
+        "color": "red",
+        "texto": "No es trabajable",
+    },
+    "DISPATCH REPORTED": {
+        "trabajable": False,
+        "color": "red",
+        "texto": "No es trabajable",
+    },
+    "DISPATCH APPROVED": {
+        "trabajable": False,
+        "color": "red",
+        "texto": "No es trabajable",
+    },
+    "DISPATCH ACCEPTED": {
+        "trabajable": True,
+        "color": "green",
+        "texto": "Es trabajable",
+    },
+    "DISPATCH REJECTED": {
+        "trabajable": True,
+        "color": "green",
+        "texto": "Es trabajable",
+    },
+}
 
 # ══════════════════════════════════════════════════════════════════════
 #  Ventana principal de comparación
@@ -98,46 +124,38 @@ class VentanaComparacion(CustomCTkFrame):
         datos_sunrun: dict = None,
         log_callback=None,
     ):
-        super().__init__(parent)
-        # self.title("Comparación HubSpot ↔ Sunrun")
-        # self.resizable(True, True)
-        # grab_set() removido: causaba bloqueo de la ventana principal.
-        # transient() removido: causaba que la ventana desapareciera al usar
-        # "Mostrar escritorio" de Windows y no se pudiera recuperar.
-        # La ventana ahora es independiente (toplevel normal).
 
+        super().__init__(parent)
         self._log_ext = log_callback or (lambda m: None)
         self._datos_hs = datos_hubspot
         self._datos_sr = datos_sunrun
 
-        # Tamaño y centrado
         self.update_idletasks()
         ancho, alto = 820, 560
         px = max(0, (self.winfo_screenwidth() - ancho) // 2)
         py = max(0, (self.winfo_screenheight() - alto) // 2)
-        # self.geometry(f"{ancho}x{alto}+{px}+{py}")
-        # self.minsize(600, 400)
 
         self._construir_ui()
 
-        # Manejar cierre con X correctamente
-        # self.protocol("WM_DELETE_WINDOW", self._cerrar)
-
-        # Traer al frente al abrir
         self.after(50, self._traer_al_frente)
 
-        # Si ya vienen datos, mostrarlos directamente
         if datos_hubspot and datos_sunrun:
             self.after(100, self._mostrar_resultado_externo)
 
     def _traer_al_frente(self):
         """Asegura que la ventana aparezca al frente al abrirse."""
         try:
-            self.deiconify()
-            self.lift()
-            self.focus_force()
-            self.attributes("-topmost", True)
-            self.after(200, lambda: self.attributes("-topmost", False))
+            # FIX #4: VentanaComparacion hereda de CustomCTkFrame (un Frame,
+            # no un Toplevel), así que self.state() no existe y lanzaba
+            # AttributeError silenciado. Ahora subimos al toplevel real
+            # con winfo_toplevel() antes de llamar state()/deiconify().
+            root = self.winfo_toplevel()
+            if root.state() == "iconic":
+                root.deiconify()
+            root.lift()
+            root.focus_force()
+            root.attributes("-topmost", True)
+            self.after(200, lambda: root.attributes("-topmost", False))
         except Exception:
             pass
 
@@ -151,6 +169,7 @@ class VentanaComparacion(CustomCTkFrame):
     # ── Construcción de la UI ─────────────────────────────────────────
 
     def _construir_ui(self):
+
         self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -210,7 +229,6 @@ class VentanaComparacion(CustomCTkFrame):
         )
         self._frame_resultados.grid_columnconfigure(0, weight=1)
 
-        # Placeholder inicial
         self._label_placeholder = ctk.CTkLabel(
             self._frame_resultados,
             text="Ingresa un número FSD y presiona Comparar.",
@@ -230,8 +248,6 @@ class VentanaComparacion(CustomCTkFrame):
             font=ctk.CTkFont(size=10),
             text_color=("gray40", "gray60"),
         ).pack(side="left", padx=12)
-
-    # ── Lanzar comparación desde el campo FSD ─────────────────────────
 
     def _lanzar_comparacion(self):
         fsd = self._fsd_var.get().strip()
@@ -258,21 +274,22 @@ class VentanaComparacion(CustomCTkFrame):
             self.after(0, lambda m=msg: self._status_var.set(m.strip()))
 
         try:
-            # 1. Sunrun via scraping
             ui_log(f"  → Buscando {fsd} en Sunrun...")
             scraper = ScraperSunrun(log_callback=ui_log)
             datos_sr = scraper.obtener_datos_por_fsd(fsd)
 
-            # 2. HubSpot via API
             ui_log("  → Obteniendo datos desde HubSpot...")
             datos_hs = self._obtener_hubspot(fsd, ui_log)
 
-            # 3. Comparar
             ui_log("  → Comparando campos...")
             resultado = comparar(datos_hs, datos_sr)
             resultado["fsd"] = fsd
+            resultado["_sunrun_extra"] = {
+                "dispatch_state": datos_sr.get("dispatch_state", ""),
+                "appointment_date": datos_sr.get("appointment_date", ""),
+                "case_reason": datos_sr.get("case_reason", ""),
+            }
 
-            # 4. Mostrar en la UI (hilo principal)
             self.after(0, lambda r=resultado: self._mostrar_resultado(r))
 
         except Exception as e:
@@ -282,10 +299,6 @@ class VentanaComparacion(CustomCTkFrame):
             self.after(0, lambda: self._status_var.set("Listo"))
 
     def _obtener_hubspot(self, fsd: str, log) -> dict:
-        """
-        Obtiene los datos del ticket + contacto de HubSpot usando  api.py.
-        Importa dinámicamente para no acoplar el módulo si la API no está disponible.
-        """
         _vacio = {
             "fsd": fsd,
             "ticket_id": None,
@@ -323,31 +336,42 @@ class VentanaComparacion(CustomCTkFrame):
     # ── Renderizado de resultados ──────────────────────────────────────
 
     def _limpiar_resultados(self):
-        """Elimina todos los widgets del área de resultados."""
         for widget in self._frame_resultados.winfo_children():
             widget.destroy()
 
     def _mostrar_resultado_externo(self):
-        """Muestra datos ya obtenidos externamente (pasados al constructor)."""
+
         resultado = comparar(self._datos_hs, self._datos_sr)
+
+        resultado["_sunrun_extra"] = {
+            "dispatch_state": self._datos_sr.get("dispatch_state", ""),
+            "appointment_date": self._datos_sr.get("appointment_date", ""),
+            "case_reason": self._datos_sr.get("case_reason", ""),
+        }
+
         self._mostrar_resultado(resultado)
 
     def _mostrar_resultado(self, resultado: dict):
         """
         Renderiza la tabla de comparación con colores por estado.
-        Tras comparar, trae la ventana al frente si estaba minimizada.
+
+        FIX #4: antes se llamaba self.state() y self.deiconify() directamente
+        sobre el Frame, lo que lanzaba AttributeError silenciado y nunca
+        restauraba la ventana. Ahora se delega al toplevel real.
         """
         self._limpiar_resultados()
-        # Restaurar si estaba minimizada y traer al frente
+
+        # Restaurar toplevel si estaba minimizado y traer al frente
         try:
-            if self.state() == "iconic":
-                self.deiconify()
-            self.lift()
-            self.focus_force()
+            root = self.winfo_toplevel()
+            if root.state() == "iconic":
+                root.deiconify()
+            root.lift()
+            root.focus_force()
         except Exception:
             pass
-        frame = self._frame_resultados
 
+        frame = self._frame_resultados
         fila = 0
 
         # ── Encabezado del ticket ─────────────────────────────────────
@@ -359,6 +383,117 @@ class VentanaComparacion(CustomCTkFrame):
             text=f"  Ticket: {resultado['fsd']}",
             font=ctk.CTkFont(size=13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=14, pady=10)
+        fila += 1
+        sunrun_extra = resultado.get("_sunrun_extra")
+
+        if sunrun_extra:
+            estado_dispatch = sunrun_extra.get("dispatch_state", "").strip().upper()
+
+            header_color = ("#804000", "#f0a050")
+            frame_color = ("#ffe5cc", "#3a2a1a")
+
+            if estado_dispatch in [
+                "DISPATCH CANCELLED",
+                "DISPATCH REPORTED",
+                "DISPATCH APPROVED",
+            ]:
+                header_color = ("#721c24", "#f85149")
+                frame_color = ("#f8d7da", "#3a1a1a")
+
+            elif estado_dispatch in [
+                "DISPATCH ACCEPTED",
+                "DISPATCH REJECTED",
+            ]:
+                header_color = ("#155724", "#3fb950")
+                frame_color = ("#d4edda", "#1a3a2a")
+
+            sr_frame = ctk.CTkFrame(
+                frame,
+                fg_color=frame_color,
+                border_width=1,
+            )
+
+            sr_frame.grid(
+                row=fila,
+                column=0,
+                sticky="ew",
+                pady=(0, 8),
+            )
+
+            sr_frame.grid_columnconfigure(1, weight=1)
+
+            ctk.CTkLabel(
+                sr_frame,
+                text="☀ Sunrun",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=header_color,
+            ).grid(
+                row=0,
+                column=0,
+                sticky="w",
+                padx=14,
+                pady=(10, 6),
+            )
+
+            campos_extra = [
+                ("Dispatch State", sunrun_extra.get("dispatch_state", "")),
+                ("Appointment Date", sunrun_extra.get("appointment_date", "")),
+                ("Case Reason", sunrun_extra.get("case_reason", "")),
+            ]
+
+            for idx, (label, valor) in enumerate(campos_extra, start=1):
+
+                ctk.CTkLabel(
+                    sr_frame,
+                    text=f"{label}:",
+                    font=ctk.CTkFont(size=11, weight="bold"),
+                ).grid(
+                    row=idx,
+                    column=0,
+                    sticky="nw",
+                    padx=(14, 8),
+                    pady=2,
+                )
+
+                color = None
+                font_weight = "normal"
+
+                if label == "Dispatch State":
+
+                    estado = str(valor).strip().upper()
+
+                    if estado in [
+                        "DISPATCH CANCELLED",
+                        "DISPATCH REPORTED",
+                        "DISPATCH APPROVED",
+                    ]:
+                        color = "red"
+                        font_weight = "bold"
+                        valor = f"{valor} → No es trabajable"
+
+                    elif estado in [
+                        "DISPATCH ACCEPTED",
+                        "DISPATCH REJECTED",
+                    ]:
+                        color = "green"
+                        font_weight = "bold"
+                        valor = f"{valor} → Es trabajable"
+
+                ctk.CTkLabel(
+                    sr_frame,
+                    text=valor or "-",
+                    font=ctk.CTkFont(size=11, weight=font_weight),
+                    wraplength=320,
+                    justify="left",
+                    anchor="w",
+                    text_color=color,
+                ).grid(
+                    row=idx,
+                    column=1,
+                    sticky="ew",
+                    padx=(0, 14),
+                    pady=2,
+                )
         fila += 1
 
         # ── Errores (si los hay) ──────────────────────────────────────
@@ -381,10 +516,10 @@ class VentanaComparacion(CustomCTkFrame):
         # ── Encabezados de columnas ───────────────────────────────────
         cols_hdr = ctk.CTkFrame(frame, fg_color=("gray80", "gray28"))
         cols_hdr.grid(row=fila, column=0, sticky="ew", pady=(0, 2))
-        cols_hdr.grid_columnconfigure(0, weight=2)  # campo
-        cols_hdr.grid_columnconfigure(1, weight=3)  # HubSpot
-        cols_hdr.grid_columnconfigure(2, weight=3)  # Sunrun
-        cols_hdr.grid_columnconfigure(3, weight=2)  # estado
+        cols_hdr.grid_columnconfigure(0, weight=2)
+        cols_hdr.grid_columnconfigure(1, weight=3)
+        cols_hdr.grid_columnconfigure(2, weight=3)
+        cols_hdr.grid_columnconfigure(3, weight=2)
 
         for i, titulo in enumerate(["Campo", "HubSpot", "Sunrun", "Estado"]):
             ctk.CTkLabel(
@@ -405,7 +540,6 @@ class VentanaComparacion(CustomCTkFrame):
         self._resumen(frame, fila, resultado["resumen"])
 
     def _fila_campo(self, parent, fila: int, cr: dict):
-        """Renderiza una fila de la tabla para un campo comparado."""
         estado = cr["estado"]
         colores = COLORES_ESTADO.get(estado, COLORES_ESTADO["ambos_vacios"])
 
@@ -435,7 +569,6 @@ class VentanaComparacion(CustomCTkFrame):
         celda(cr["valor_hs"], col=1)
         celda(cr["valor_sr"], col=2)
 
-        # Celda de estado con icono
         estado_txt = f"{colores['icono']} {ETIQUETAS_ESTADO.get(estado, estado)}"
         ctk.CTkLabel(
             row_frame,
@@ -444,7 +577,6 @@ class VentanaComparacion(CustomCTkFrame):
             text_color=colores["texto"],
         ).grid(row=0, column=3, sticky="w", padx=14, pady=10)
 
-        # Tooltip de nota (fila expandida si hay nota relevante)
         if cr.get("nota") and estado not in ("igual", "ambos_vacios"):
             nota_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
             nota_frame.grid(row=1, column=0, columnspan=4, sticky="ew")
@@ -456,7 +588,6 @@ class VentanaComparacion(CustomCTkFrame):
             ).grid(row=0, column=0, sticky="w", padx=14, pady=(0, 6))
 
     def _resumen(self, parent, fila: int, resumen: dict):
-        """Muestra el resumen de conteos por estado al final de la tabla."""
         frame = ctk.CTkFrame(parent, fg_color=("gray88", "gray22"), border_width=1)
         frame.grid(row=fila, column=0, sticky="ew", pady=(12, 4))
 
@@ -487,7 +618,6 @@ class VentanaComparacion(CustomCTkFrame):
             ).pack(side="left", padx=8, pady=10)
 
     def _mostrar_error(self, mensaje: str):
-        """Muestra un error general en el área de resultados."""
         self._limpiar_resultados()
         ctk.CTkLabel(
             self._frame_resultados,
@@ -500,12 +630,8 @@ class VentanaComparacion(CustomCTkFrame):
 
 if __name__ == "__main__":
     config = cargar_config()
-
     ctk.set_appearance_mode(config.get("tema", "dark"))
-
     root = ctk.CTk()
     root.withdraw()
-
     app = VentanaComparacion(root)
-
     root.mainloop()
