@@ -1,0 +1,652 @@
+CONTACT PROPERTIES:
+
+a_qu_plaza_se_postula -> PS FaceBook ¿A qué plaza se postula? -> string
+a_qu_plaza_solicita -> ¿A qué plaza solicita? -> string
+aceptacion_terminos_y_condiciones -> Aceptación Términos y Condiciones -> enumeration
+acepto_los_terminos_y_condiciones_del_concurso_brilla_gratis_con_planet -> Acepto los términos y condiciones del concurso Brilla Gratis con Planet ! -> enumeration
+actualmente_tiene_sistema_solar_instalado -> ¿Actualmente tiene sistema solar instalado? -> string
+actualmente_tienes_placas_solares_instaladas -> ¿Actualmente tienes placas solares instaladas? -> string
+address -> Street Address -> string
+agendador__inside_sales_ -> Agendador (Inside Sales) -> enumeration
+annualrevenue -> Annual Revenue -> string
+asignado_a_inside_sales -> Asignado a Inside Sales -> enumeration
+asignado_por -> PS Assigned by -> enumeration
+associatedcompanyid -> Primary Associated Company ID -> number
+associatedcompanylastupdated -> Associated Company Last Updated -> number
+bateria__contacto_ -> Tiempo Autonomia Todas las Cargas (Contacto) -> enumeration
+bateria__negocios_ -> Cargas Bateria (Contacto) -> enumeration
+campana -> PS FaceBook Generac -> string
+canal -> Evento | Concurso | Leads -> enumeration
+cantidad_tipo_de_bateria__contacto_ -> Cantidad Tipo de Batería (Contacto) -> number
+cantidad_tipo_de_cargador__contacto_ -> Cantidad Tipo de Cargador (Contacto) -> number
+cantidad_tipo_de_inversor__contacto_ -> Cantidad Tipo de Inversor (Contacto) -> number
+cantidad_tipo_de_panel__contacto_ -> Cantidad Tipo de Panel (Contacto) -> number
+cerrador_concurso -> Cerrador Concurso | Brilla 2026 -> enumeration
+cita_nueva_o_reagendada -> Cita Nueva o Reagendada (Inside Sales) -> enumeration
+city -> City -> string
+closedate -> Close Date -> datetime
+comentario_de_ventas -> PS Webform Note -> string
+comentarios_division_comercial -> Notas Adicionales (Contacto) -> string
+company -> Company Name -> string
+company_size -> Company size -> string
+concurso__evento_ -> Concurso (Evento) -> enumeration
+consultor__baby_boomers_expo_2024_ -> Consultor (Baby Boomers Expo 2024) -> string
+consultor__booth_ -> Consultor (Booth) -> string
+consultor__sanse_caguas_2025_ -> Consultor (Sanse Caguas 2025) -> string
+consultor__sanse_san_juan_2025_ -> Consultor (Sanse San Juan 2025) -> string
+consultor_comercial_asignado__contacto_ -> Consultor Comercial (Contacto) -> string
+contratado__jobs_ -> Contratado (Jobs) -> enumeration
+cotizacion__contacto_ -> Cotización (Contacto) -> string
+country -> Country/Region -> string
+createdate -> Create Date -> datetime
+cual_es_su_empirica_aproximada -> Cual es su empirica aproximada? -> string
+cual_es_su_pago_aproximado_de_energia -> ¿Cuál es su pago aproximado de energía? -> number
+cual_es_tu_aproximado_de_luma -> Cual es tu aproximado de LUMA? -> string
+cuanto_es_la_cantidad_adeudada_en_luma -> Cuanto es la cantidad adeudada en LUMA? -> string
+cuanto_es_regularmente_su_factura_de_luma -> Cuanto es regularmente su factura de luma? -> string
+cuanto_es_su_pago_regular_de_luma -> Cuanto es su pago regular de LUMA? -> string
+cuanto_paga_de_su_factura_de_luma -> Cuanto paga de su factura de Luma? -> string
+cuanto_paga_regularmente_de_su_factura_de_luma -> ¿Cuanto paga regularmente de su factura de LUMA? -> string
+cuanto_paga_regularmente_de_su_factura_de_luma_ -> ¿Cuanto paga regularmente de su factura de LUMA -> string
+cuanto_paga_regularmente_en_luma -> ¿Cuanto paga regularmente en LUMA? -> string
+cuanto_paga_regularmente_en_su_factura_de_luma_ -> Cuanto paga regularmente en su factura de LUMA -> string
+cuanto_pagas_actualmente_de_tu_factura -> Cuanto pagas actualmente de tu factura -> string
+cuanto_pagas_de_luz_mensual -> Cuanto pagas de luz mensual? -> string
+cuanto_pagas_de_tu_factura_regular_de_luma -> Cuanto pagas de tu factura regular de LUMA? -> string
+cuanto_pagas_regularmente_de_tu_factura_de_luma -> ¿Cuanto pagas regularmente de tu factura de LUMA? -> string
+cuanto_pagas_regularmente_de_tu_factura_de_luma_ -> Cuanto pagas regularmente de tu factura de LUMA -> string
+cuanto_pagas_regularmente_de_tu_factura_de_luz_ -> Cuanto pagas regularmente de tu factura de LUZ -> string
+cuanto_pagas_regularmente_en_tu_factura_de_luma -> ¿Cuanto pagas regularmente en tu factura de LUMA? -> string
+cuentas_con_autotransportacin_propia -> ¿Cuentas con auto/transportación propia? -> string
+cul_describe_mejor_tu_perfil -> ¿Cuál describe mejor tu perfil? -> string
+cul_es_el_promedio_de_tu_factura_mensual_de_electricidad -> ¿Cuál es el promedio de tu factura mensual de electricidad? -> string
+cul_es_el_promedio_mensual_de_tu_factura_elctrica -> ¿Cuál es el promedio mensual de tu factura eléctrica? -> string
+cul_es_su_pago_aproximado_de_energa -> ¿Cuál es su pago aproximado de energía? -> string
+cul_es_su_zona_de_ubicacin -> ¿Cuál es su zona de ubicación? -> string
+cul_es_tu_consumo_mensual_aproximado_de_electricidad -> ¿Cuál es tu consumo mensual aproximado de electricidad? -> string
+cul_es_tu_consumo_mensual_aproximado_de_luz -> ¿Cuál es tu consumo mensual aproximado de luz? -> string
+cul_es_tu_consumo_mensual_de_luz_aproximado -> ¿Cuál es tu consumo mensual de luz aproximado? -> string
+cul_es_tu_consumo_mensual_promedio_de_electricidad -> ¿Cuál es tu consumo mensual promedio de electricidad? -> string
+cul_es_tu_factura_mensual_de_luz -> ¿Cuál es tu factura mensual de luz? -> string
+cul_es_tu_factura_promedio_de_luz -> ¿Cuál es tu factura promedio de luz? -> string
+cul_es_tu_factura_promedio_mensual_de_electricidad -> ¿Cuál es tu factura promedio mensual de electricidad? -> string
+cul_es_tu_gasto_promedio_mensual_de_luz -> ¿Cuál es tu gasto promedio mensual de luz? -> string
+cul_horario_es_conveniente_para_ser_contactad -> ¿Cuál horario es conveniente para ser contactad@? -> string
+cunto_pagas_en_energa_en_promedio_por_mes_ -> ¿Cuánto pagas en energía en promedio por mes? * -> string
+cuota_por_cita -> Cuota por Cita -> number
+currentlyinworkflow -> Currently in workflow (discontinued) -> enumeration
+cybertruck_notas -> Cybertruck Notas -> string
+date_of_birth -> Date of birth -> string
+days_to_close -> Days To Close -> number
+de_cuanto_es_su_factura_de_luma_regularmente -> De cuanto es su factura de LUMA regularmente? -> string
+de_que_pueblo_es -> De que pueblo es? -> string
+degree -> Degree -> string
+departamento -> PS Webform Work Deparment -> enumeration
+deseas_instalacin_en_menos_de_30_das -> ¿Deseas instalación en menos de 30 días? -> string
+deseas_ser_parte_de_nuestra_red_de_instaladoresdistribuidores -> ¿Deseas ser parte de nuestra red de instaladores/distribuidores? -> string
+direccion__fisica_ -> Direccion (Fisica) -> string
+direccion_postal -> Direccion (Postal) -> string
+disclaimer -> Disclaimer -> enumeration
+disponibilidad_para_comenzar -> Disponibilidad para comenzar -> string
+dnde_deseas_instalar_el_sistema_solar_si_resultas_ganadora -> ¿Dónde deseas instalar el sistema solar si resultas ganador(a)? -> string
+dueno_de_la_propiedad__contactos_ -> Dueño de la propiedad (Contactos) -> string
+el_hogar_donde_interesa_el_sistema_es_de_su_propiedad -> El hogar donde interesa el sistema es de su propiedad? -> string
+el_hogar_donde_te_interesa_instalar_sistema_es_de_su_propiedad -> El hogar donde te interesa instalar sistema es de su propiedad? -> string
+email -> Email -> string
+email_consultor_comercial__contacto_ -> Email Consultor Comercial (Contacto) -> string
+email_del_representate_costco -> Email del Representate (Costco) -> string
+en_cual_pueblo_reside -> ¿En cual pueblo reside? -> string
+en_cunto_tiempo_planea_implementar_energa_solar -> ¿En cuánto tiempo planea implementar energía solar? -> string
+en_qu_horario_es_conveniente_ser_contactado_a -> ¿En qué horario es conveniente ser contactado (a)? -> string
+en_qu_municipio_resides -> ¿En qué municipio resides? -> string
+en_qu_municipio_resides_ -> ¿En qué municipio resides? -> string
+en_qu_municipios_o_regiones_trabajas_principalmente -> ¿En qué municipios o regiones trabajas principalmente? -> string
+en_qu_tipo_de_propiedad_te_interesa_instalar_el_sistema -> ¿En qué tipo de propiedad te interesa instalar el sistema? -> string
+en_que_horario_es_conveniente_ser_contactad -> ¿En que horario es conveniente ser contactad@? -> string
+en_que_pueblo_reside -> ¿En que pueblo reside? -> string
+en_que_pueblo_resides -> ¿En que pueblo resides? -> string
+en_que_usted_est_interesado_a_si_vive_en_un_edificio_no_aplica -> ¿En que usted está interesado (a)? *Si vive en un edificio no aplica* -> string
+engagements_last_meeting_booked -> Date of last meeting booked in meetings tool -> datetime
+engagements_last_meeting_booked_campaign -> Campaign of last booking in meetings tool -> string
+engagements_last_meeting_booked_medium -> Medium of last booking in meetings tool -> string
+engagements_last_meeting_booked_source -> Source of last booking in meetings tool -> string
+enviar_archivo -> PS Webform Upload Resume -> string
+eres_duenoa_de_la_propiedad -> ¿Eres dueño(a) de la propiedad? -> enumeration
+eres_dueo_de_la_propiedad -> ¿Eres dueño de la propiedad? -> string
+eres_dueo_de_tu_casa -> ¿Eres dueño de tu casa? -> string
+eres_dueo_de_tu_hogar_ -> ¿Eres dueño de tu hogar? -> string
+eres_dueo_de_tu_residencia -> ¿Eres dueño de tu residencia? -> string
+eres_el_dueo_legal_de_la_propiedad_o_cuentas_con_su_autorizacin -> ¿Eres el dueño legal de la propiedad o cuentas con su autorización? -> string
+eres_la_persona_que_puede_autorizar_mejoras_estructurales_en_la_propiedad -> ¿Eres la persona que puede autorizar mejoras estructurales en la propiedad? -> string
+es_dueo_de_la_propiedad -> Es dueño de la propiedad? -> string
+espacio_en_metros_disponible__contacto_ -> Espacio Disponible en m2 (Contacto) -> string
+esta_conciente_que_para_participar_tiene_que_adquirir_el_sistema_con_planet_solar -> Esta conciente que para participar tiene que adquirir el sistema con Planet Solar -> string
+estas_en_casa_del_cliente_ -> Estas en casa del Cliente? (Inside Sales) -> enumeration
+estatus -> Estatus -> string
+estatus_de_llamada -> Estatus de Llamada (Jobs) -> enumeration
+fax -> Fax Number -> string
+fecha_de_atencion -> PS Date Attention -> date
+fecha_de_cita__costco___captura_de_leads -> Fecha de Cita (Costco) -> date
+fecha_de_cita__evento_copharma_ -> Fecha de Cita (Evento CoopPharma) -> date
+fecha_de_cita__inside_sales_ -> Fecha de Cita (Inside Sales) -> datetime
+fecha_de_nacimiento_ -> ¿Fecha de Nacimiento? -> date
+fecha_de_primera_interaccion -> Fecha de llamada (Jobs) -> datetime
+fecha_de_registro -> PS Date Registration -> date
+fecha_de_registro__brilla_grartis_con_planet -> Fecha de Registro | Brilla 2026 -> datetime
+fecha_de_trabajado_inside_sales -> Fecha de Trabajado (Inside Sales) -> date
+fecha_del_sorteo -> Fecha del Sorteo | Brilla 2026 -> enumeration
+fecha_estimada_de_contrato__contacto_ -> Fecha Estimada de Contrato (Contacto) -> date
+fecha_prp__asignado -> Fecha PRP | Asignado -> datetime
+fecha_prp__trabajado -> Fecha PRP | Trabajado -> datetime
+field_of_study -> Field of study -> string
+first_conversion_date -> First Conversion Date -> datetime
+first_conversion_event_name -> First Conversion -> string
+first_deal_created_date -> First Deal Created Date -> datetime
+firstname -> First Name -> string
+followercount -> Follower Count -> number
+forma_de_pago__contacto_ -> Forma de Pago (Contacto) -> enumeration
+fotos_de_la_fachada__contacto_ -> Fotos de la Fachada (Contacto) -> string
+fotos_del_contador__contacto_ -> Fotos de Equipos Electricos (Contacto) -> string
+fotos_del_techo_internas_y_externas__contacto_ -> Fotos del Techo Internas y Externas (Contacto) -> string
+fuente_del_lead__control_ -> Fuente del Lead (Control) -> enumeration
+gender -> Gender -> string
+gerente__inside_sales_ -> Consultor Asignado (Inside Sales) -> enumeration
+gerente_de_ventas__contacto_ -> Gerente de Ventas (Contacto) -> enumeration
+gerente_division_comercial__contacto_ -> Gerente Division Comercial (Contacto) -> enumeration
+graduation_date -> Graduation date -> string
+has_trabajado_en_energa_solar_o_servicios_afines -> ¿Has trabajado en energía solar o servicios afines? -> string
+hs_additional_emails -> Additional email addresses -> enumeration
+hs_all_accessible_team_ids -> All teams -> enumeration
+hs_all_assigned_business_unit_ids -> Brands -> enumeration
+hs_all_contact_vids -> All vids for a contact -> enumeration
+hs_all_owner_ids -> All owner IDs -> enumeration
+hs_all_team_ids -> All team IDs -> enumeration
+hs_analytics_average_page_views -> Average Pageviews -> number
+hs_analytics_first_referrer -> First Referring Site -> string
+hs_analytics_first_timestamp -> Time First Seen -> datetime
+hs_analytics_first_touch_converting_campaign -> First Touch Converting Campaign -> string
+hs_analytics_first_url -> First Page Seen -> string
+hs_analytics_first_visit_timestamp -> Time of First Session -> datetime
+hs_analytics_last_referrer -> Last Referring Site -> string
+hs_analytics_last_timestamp -> Time Last Seen -> datetime
+hs_analytics_last_touch_converting_campaign -> Last Touch Converting Campaign -> string
+hs_analytics_last_url -> Last Page Seen -> string
+hs_analytics_last_visit_timestamp -> Time of Last Session -> datetime
+hs_analytics_num_event_completions -> Number of event completions -> number
+hs_analytics_num_page_views -> Number of Pageviews -> number
+hs_analytics_num_visits -> Number of Sessions -> number
+hs_analytics_revenue -> Event Revenue -> number
+hs_analytics_source -> Original Traffic Source -> enumeration
+hs_analytics_source_composite_data -> Original Traffic Source Composite Data -> string
+hs_analytics_source_data_1 -> Original Traffic Source Drill-Down 1 -> string
+hs_analytics_source_data_2 -> Original Traffic Source Drill-Down 2 -> string
+hs_associated_target_accounts -> Associated Target Accounts -> number
+hs_avatar_filemanager_key -> Avatar FileManager key -> string
+hs_bing_ad_clicked -> Bing ad clicked -> bool
+hs_bing_click_id -> Bing click id -> string
+hs_buying_role -> Buying Role -> enumeration
+hs_calculated_form_submissions -> The 800 most recent form submissions for a contact -> enumeration
+hs_calculated_merged_vids -> Merged vids with timestamps of a contact -> enumeration
+hs_calculated_mobile_number -> Calculated Mobile Number in International Format -> string
+hs_calculated_phone_number -> Calculated Phone Number in International Format -> string
+hs_calculated_phone_number_area_code -> Calculated Phone Number Area Code -> string
+hs_calculated_phone_number_country_code -> Calculated Phone Number Country Code -> string
+hs_calculated_phone_number_region_code -> Calculated Phone Number Region -> string
+hs_chat_assistant_iql_date -> Chat Assistant IQL Date -> datetime
+hs_chat_assistant_source -> Chat Assistant Source -> enumeration
+hs_chat_assistant_summary -> Chat Assistant:Summary -> string
+hs_clicked_linkedin_ad -> Clicked on a LinkedIn Ad -> enumeration
+hs_contact_creation_legal_basis_source_instance_id -> Contact creation legal basis source instance ID -> string
+hs_contact_enrichment_opt_out -> Enrichment opt out -> bool
+hs_contact_enrichment_opt_out_timestamp -> Enrichment opt out timestamp -> datetime
+hs_content_membership_email -> Member email -> string
+hs_content_membership_email_confirmed -> Email Confirmed -> bool
+hs_content_membership_follow_up_enqueued_at -> Time enrolled in registration follow up emails -> datetime
+hs_content_membership_notes -> Membership Notes -> string
+hs_content_membership_registered_at -> Registered At -> datetime
+hs_content_membership_registration_domain_sent_to -> Domain to which registration email was sent -> string
+hs_content_membership_registration_email_sent_at -> Time registration email was sent -> datetime
+hs_content_membership_status -> Status -> enumeration
+hs_conversations_visitor_email -> Conversations visitor email -> string
+hs_count_is_unworked -> Count of unengaged contacts -> number
+hs_count_is_worked -> Count of engaged contacts -> number
+hs_country_region_code -> Country/Region Code -> string
+hs_created_by_conversations -> Created By Conversations -> bool
+hs_created_by_user_id -> Created by user ID -> number
+hs_createdate -> Object create date/time -> datetime
+hs_cross_account_note -> Cross-Account Note -> string
+hs_cross_sell_opportunity -> Cross-sell Opportunity -> bool
+hs_current_customer -> Current Customer -> enumeration
+hs_currently_enrolled_in_prospecting_agent -> Currently Enrolled in Prospecting Agent -> bool
+hs_customer_agent_lead_status -> Customer Agent Lead Status -> enumeration
+hs_data_privacy_ads_consent -> Ads Consent from Forms -> bool
+hs_document_last_revisited -> Recent Document Revisit Date -> datetime
+hs_email_bad_address -> Invalid email address -> bool
+hs_email_bounce -> Marketing emails bounced -> number
+hs_email_click -> Marketing emails clicked -> number
+hs_email_customer_quarantined_reason -> Email address quarantine reason -> enumeration
+hs_email_delivered -> Marketing emails delivered -> number
+hs_email_domain -> Email Domain -> string
+hs_email_first_click_date -> First marketing email click date -> datetime
+hs_email_first_open_date -> First marketing email open date -> datetime
+hs_email_first_reply_date -> First marketing email reply date -> datetime
+hs_email_first_send_date -> First marketing email send date -> datetime
+hs_email_hard_bounce_reason -> Email hard bounce reason -> string
+hs_email_hard_bounce_reason_enum -> Email hard bounce reason -> enumeration
+hs_email_is_ineligible -> Is globally ineligible -> bool
+hs_email_last_click_date -> Last marketing email click date -> datetime
+hs_email_last_email_name -> Last marketing email name -> string
+hs_email_last_open_date -> Last marketing email open date -> datetime
+hs_email_last_reply_date -> Last marketing email reply date -> datetime
+hs_email_last_send_date -> Last marketing email send date -> datetime
+hs_email_live_sourcing_restricted -> Email live sourcing restricted -> bool
+hs_email_open -> Marketing emails opened -> number
+hs_email_optimal_send_day_of_week -> Optimal Marketing Email Send Day of Week -> string
+hs_email_optimal_send_time_of_day -> Optimal Marketing Email Send Time of Day  -> string
+hs_email_optout -> Unsubscribed from all email -> bool
+hs_email_optout_364428593 -> Opted out of email: Marketing Information -> enumeration
+hs_email_optout_364428595 -> Opted out of email: Marketing Information -> enumeration
+hs_email_optout_364428625 -> Opted out of email: Marketing Information -> enumeration
+hs_email_optout_36748909 -> Opted out of email: Marketing Information -> enumeration
+hs_email_optout_52655928 -> Opted out of email: One to One -> enumeration
+hs_email_optout_78563758 -> Opted out of email: Customer Service Communication -> enumeration
+hs_email_quarantined -> Email Address Quarantined -> bool
+hs_email_quarantined_reason -> Email address automated quarantine reason -> enumeration
+hs_email_recipient_fatigue_recovery_time -> Email Address Recipient Fatigue Next Available Sending Time -> datetime
+hs_email_replied -> Marketing emails replied -> number
+hs_email_sends_since_last_engagement -> Sends Since Last Engagement -> number
+hs_email_type -> Email type -> enumeration
+hs_emailconfirmationstatus -> Marketing email confirmation status -> enumeration
+hs_employment_change_detected_date -> Employment change detected date -> date
+hs_enriched_email_bounce_detected -> Enriched Email Bounce Detected (Deprecated) -> bool
+hs_excluded_from_cross_account_data_mirroring -> Excluded from cross-account data mirroring -> bool
+hs_facebook_ad_clicked -> Clicked Facebook ad -> bool
+hs_facebook_click_id -> Facebook click id -> string
+hs_facebookid -> Facebook ID -> string
+hs_feedback_last_ces_survey_date -> Last CES survey date -> datetime
+hs_feedback_last_ces_survey_follow_up -> Last CES survey comment -> string
+hs_feedback_last_ces_survey_rating -> Last CES survey rating -> number
+hs_feedback_last_csat_survey_date -> Last CSAT survey date -> datetime
+hs_feedback_last_csat_survey_follow_up -> Last CSAT survey comment -> string
+hs_feedback_last_csat_survey_rating -> Last CSAT survey rating -> number
+hs_feedback_last_nps_follow_up -> Last NPS survey comment -> string
+hs_feedback_last_nps_rating -> Last NPS survey rating (deprecated) -> enumeration
+hs_feedback_last_nps_rating_number -> Latest NPS survey rating -> number
+hs_feedback_last_survey_date -> Last NPS survey date -> datetime
+hs_feedback_show_nps_web_survey -> Should be shown an NPS web survey -> bool
+hs_first_closed_order_id -> First Closed Order ID -> number
+hs_first_engagement_object_id -> ID of first engagement -> number
+hs_first_order_closed_date -> First Order Closed Date -> datetime
+hs_first_outreach_date -> First outreach date -> datetime
+hs_first_subscription_create_date -> First subscription create date -> datetime
+hs_full_name_or_email -> Full name or email -> string
+hs_geohash_1 -> geohash_1 -> string
+hs_geohash_2 -> geohash_2 -> string
+hs_geohash_3 -> geohash_3 -> string
+hs_geohash_4 -> geohash_4 -> string
+hs_geohash_5 -> geohash_5 -> string
+hs_geohash_6 -> geohash_6 -> string
+hs_google_click_id -> Google ad click id -> string
+hs_googleplusid -> googleplus ID -> string
+hs_gps_error -> GPS Error -> string
+hs_gps_latitude -> Latitudes -> string
+hs_gps_longitude -> Longitudes -> string
+hs_has_active_subscription -> Contact has an active subscription -> number
+hs_inferred_language_codes -> Inferred Language Codes -> enumeration
+hs_intent_paid_up_to_date -> Intent paid up to date -> date
+hs_intent_signals_enabled -> Intent Signals active -> bool
+hs_ip_timezone -> IP Timezone -> string
+hs_is_contact -> Is a contact -> bool
+hs_is_enriched -> Has been enriched -> bool
+hs_is_merge_revertible -> Is Merge Revertible -> bool
+hs_is_unworked -> Contact unworked -> bool
+hs_job_change_detected_date -> Job change detected date -> date
+hs_journey_stage -> Journey Stage -> enumeration
+hs_language -> Preferred language -> enumeration
+hs_last_metered_enrichment_timestamp -> Last Metered Enrichment Timestamp -> datetime
+hs_last_sales_activity_date -> last sales activity date old -> datetime
+hs_last_sales_activity_timestamp -> Last Engagement Date -> datetime
+hs_last_sales_activity_type -> Last Engagement Type -> enumeration
+hs_last_sms_send_date -> Last Sms Send Date -> datetime
+hs_last_sms_send_name -> Last SMS Send Name -> string
+hs_lastmodifieddate -> Object last modified date/time -> datetime
+hs_latest_disqualified_lead_date -> Latest Disqualified Lead Date -> datetime
+hs_latest_meeting_activity -> Latest meeting activity -> datetime
+hs_latest_open_lead_date -> Latest Open Lead Date -> datetime
+hs_latest_qualified_lead_date -> Latest Qualified Lead Date -> datetime
+hs_latest_sequence_ended_date -> Last sequence ended date -> datetime
+hs_latest_sequence_enrolled -> Last sequence enrolled -> number
+hs_latest_sequence_enrolled_date -> Last sequence enrolled date -> datetime
+hs_latest_sequence_finished_date -> Last sequence finished date -> datetime
+hs_latest_sequence_unenrolled_date -> Last sequence unenrolled date -> datetime
+hs_latest_source -> Latest Traffic Source -> enumeration
+hs_latest_source_composite_data -> Latest Traffic Source Composite Data -> string
+hs_latest_source_data_1 -> Latest Traffic Source Drill-Down 1 -> string
+hs_latest_source_data_2 -> Latest Traffic Source Drill-Down 2 -> string
+hs_latest_source_timestamp -> Latest Traffic Source Date -> datetime
+hs_latest_subscription_create_date -> Latest subscription create date -> datetime
+hs_latitude -> Latitude -> number
+hs_lead_status -> Lead Status -> enumeration
+hs_legal_basis -> Legal basis for processing contact's data -> enumeration
+hs_linkedin_ad_clicked -> Clicked LinkedIn Ad -> enumeration
+hs_linkedin_click_id -> LinkedIn click id -> string
+hs_linkedin_url -> LinkedIn URL -> string
+hs_linkedinid -> Linkedin ID -> string
+hs_live_enrichment_deadline -> Live enrichment deadline -> datetime
+hs_longitude -> Longitude -> number
+hs_manual_campaign_ids -> Manual campaign ids -> number
+hs_marketable_reason_id -> Marketing contact status source name -> string
+hs_marketable_reason_type -> Marketing contact status source type -> enumeration
+hs_marketable_status -> Marketing contact status -> enumeration
+hs_marketable_until_renewal -> Marketing contact until next update -> enumeration
+hs_membership_has_accessed_private_content -> Member has accessed private content -> number
+hs_membership_last_private_content_access_date -> Membership last private content access date -> datetime
+hs_merged_object_ids -> Merged Contact IDs -> enumeration
+hs_messaging_engagement_score -> messaging_engagement_score -> number
+hs_mobile_sdk_push_tokens -> Mobile Sdk Push Tokens -> string
+hs_notes_last_activity -> Last Activity -> object_coordinates
+hs_notes_next_activity -> Next Activity -> object_coordinates
+hs_notes_next_activity_type -> Next Activity Type -> enumeration
+hs_num_associated_open_deals -> Number of open deals -> number
+hs_object_id -> Record ID -> number
+hs_object_source -> Record creation source -> string
+hs_object_source_detail_1 -> Record source detail 1 -> string
+hs_object_source_detail_2 -> Record source detail 2 -> string
+hs_object_source_detail_3 -> Record source detail 3 -> string
+hs_object_source_id -> Record creation source ID -> string
+hs_object_source_label -> Record source -> enumeration
+hs_object_source_user_id -> Record creation source user ID -> number
+hs_owning_teams -> Owning Teams -> enumeration
+hs_persona -> Persona -> enumeration
+hs_pinned_engagement_id -> Pinned engagement ID -> number
+hs_pipeline -> Pipeline -> enumeration
+hs_predictivecontactscore -> Predictive Lead Score -> number
+hs_predictivecontactscore_v2 -> Likelihood to close -> number
+hs_predictivecontactscorebucket -> Lead Rating -> enumeration
+hs_predictivescoringtier -> Contact priority -> enumeration
+hs_prospecting_agent_actively_enrolled_count -> Prospecting Agent Actively Enrolled Count -> number
+hs_prospecting_agent_enrollment_status -> Prospecting Agent Enrollment Status -> enumeration
+hs_prospecting_agent_last_enrolled -> Prospecting Agent Last Enrolled -> datetime
+hs_prospecting_agent_sender -> Prospecting Agent Sender -> enumeration
+hs_prospecting_agent_total_enrolled_count -> Prospecting Agent Total Enrolled Count -> number
+hs_quarantined_emails -> Quarantined Emails -> string
+hs_read_only -> Read only object -> bool
+hs_recent_closed_order_date -> Recent Closed Order Date -> datetime
+hs_registered_member -> Registered member -> number
+hs_registration_method -> Registration Method -> string
+hs_returning_to_office_detected_date -> Returning to office detected date -> date
+hs_role -> Employment Role -> enumeration
+hs_sa_first_engagement_date -> Date of first engagement -> datetime
+hs_sa_first_engagement_descr -> Description of first engagement -> enumeration
+hs_sa_first_engagement_object_type -> Type of first engagement -> enumeration
+hs_sales_email_last_clicked -> Recent Sales Email Clicked Date -> datetime
+hs_sales_email_last_opened -> Recent Sales Email Opened Date -> datetime
+hs_sales_email_last_replied -> Recent Sales Email Replied Date -> datetime
+hs_searchable_calculated_international_mobile_number -> Calculated Mobile Number with country code -> string
+hs_searchable_calculated_international_phone_number -> Calculated Phone Number with country code -> string
+hs_searchable_calculated_mobile_number -> Calculated Mobile Number without country code -> phone_number
+hs_searchable_calculated_phone_number -> Calculated Phone Number without country code -> phone_number
+hs_seniority -> Employment Seniority -> enumeration
+hs_sequences_actively_enrolled_count -> Number of sequences actively enrolled -> number
+hs_sequences_enrolled_count -> Number of sequences enrolled -> number
+hs_sequences_is_enrolled -> Currently in Sequence -> bool
+hs_shared_team_ids -> Shared teams -> enumeration
+hs_shared_user_ids -> Shared users -> enumeration
+hs_social_facebook_clicks -> Facebook Clicks -> number
+hs_social_google_plus_clicks -> Google Plus Clicks -> number
+hs_social_last_engagement -> Most Recent Social Click -> datetime
+hs_social_linkedin_clicks -> LinkedIn Clicks -> number
+hs_social_num_broadcast_clicks -> Broadcast Clicks -> number
+hs_social_twitter_clicks -> Twitter Clicks -> number
+hs_source_object_id -> Source Object ID -> number
+hs_source_portal_id -> Source Portal ID -> number
+hs_sourced_contact_origin -> Sourced Contact Origin -> enumeration
+hs_state_code -> State/Region Code -> string
+hs_sub_role -> Employment Sub Role -> enumeration
+hs_testpurge -> testpurge -> string
+hs_testrollback -> testrollback -> string
+hs_tiktok_ad_clicked -> TikTok ad clicked -> bool
+hs_tiktok_click_id -> TikTok click id -> string
+hs_time_between_contact_creation_and_deal_close -> Time between contact creation and deal close -> number
+hs_time_between_contact_creation_and_deal_creation -> Time between contact creation and deal creation -> number
+hs_time_to_first_engagement -> Lead response time -> number
+hs_time_to_move_from_lead_to_customer -> Time to move from lead to customer -> number
+hs_time_to_move_from_marketingqualifiedlead_to_customer -> Time to move from marketing qualified lead to customer -> number
+hs_time_to_move_from_opportunity_to_customer -> Time to move from opportunity to customer -> number
+hs_time_to_move_from_salesqualifiedlead_to_customer -> Time to move from sales qualified lead to customer -> number
+hs_time_to_move_from_subscriber_to_customer -> Time to move from subscriber to customer -> number
+hs_timezone -> Time Zone -> enumeration
+hs_twitterid -> Twitter ID -> string
+hs_unique_creation_key -> Unique creation key -> string
+hs_updated_by_user_id -> Updated by user ID -> number
+hs_user_ids_of_all_notification_followers -> User IDs of all notification followers -> enumeration
+hs_user_ids_of_all_notification_unfollowers -> User IDs of all notification unfollowers -> enumeration
+hs_user_ids_of_all_owners -> User IDs of all owners -> enumeration
+hs_v2_cumulative_time_in_1293308728 -> Cumulative time in "Intento de Contacto (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_1293308730 -> Cumulative time in "Propuesta Enviada (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_1293548298 -> Cumulative time in "En Conversacion (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_1293548443 -> Cumulative time in "Inside Leads (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_1293549229 -> Cumulative time in "Negociacion (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_1293550221 -> Cumulative time in "Interes Confirmado (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_1293560724 -> Cumulative time in "Negativo | Perdido (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_customer -> Cumulative time in "Cierre | Ganado (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_lead -> Cumulative time in "Nuevo Leads (Lifecycle Stage Pipeline)" -> number
+hs_v2_cumulative_time_in_opportunity -> Cumulative time in "Opportunity (Lifecycle Stage Pipeline)" -> number
+hs_v2_date_entered_1293308728 -> Date entered "Intento de Contacto (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_1293308730 -> Date entered "Propuesta Enviada (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_1293548298 -> Date entered "En Conversacion (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_1293548443 -> Date entered "Inside Leads (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_1293549229 -> Date entered "Negociacion (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_1293550221 -> Date entered "Interes Confirmado (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_1293560724 -> Date entered "Negativo | Perdido (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_current_stage -> Date entered current stage -> datetime
+hs_v2_date_entered_customer -> Date entered "Cierre | Ganado (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_lead -> Date entered "Nuevo Leads (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_entered_opportunity -> Date entered "Opportunity (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_1293308728 -> Date exited "Intento de Contacto (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_1293308730 -> Date exited "Propuesta Enviada (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_1293548298 -> Date exited "En Conversacion (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_1293548443 -> Date exited "Inside Leads (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_1293549229 -> Date exited "Negociacion (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_1293550221 -> Date exited "Interes Confirmado (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_1293560724 -> Date exited "Negativo | Perdido (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_customer -> Date exited "Cierre | Ganado (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_lead -> Date exited "Nuevo Leads (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_date_exited_opportunity -> Date exited "Opportunity (Lifecycle Stage Pipeline)" -> datetime
+hs_v2_latest_time_in_1293308728 -> Latest time in "Intento de Contacto (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_1293308730 -> Latest time in "Propuesta Enviada (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_1293548298 -> Latest time in "En Conversacion (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_1293548443 -> Latest time in "Inside Leads (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_1293549229 -> Latest time in "Negociacion (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_1293550221 -> Latest time in "Interes Confirmado (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_1293560724 -> Latest time in "Negativo | Perdido (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_customer -> Latest time in "Cierre | Ganado (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_lead -> Latest time in "Nuevo Leads (Lifecycle Stage Pipeline)" -> number
+hs_v2_latest_time_in_opportunity -> Latest time in "Opportunity (Lifecycle Stage Pipeline)" -> number
+hs_v2_time_in_current_stage -> Time in current stage -> datetime
+hs_was_imported -> Performed in an import -> bool
+hs_whatsapp_phone_number -> WhatsApp Phone Number -> string
+hs_why_this_contact -> Why This Contact -> string
+hubspot_owner_assigneddate -> Owner assigned date -> datetime
+hubspot_owner_id -> Contact owner -> enumeration
+hubspot_team_id -> HubSpot Team -> enumeration
+hubspotscore -> HubSpot Score -> number
+id_de_goformz__contacto_ -> ID de GoFormz (Contacto) -> number
+inbox_url -> PS FaceBook Inbox URL -> string
+industry -> Industry -> string
+intento_de_contacto__inside_sales_ -> Intento de Contacto (Inside Sales) -> enumeration
+interes__costco___captura_de_leads_ -> Interes (Costco) -> enumeration
+interes__evento_copharma_ -> Interes (Evento CoopPharma) -> enumeration
+interes_tipo_de_compra__contacto_ -> Interes Tipo de Compra (Contacto) -> enumeration
+ip_city -> IP City -> string
+ip_country -> IP Country -> string
+ip_country_code -> IP Country Code -> string
+ip_latlon -> IP Latitude & Longitude -> string
+ip_state -> IP State/Region -> string
+ip_state_code -> IP State Code/Region Code -> string
+ip_zipcode -> IP Zipcode -> string
+job_function -> Job function -> string
+jobtitle -> Job Title -> string
+kloutscoregeneral -> Klout Score -> number
+kw_tipo_de_panel__contacto_ -> kW Tipo de Panel (Contacto) -> number
+la_casa_es_de_su_popiedad -> La casa es de su Popiedad? -> string
+lastmodifieddate -> Last Modified Date -> datetime
+lastname -> Last Name -> string
+latitud__contacto_ -> Latitud (Contacto) -> string
+lifecyclestage -> Lifecycle Stage -> enumeration
+linkedinbio -> LinkedIn Bio -> string
+linkedinconnections -> LinkedIn Connections -> number
+longitud__contacto_ -> Longitud (Contacto) -> string
+marital_status -> Marital Status -> string
+material_del_techo__contacto_ -> Material del Techo (Contacto) -> enumeration
+mejor_horario_para_contactarte -> Mejor horario para contactarte: -> string
+message -> Message -> string
+military_status -> Military status -> string
+mobilephone -> Mobile Phone Number -> string
+municipio_de_residencia -> Municipio de residencia -> string
+municipios_co__contacto_ -> Municipios CO (Contacto) -> enumeration
+nombre_de_la_empresa__evento_cooppharma_ -> Nombre de la Empresa (Evento CoopPharma) -> string
+nombre_del_consultor__cambaceo_ -> Nombre del Consultor (Cambaceo) -> string
+nos_visitas_como -> ¿Nos visitas como? -> string
+notas -> Notas -> string
+notas__booth_ -> Notas (Booth) -> string
+notas__costco___captura_de_leads_ -> Notas (Costco) -> string
+notas__evento_baby_boomers_expo_2024_ -> Notas (Evento Baby Boomers Expo 2024) -> string
+notas__evento_copharma_ -> Notas (Evento CoopPharma) -> string
+notas__sanse_caguas_2025_ -> Notas (Sanse Caguas 2025) -> string
+notas__sanse_san_juan_2025_ -> Notas (Sanse San Juan 2025) -> string
+notes_last_contacted -> Last Contacted -> datetime
+notes_last_updated -> Last Activity Date -> datetime
+notes_next_activity_date -> Next Activity Date -> datetime
+num_associated_deals -> Number of Associated Deals -> number
+num_contacted_notes -> Number of times contacted -> number
+num_conversion_events -> Number of Form Submissions -> number
+num_notes -> Number of Sales Activities -> number
+num_unique_conversion_events -> Number of Unique Forms Submitted -> number
+numemployees -> Number of Employees -> enumeration
+numero_de_cliente__contacto_ -> Número de Cliente (Contacto) -> number
+numero_de_cuenta_luma__contactos_ -> ID localidad | LUMA (Contactos) -> number
+numero_de_seguro_social -> Número de seguro social (Inside Sales) -> number
+owneremail -> HubSpot Owner Email (legacy) -> string
+ownername -> HubSpot Owner Name (legacy) -> string
+pago_luma -> Pago LUMA (Facebook Form) -> string
+participaciones_concurso -> Participaciones Concurso | Brilla 2026 -> enumeration
+permitir_entrada_a_master_2 -> Permitir entrada a Master #2 -> bool
+phone -> Phone Number -> string
+photo -> Photo -> string
+pin_de_ubicacion -> PIN de Ubicacion -> string
+por_que_medio_te_enteraste_de_nosotros___inside_sales_ -> ¿Por que medio te enteraste de nosotros? (Inside Sales) -> enumeration
+posicion -> Posicion -> string
+post_cita___fecha__inside_sales_ -> Post Cita | Fecha (Inside Sales) -> date
+post_cita___medio__inside_sales_ -> Post Cita | Medio (Inside sales) -> enumeration
+post_cita___status__inside_sales_ -> Post Cita | Status (Inside Sales) -> enumeration
+preferencia_de_cita -> Preferencia de Cita (Costco) -> enumeration
+preferencia_de_cita__evento_copharma_ -> Preferencia de Cita (Evento CoopPharma) -> enumeration
+preferencia_de_cita__formulario_ -> Preferencia de Cita (Formulario) -> enumeration
+producto_interesado -> PS Webform Product Interested -> enumeration
+promotor_a____costco___captura_de_leads -> Representante (Costco) -> enumeration
+propietario_adicional_costco_ -> Propietario Adicional -> enumeration
+ps_col_departamentos -> Departamento CO (Contacto) -> enumeration
+ps_consultant_email -> PS Consultant Email -> string
+ps_country -> PS País -> enumeration
+ps_event_name -> Nombre del Evento (Old) -> enumeration
+ps_interes_comentarios -> PS Interés/Comentarios -> string
+ps_marca_a_la_que_pertenece -> PS Marca a la que pertenece -> enumeration
+ps_otros_type_of_bussiness -> PS Otros Type of Bussiness -> string
+ps_pdf_1 -> PS PDF 1 -> string
+ps_producto_de_interes -> PS Producto de Interés -> enumeration
+ps_telephone_prefix_1 -> PS Telephone Prefix 1 -> enumeration
+ps_type_of_business -> PS Type of Business -> enumeration
+pueblo__desplegable -> Municipios PR (Contactos) -> enumeration
+pueblo_donde_vives -> Pueblo donde vives? -> string
+puesto_del_contacto__contacto_ -> Puesto del Cliente (Contacto) -> string
+qu_es_ms_importante_para_ti -> ¿Qué es más importante para ti? -> string
+qu_productos_te_interesan -> ¿Qué productos te interesan? -> string
+qu_te_interesa_ms -> ¿Qué te interesa más? -> string
+qu_tipo_de_sistema_te_interesa -> ¿Qué tipo de sistema te interesa? -> string
+qu_tipo_de_solucin_te_interesa -> ¿Qué tipo de solución te interesa? -> string
+que_busca_en_un_sistema_de_energa_renovable -> Que busca en un sistema de energía renovable? -> string
+que_deseas_de_tu_sistema_de_energia_renovable_con_planet_solar -> Que deseas de tu sistema de energia renovable con Planet Solar? -> string
+que_estas_solicitando___inside_sales_ -> Que estas solicitando? (Inside Sales) -> enumeration
+que_necesitas_cotizar -> ¿Qué necesitas cotizar? -> enumeration
+que_posicin_estas_buscando -> ¿Que posición estas buscando? -> string
+que_tipo_de_sistema_desea_cotizar_ -> ¿Que tipo de sistema desea cotizar? -> string
+que_tipo_de_techo_tiene_su_propiedad -> Que tipo de techo tiene su propiedad -> string
+quien_lo_refirio -> ¿Alguien te refirió al concurso? -> string
+recent_conversion_date -> Recent Conversion Date -> datetime
+recent_conversion_event_name -> Recent Conversion -> string
+recent_deal_amount -> Recent Deal Amount -> number
+recent_deal_close_date -> Recent Deal Close Date -> datetime
+recheck_validacion -> Recheck Validacion -> enumeration
+recibo_de_luma -> Ultima Factura de Electricidad (Contactos) -> string
+regin_de_inters_ -> Región de interés -> string
+region_asociada -> PS Region Assigned -> enumeration
+registro_del_concurso -> Registro del Concurso | Brilla 2026 -> enumeration
+relationship_status -> Relationship Status -> string
+retencion_por_lead_asignado__brilla_2026 -> Retención por Lead Asignado | Brilla 2026 -> bool
+salutation -> Salutation -> string
+school -> School -> string
+seniority -> Seniority -> string
+si_no_resultas_ganadora_te_gustara_recibir_una_evaluacin_gratuita_para_conocer_cunto_podras_ahorrar -> Si no resultas ganador(a), ¿te gustaría recibir una evaluación gratuita para conocer cuánto podrías ahorrar con energía solar? -> string
+start_date -> Start date -> string
+state -> State/Region -> string
+su_recibo_de_luz_esta_a_nombre_suyo_ -> ¿Su recibo de Luz esta a nombre suyo?  -> enumeration
+sunhouz___estado_de_lead -> PS Lead Calification -> enumeration
+surveymonkeyeventlastupdated -> SurveyMonkey Event Last Updated -> number
+te_interesa_recibir_capacitaciones_sobre_productos_sunhouz -> ¿Te interesa recibir capacitaciones sobre productos Sunhouz? -> string
+telefono_alterno_del_cliente -> Teléfono Alterno del Cliente -> string
+telefono_del_consultor__contacto_ -> Teléfono del Consultor (Contacto) -> string
+tiempo_asignacion_de_propietario_vs_ultima_actividad -> Tiempo Asignacion de Propietario vs Ultima Actividad -> number
+tiempo_autonomia_cargas_criticas__negocios___clonada_ -> Tiempo Autonomia Cargas Esenciales (Contacto) -> enumeration
+tiene_casa_propia_o_rentada -> Tiene casa propia o rentada? -> string
+tiene_de_empirica_de_credito_mas_de_650_ -> Tiene de empirica de credito mas de 650 -> string
+tiene_mas_de_650_de_empirica_de_credito -> Tiene mas de 650 de empirica de credito? -> string
+tienes_experiencia_previa_instalando_sistemas_solares -> ¿Tienes experiencia previa instalando sistemas solares? -> string
+tienes_generador_o_sistema_solar_actualmente -> ¿Tienes generador o sistema solar actualmente? -> string
+tipo_de_bateria__contacto_ -> Tipo de Batería (Contacto) -> enumeration
+tipo_de_cargador__contacto_ -> Tipo de Cargador (Contacto) -> enumeration
+tipo_de_cliente_sunhouz_pa -> ¿Cual es tu Perfil? -> enumeration
+tipo_de_instalacion -> Tipo de Instalacion -> enumeration
+tipo_de_inversor__contacto_ -> Tipo de Inversor (Contacto) -> enumeration
+tipo_de_montaje -> Tipo de Montaje (Contacto) -> enumeration
+tipo_de_negociacion_residencial_o_comercial__clonado_ -> Tipo de negociación Residencial o Comercial (Contacto) -> enumeration
+tipo_de_negocio__contactos_ -> Tipo de Negocio (Contacto) -> enumeration
+tipo_de_propiedad_ -> Tipo de Propiedad -> string
+tipo_de_representante__costco_ -> Tipo de Representante (Costco) -> enumeration
+tipo_de_servicio_electrico__contacto_ -> Tipo de Servicio Eléctrico (Contacto) -> enumeration
+tipo_de_sistema_requerido -> Tipo de sistema requerido -> string
+tipo_de_solicitud_pqr -> Tipo de Solicitud PQR -> enumeration
+tipo_de_techo -> Material Superficie Techo (Contacto) -> enumeration
+total_cargas_criticas_del_dia_kwh__contacto_ -> Total Cargas Esenciales del Dia kWh (Contacto) -> string
+total_revenue -> Total Revenue -> number
+twitterbio -> Twitter Bio -> string
+twitterhandle -> Twitter Username -> string
+twitterprofilephoto -> Twitter Profile Photo -> string
+ubicacion_propiedad__contacto_ -> Ubicacion Propiedad (Contacto) -> string
+ultimos_4_numeros_del_seguro_social_ -> ¿Últimos 4 Números del Seguro Social? -> number
+usted_es_dueno_de_la_propiedad -> Usted es dueno de la propiedad? -> string
+usted_es_dueno_del_hogar_ -> ¿Usted es dueño del Hogar? -> enumeration
+validacion_concurso -> Validacion Concurso | Brilla 2026 -> enumeration
+via_de_ingreso_del_lead___inside_sales_ -> ¿Via de ingreso del Lead? (Inside Sales) -> enumeration
+webinareventlastupdated -> Webinar Event Last Updated -> number
+website -> Website URL -> string
+work_email -> Work email -> string
+ya_cuentas_con_sistema_solar_instalado -> ¿Ya cuentas con sistema solar instalado? -> string
+zip -> Postal Code -> string
+
+
+PARA LA BUSQUEDA Y COMPARACION NECESITAMOS:
+FALTA hs_ticket_id -> ID de ticket
+hs_object_id -> ID de registro
+_C_FIRSTNAME = "firstname"
+_C_LASTNAME = "lastname"
+_C_ID_GOFORMZ = "id_de_goformz__contacto_"
+_C_ADDRESS = "direccion__fisica_"
+_C_PHONE = "phone"
+_C_PHONE_ALT = "telefono_alterno_del_cliente"
+_C_EMAIL = "email"
+_C_STATE = "country"  # "Estado" está en el campo country
+_C_MUNICIPIO = "municipio_de_residencia"
+_C_MUNICIPIO_CO = "municipios_co__contacto_"
+_C_STATE2 = "state"
+_C_ZIP = "zip"

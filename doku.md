@@ -681,3 +681,195 @@ FSD1205223 - BENJAMIN GAUTHIER RODRIGUEZ - 216093 - METERING
 Se arreglo el nombre en el comparador, ahora se parsea el fsd - nombre - id - y se quitan los comentarios.
 TAMBIEN SE PARSEAN SIMBOLOS RAROS COMO [-/\\|] ETC.
 PROXIMO: HACER QUE SE VEA TODO EL SUBJECT MEJOR PARA MAS CLARIDAD. BUSQUEDA POR DEMAS ATRIBUTOS Y SUBIDA A SUNRUN Y A AMBAS PLATAFORMAS. ORC IMPLEMENTADO, CAPTURA DE EXCEL Y RECORTE AUTOMATICO DE CELDAS PARA UNA MEJOR CAPTURA
+
+27/05/2026
+Hola, estoy haciendo un script de automatizacion, uso selenium y web scraping, y tengo una ventana de comparacion, en esta ventana se realiza la comparacion entre 2 sitios web, uno es sunrun y el otro es hubspot, quiero mejorar la busqueda, mi idea es agregar varios atributos  mas para la busqueda, PERO, esto es algo complejo porque resulta que la unica forma de comparar entre los 2 sitios web es con el FSD, sin este no se puede buscar bien, PERO, estuve pensando y si se puede hacer algo, creo que hacer la busqueda internamente mediante el fsd es una buena idea, o sea, digamos que busco por direccion -> el comparador encuentra algo por la API de hubspot, de ahi saca los atributos importantes como el nombre, la direccion, municipio, etc y encuentra el FSD, al encontrar el FSD realiza la comparacion con Sunrun que es la pagina donde utilizo web scraping, esto si se puede hacer? la idea es implementar esta funcionalidad sin dañar ninguna otra funcionalidad y que los atributos de busqueda sean elegidos con un dropdown o algo mejor, que sugieres hacer? se puede implementar? gracias
+
+
+Que alegria que si se pueda implementar! Gracias por entender la idea, bueno ahora te pasare algunos metodos y archivos que tengo: 
+comparador.py
+_norm
+_comparar_nombres
+_similitud
+_vacio
+_normalizar_telefono
+comparar_campo
+comparar
+datos_hs_desde_ticket
+
+
+api.py
+tengo varios diccionarios con atributos, municipios, comentarios
+_norm
+_detectar_municipio
+_parsear_asunto
+_val
+_buscar_ticket_por_fsd
+_buscar_contacto_por_id_goformz
+_limpiar_nombre_hubspot
+extraer_datos_hubspot
+extraer_ticket_por_fsd
+
+ventana_comparacion.py
+class VentanaComparacion en customtkinter
+__init__
+_traer_al_frente
+_cerrar
+_construir_ui
+_lanzar_comparacion
+ui_log
+_obtener_hubspot
+_limpiar_resultados
+_mostrar_resultado_externo
+_mostrar_resultado
+_fila_campo
+celda
+_resumen
+_mostrar_error
+
+para que me des masomenos la idea de donde hacer los cambios, recuerda que lo tengo construido en customtkinter
+
+comparador.py
+├── Agregar método: _buscar_hubspot_por_estrategia()
+│   └── Usa extraer_datos_hubspot() existente pero con filtros flexibles
+├── Agregar método: _extraer_fsd_desde_candidato()
+│   └── Saca el FSD de un candidato HubSpot
+└── Método existente comparar() sigue igual
+    └── Ahora puede recibir FSD como parámetro
+
+api.py
+├── Agregar diccionario: SEARCH_STRATEGIES
+│   └── Define tipos de búsqueda disponibles
+├── Agregar método: buscar_contactos_por_criterio()
+│   └── Búsqueda flexible según estrategia
+└── Métodos existentes: no tocar
+
+ventana_comparacion.py (AQUÍ ES DONDE MÁS CAMBIOS)
+├── EN __init__:
+│   ├── Agregar variable: self.search_strategy = "direccion"
+│   └── Agregar variable: self.candidatos_hubspot = []
+│
+├── EN _construir_ui():
+│   ├── NUEVA SECCIÓN: Frame de búsqueda mejorada
+│   │   ├── Dropdown: tipo de búsqueda (SEARCH_STRATEGIES)
+│   │   ├── Input(s) dinámico(s) según tipo
+│   │   └── Botón: "Buscar en HubSpot"
+│   │
+│   ├── NUEVA SECCIÓN: Tabla de candidatos
+│   │   ├── Tabla con Nombre, Dirección, Municipio, FSD
+│   │   ├── Columna izquierda: Radio buttons
+│   │   └── Botón: "Comparar seleccionado"
+│   │
+│   └── SECCIÓN EXISTENTE: Comparación (igual pero mejorada)
+│       └── Ahora recibe datos del candidato seleccionado
+│
+├── NUEVOS MÉTODOS:
+│   ├── _al_cambiar_tipo_busqueda(tipo)
+│   │   └── Actualiza inputs dinámicos según SEARCH_STRATEGIES
+│   ├── _obtener_criterio_busqueda()
+│   │   └── Lee los inputs según tipo seleccionado
+│   ├── _buscar_candidatos()
+│   │   └── Llama a comparador._buscar_hubspot_por_estrategia()
+│   ├── _mostrar_candidatos()
+│   │   └── Llena la tabla con resultados
+│   ├── _obtener_candidato_seleccionado()
+│   │   └── Devuelve el candidato elegido
+│   └── _lanzar_comparacion_mejorada()
+│       └── Nueva versión de _lanzar_comparacion() con FSD automático
+│
+└── MÉTODOS EXISTENTES (refactorizar levemente):
+    └── _lanzar_comparacion() → puede llamar a _lanzar_comparacion_mejorada()
+
+
+Los contactos NO TIENEN id_cliente, tienen contact_id.
+Eso significa que en HubSpot:
+
+CONTACTOS tienen contact_id (referencia interna de HubSpot)
+TICKETS tienen id_goformz__servicios_tecnicos_ (el ID del cliente que buscas)
+
+La solución es: Cuando buscas por nombre/email/etc y obtienes un contacto, necesitas buscar el TICKET asociado usando el contact_id para obtener el FSD.
+Perfecto, ahora veo el problema. La línea 459 intenta obtener id_de_goformz__contacto_ del CONTACTO, pero ese campo NO EXISTE en los contactos.
+El id_de_goformz__contacto_ es un campo que está en los CONTACTOS pero parece que es None o no está en los resultados que devuelve HubSpot.
+La solución es: Buscar los TICKETS por firstname + lastname para encontrar el id_goformz__servicios_tecnicos_ que es lo que necesitas.
+
+¡Casi! La coma no es el problema — el ticket SÍ se encuentra. El problema es otro: fsd__ está None en ese ticket.
+Mira el subject: 'Daisy I Soto Santiago-267334-Orientación Sunrun' — no tiene FSD. Este ticket es de orientación, no de servicio técnico. El FSD está en otro ticket del mismo cliente.
+El fix es buscar todos los tickets del cliente, no solo el primero, y quedarse con el que tenga fsd__ llenado:
+El diagnóstico exacto: el ticket 39542009896 existe y tiene el id_cliente correcto, pero es un ticket de "Orientación Sunrun" — no tiene FSD porque no es una orden de servicio técnico. El cliente 267334 tiene múltiples tickets y el FSD está en otro.
+El fix hace dos cosas:
+
+Trae hasta 10 tickets del mismo id_cliente en vez de solo el primero
+Elige el que tenga fsd__ llenado — si ninguno lo tiene, usa el primero como antes
+
+También agregué manejo del formato con coma (267,334 vs 267334) por si aparece en otros casos.
+Prueba y dime qué sale en consola ahora.
+
+El diagnóstico completo
+Cuando buscas por FSD, el flujo es directo: ticket → FSD. Fácil.Pero cuando buscas por correo/teléfono/nombre, el flujo es: contacto → id_cliente → ticket → FSD. Y en ese camino había 4 cosas rotas.
+
+Bug 1 — Campo de dirección incorrecto
+En _SEARCH_CONTACT_FIELDS tenías "direccion": "address". Ese campo address existe en tickets, no en contactos. En contactos el campo real se llama direccion__fisica_. Por eso la dirección siempre llegaba None.
+
+# ❌ Antes
+"direccion": "address"
+
+# ✅ Después  
+"direccion": "direccion__fisica_"
+
+Bug 2 — Operador de búsqueda incorrecto
+Todo usaba CONTAINS_TOKEN, que sirve para texto libre como nombres. Pero un teléfono como +19394004759 HubSpot no lo tokeniza — no lo parte en palabras. Necesita EQ (igual exacto).
+
+# ❌ Antes — siempre CONTAINS_TOKEN
+operator = "CONTAINS_TOKEN"
+
+# ✅ Después — depende del campo
+operator = "EQ" if tipo_busqueda in {"telefono", "correo", "id_cliente"} else "CONTAINS_TOKEN"
+
+Bug 3 — _buscar_fsd_por_contact_id usaba una propiedad no filtrable
+Cuando el contacto no tiene id_cliente, el fallback buscaba tickets filtrando por hs_all_contact_ids. El problema es que esa propiedad no es filtrable en la Search API de HubSpot — la API simplemente la ignora y devuelve vacío sin dar error. Lo reemplacé con la API de asociaciones, que es la forma correcta:
+
+# ❌ Antes — filtro que HubSpot ignora silenciosamente
+TicketSearchRequest(filters=[{"propertyName": "hs_all_contact_ids", ...}])
+
+# ✅ Después — API de asociaciones: contacto → sus tickets
+assoc_response = _client.crm.associations.v4.basic_api.get_page(
+    object_type="contacts",
+    object_id=contact_id,
+    to_object_type="tickets",
+)
+ticket_id = assoc_response.results[0].to_object_id
+ticket = _client.crm.tickets.basic_api.get_by_id(ticket_id)
+
+Bug 4 — El más tramposo: limit=1 traía el ticket equivocado
+Este fue el que encontramos juntos al final. El cliente 267334 tenía varios tickets:
+
+Ticket de "Orientación Sunrun" → fsd__ = None ← este llegaba primero
+Ticket de servicio técnico → fsd__ = "983XXX" ← este era el que necesitabas
+
+Con limit=1 HubSpot devolvía el primero que encontraba (orden interno de HubSpot, no el más relevante). El fix fue pedir hasta 10 y elegir inteligentemente:
+
+# ❌ Antes — trae el primero que aparezca, puede no tener FSD
+limit=1
+return response.results[0]
+
+# ✅ Después — trae varios y elige el que tenga FSD
+limit=10
+
+ticket_con_fsd = None
+ticket_fallback = None
+
+for ticket in response.results:
+    fsd_val = ticket.properties.get("fsd__", "")
+    if fsd_val and str(fsd_val).strip():
+        ticket_con_fsd = ticket  # ← este es el bueno
+        break
+    if ticket_fallback is None:
+        ticket_fallback = ticket  # ← por si ninguno tiene FSD
+
+# Usar el que tiene FSD, o el primero si ninguno lo tiene
+ticket = ticket_con_fsd or ticket_fallback
+
+La lógica es: recorre los tickets uno por uno, en cuanto encuentres uno con fsd__ llenado, para ahí. Si ninguno tiene FSD, usa el primero de todos como antes (no rompe nada, solo no tendrá FSD).
+
+En resumen, el error ❌ No se pudo extraer FSD del candidato era el síntoma final de una cadena larga — los bugs 1, 2 y 3 hacían que la búsqueda fallara antes de llegar a los tickets, y el bug 4 hacía que aunque llegara, trajera el ticket equivocado.
+

@@ -18,9 +18,10 @@ import threading
 import customtkinter as ctk
 from tkinter import messagebox
 from ui.custom_ctkframe import CustomCTkFrame
-from core.comparador import comparar, datos_hs_desde_ticket
+from core.comparador import Comparador, comparar, datos_hs_desde_ticket
 from scraping_sunrun import ScraperSunrun
 from config.configuracion import cargar_config
+from data.buscador import SEARCH_STRATEGIES
 
 # ══════════════════════════════════════════════════════════════════════
 #  Colores por estado (modo oscuro / modo claro)
@@ -115,6 +116,7 @@ class VentanaComparacion(CustomCTkFrame):
     datos_hubspot   : dict con datos de HubSpot (opcional, si ya se obtuvieron)
     datos_sunrun    : dict con datos de Sunrun (opcional, si ya se obtuvieron)
     log_callback    : función de log de la ventana principal
+    ventana_principal_o_comparador : referencia a la ventana principal o al comparador
     """
 
     def __init__(
@@ -123,6 +125,8 @@ class VentanaComparacion(CustomCTkFrame):
         datos_hubspot: dict = None,
         datos_sunrun: dict = None,
         log_callback=None,
+        comparador=None,
+        ventana_principal_o_comparador=None,
     ):
 
         super().__init__(parent)
@@ -130,11 +134,28 @@ class VentanaComparacion(CustomCTkFrame):
         self._datos_hs = datos_hubspot
         self._datos_sr = datos_sunrun
 
+        self.comparador = comparador
+
+        if self.comparador is None and ventana_principal_o_comparador is not None:
+            if hasattr(ventana_principal_o_comparador, "comparador"):
+                self.comparador = ventana_principal_o_comparador.comparador
+            else:
+                self.comparador = ventana_principal_o_comparador
+
+        if self.comparador is None and hasattr(parent, "comparador"):
+            self.comparador = parent.comparador
+
+        if self.comparador is None:
+            self.comparador = Comparador()
+
         self.update_idletasks()
         ancho, alto = 820, 560
         px = max(0, (self.winfo_screenwidth() - ancho) // 2)
         py = max(0, (self.winfo_screenheight() - alto) // 2)
-
+        self.search_strategy = "direccion"
+        self.candidatos_hubspot = []
+        self.candidato_seleccionado = None
+        self.radio_var = ctk.IntVar()
         self._construir_ui()
 
         self.after(50, self._traer_al_frente)
@@ -169,11 +190,13 @@ class VentanaComparacion(CustomCTkFrame):
     # ── Construcción de la UI ─────────────────────────────────────────
 
     def _construir_ui(self):
+        """Construye la UI completa"""
 
+        # CONFIGURACIÓN GENERAL
         self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
-
         # ── Encabezado ────────────────────────────────────────────────
+
         enc = ctk.CTkFrame(self, fg_color=("gray88", "gray20"), height=50)
         enc.grid(row=0, column=0, sticky="ew")
         enc.grid_propagate(False)
@@ -184,70 +207,170 @@ class VentanaComparacion(CustomCTkFrame):
             font=ctk.CTkFont(size=14, weight="bold"),
         ).pack(side="left", padx=16, pady=12)
 
-        # ── Fila de búsqueda ──────────────────────────────────────────
-        fila_busqueda = ctk.CTkFrame(self, fg_color=("gray95", "gray18"))
-        fila_busqueda.grid(row=1, column=0, sticky="ew", padx=12, pady=(10, 0))
-        fila_busqueda.grid_columnconfigure(1, weight=1)
+        # FRAME SUPERIOR (BÚSQUEDA)
+        frame_busqueda = ctk.CTkFrame(self, fg_color=("gray95", "gray18"))
+        frame_busqueda.grid(row=1, column=0, sticky="ew", padx=12, pady=(10, 0))
 
+        frame_busqueda.grid_columnconfigure(0, weight=1)
+
+        # Label
         ctk.CTkLabel(
-            fila_busqueda,
-            text="FSD:",
+            frame_busqueda,
+            text="Tipo de Búsqueda",
             font=ctk.CTkFont(size=12, weight="bold"),
             text_color=("gray40", "gray60"),
-        ).grid(row=0, column=0, padx=(14, 8), pady=12)
+        ).grid(row=0, column=0, sticky="w", padx=14, pady=(12, 4))
 
+        # ComboBox estrategias
+
+        estrategias = [v["label"] for v in SEARCH_STRATEGIES.values()]
+
+        self.combo_tipo_busqueda = ctk.CTkComboBox(
+            frame_busqueda,
+            values=estrategias,
+            state="readonly",
+            command=self._al_cambiar_tipo_busqueda,
+        )
+
+        self.combo_tipo_busqueda.grid(
+            row=1, column=0, sticky="ew", padx=14, pady=(0, 10)
+        )
+
+        self.combo_tipo_busqueda.set(SEARCH_STRATEGIES["direccion"]["label"])
+
+        # FRAME INPUTS DINÁMICOS
+        self.frame_inputs = ctk.CTkFrame(frame_busqueda, fg_color="transparent")
+
+        self.frame_inputs.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 10))
+
+        self.frame_inputs.grid_columnconfigure(0, weight=1)
+
+        # INPUT FSD DEFAULT
         self._fsd_var = ctk.StringVar()
+
         self._entry_fsd = ctk.CTkEntry(
-            fila_busqueda,
+            self.frame_inputs,
             textvariable=self._fsd_var,
             placeholder_text="Ej: FSD983316",
             font=ctk.CTkFont(size=12),
-        )
-        self._entry_fsd.grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=12)
-        self._entry_fsd.bind("<Return>", lambda e: self._lanzar_comparacion())
-
-        self._btn_comparar = ctk.CTkButton(
-            fila_busqueda,
-            text="Comparar",
-            command=self._lanzar_comparacion,
-            font=ctk.CTkFont(size=12, weight="bold"),
-            width=110,
             height=34,
+        )
+
+        self._entry_fsd.grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=2)
+
+        self._entry_fsd.bind("<Return>", lambda e: self._buscar_candidatos())
+
+        # BOTÓN BUSCAR
+        self._btn_buscar = ctk.CTkButton(
+            frame_busqueda,
+            text="🔍 Buscar en HubSpot",
+            command=self._buscar_candidatos,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=36,
             fg_color=("#238636", "#2ea043"),
             hover_color=("#1e7a30", "#26963a"),
         )
-        self._btn_comparar.grid(row=0, column=2, padx=(0, 14), pady=12)
 
-        # ── Área de resultados ────────────────────────────────────────
-        self._frame_resultados = ctk.CTkScrollableFrame(
-            self,
-            fg_color="transparent",
-            scrollbar_button_hover_color=("gray60", "gray40"),
-        )
-        self._frame_resultados.grid(
-            row=2, column=0, sticky="nsew", padx=12, pady=(10, 0)
-        )
-        self._frame_resultados.grid_columnconfigure(0, weight=1)
+        self._btn_buscar.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 14))
 
-        self._label_placeholder = ctk.CTkLabel(
-            self._frame_resultados,
-            text="Ingresa un número FSD y presiona Comparar.",
+        # ÁREA PRINCIPAL         # ── Área de resultados ────────────────────────────────────────
+        self._frame_main = ctk.CTkFrame(self, fg_color="transparent")
+
+        self._frame_main.grid(row=2, column=0, sticky="nsew", padx=12, pady=(10, 0))
+
+        self._frame_main.grid_columnconfigure(0, weight=1)
+        self._frame_main.grid_rowconfigure(1, weight=1)
+        self._frame_main.grid_rowconfigure(3, weight=2)
+
+        # TABLA CANDIDATOS
+        ctk.CTkLabel(
+            self._frame_main,
+            text="Resultados en HubSpot",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=0, sticky="w", pady=(0, 6))
+
+        self.frame_tabla = ctk.CTkScrollableFrame(
+            self._frame_main,
+            fg_color=("gray95", "gray18"),
+            height=180,
+        )
+
+        self.frame_tabla.grid(row=1, column=0, sticky="nsew")
+
+        self.frame_tabla.grid_columnconfigure(0, weight=1)
+
+        # Placeholder tabla
+        self._label_placeholder_tabla = ctk.CTkLabel(
+            self.frame_tabla,
+            text="No hay resultados todavía.",
             font=ctk.CTkFont(size=12),
             text_color=("gray50", "gray50"),
         )
+
+        self._label_placeholder_tabla.grid(row=0, column=0, pady=30)
+
+        # BOTÓN COMPARAR
+        self._btn_comparar = ctk.CTkButton(
+            self._frame_main,
+            text="▶ Comparar Seleccionado",
+            command=self._lanzar_comparacion_mejorada,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=36,
+            fg_color=("#1976D2", "#1565C0"),
+            hover_color=("#1565C0", "#0D47A1"),
+        )
+
+        self._btn_comparar.grid(row=2, column=0, sticky="ew", pady=(10, 10))
+
+        # FRAME RESULTADOS
+        self._frame_resultados = ctk.CTkScrollableFrame(
+            self._frame_main,
+            fg_color="transparent",
+            scrollbar_button_hover_color=("gray60", "gray40"),
+        )
+
+        self._frame_resultados.grid(row=3, column=0, sticky="nsew")
+
+        self._frame_resultados.grid_columnconfigure(0, weight=1)
+
+        # Placeholder resultados
+        self._label_placeholder = ctk.CTkLabel(
+            self._frame_resultados,
+            text="Selecciona un candidato y presiona Comparar.",
+            font=ctk.CTkFont(size=12),
+            text_color=("gray50", "gray50"),
+        )
+
         self._label_placeholder.grid(row=0, column=0, pady=40)
 
         # ── Barra de estado ───────────────────────────────────────────
         self._status_var = ctk.StringVar(value="Listo")
+
         barra = ctk.CTkFrame(self, fg_color=("gray88", "gray20"), height=30)
+
         barra.grid(row=3, column=0, sticky="ew", pady=(8, 0))
+
         barra.grid_propagate(False)
+
         ctk.CTkLabel(
             barra,
             textvariable=self._status_var,
             font=ctk.CTkFont(size=10),
             text_color=("gray40", "gray60"),
         ).pack(side="left", padx=12)
+
+    def ui_log(self, mensaje: str, tipo: str = "info"):
+        """
+        Actualiza barra de estado y opcionalmente imprime logs.
+        """
+
+        self._status_var.set(mensaje)
+
+        # Opcional: imprimir en consola
+        print(f"[{tipo.upper()}] {mensaje}")
+
+        # Refrescar UI
+        self.update_idletasks()
 
     def _lanzar_comparacion(self):
         fsd = self._fsd_var.get().strip()
@@ -334,6 +457,154 @@ class VentanaComparacion(CustomCTkFrame):
             return {**_vacio, "error": str(e)}
 
     # ── Renderizado de resultados ──────────────────────────────────────
+    def _al_cambiar_tipo_busqueda(self, nuevo_tipo_label):
+        """Se dispara cuando cambia el dropdown de tipo de búsqueda"""
+
+        # Encontrar la clave del tipo seleccionado
+        self.search_strategy = [
+            k for k, v in SEARCH_STRATEGIES.items() if v["label"] == nuevo_tipo_label
+        ][0]
+
+        # Limpiar inputs previos
+        for widget in self.frame_inputs.winfo_children():
+            widget.destroy()
+
+        # Crear inputs dinámicos según cantidad
+        estrategia = SEARCH_STRATEGIES[self.search_strategy]
+        input_count = estrategia["input_count"]
+
+        self.criterio_inputs = []
+
+        if input_count == 1:
+            entrada = ctk.CTkEntry(
+                self.frame_inputs,
+                placeholder_text=estrategia.get("placeholder", "Buscar..."),
+            )
+            entrada.pack(fill="x")
+            self.criterio_inputs.append(entrada)
+
+        elif input_count == 2:
+            entrada1 = ctk.CTkEntry(
+                self.frame_inputs,
+                placeholder_text=estrategia.get("placeholder_1", "Campo 1"),
+            )
+            entrada1.pack(fill="x", pady=(0, 5))
+            self.criterio_inputs.append(entrada1)
+
+            entrada2 = ctk.CTkEntry(
+                self.frame_inputs,
+                placeholder_text=estrategia.get("placeholder_2", "Campo 2"),
+            )
+            entrada2.pack(fill="x")
+            self.criterio_inputs.append(entrada2)
+
+    def _obtener_criterio_busqueda(self):
+        """Lee los inputs según tipo seleccionado"""
+
+        estrategia = SEARCH_STRATEGIES[self.search_strategy]
+        input_count = estrategia["input_count"]
+
+        if input_count == 1:
+            return self.criterio_inputs[0].get()
+        elif input_count == 2:
+            return {
+                "criterio1": self.criterio_inputs[0].get(),
+                "criterio2": self.criterio_inputs[1].get(),
+            }
+
+    def _buscar_candidatos(self):
+        """Busca candidatos en HubSpot según criterio"""
+        criterio = self._obtener_criterio_busqueda()
+
+        if not criterio or (isinstance(criterio, dict) and not all(criterio.values())):
+            self.ui_log("❌ Rellena todos los campos de búsqueda", "error")
+            return
+
+        self.ui_log("🔄 Buscando en HubSpot...", "info")
+
+        try:
+            self.candidatos_hubspot = self.comparador.buscar_hubspot_por_estrategia(
+                criterio, self.search_strategy
+            )
+
+            if not self.candidatos_hubspot:
+                self.ui_log("❌ No se encontraron resultados", "warning")
+                return
+
+            self._mostrar_candidatos()
+            self.ui_log(
+                f"✅ Se encontraron {len(self.candidatos_hubspot)} resultado(s)",
+                "success",
+            )
+
+        except Exception as e:
+            self.ui_log(f"❌ Error en búsqueda: {str(e)}", "error")
+
+    def _mostrar_candidatos(self):
+        """Muestra los candidatos en la tabla"""
+        # Limpiar tabla anterior
+        for widget in self.frame_tabla.winfo_children():
+            widget.destroy()
+
+        self.radio_var.set(-1)
+
+        for idx, candidato in enumerate(self.candidatos_hubspot):
+            frame_fila = ctk.CTkFrame(
+                self.frame_tabla, fg_color="#2a2a2a", corner_radius=5
+            )
+            frame_fila.pack(fill="x", pady=3, padx=5)
+
+            # Radio button
+            rb = ctk.CTkRadioButton(
+                frame_fila, text="", variable=self.radio_var, value=idx
+            )
+            rb.pack(side="left", padx=5)
+
+            # Datos del candidato
+            nombre = candidato.get("nombre", "N/A")
+            direccion = candidato.get("direccion", "N/A")
+            municipio = candidato.get("municipio", "N/A")
+            fsd = candidato.get("fsd", "N/A")
+
+            info_text = f"{nombre} | {direccion} | {municipio} | FSD: {fsd}"
+
+            ctk.CTkLabel(
+                frame_fila,
+                text=info_text,
+                font=("Segoe UI", 10),
+                text_color="#CCCCCC",
+                justify="left",
+            ).pack(side="left", padx=10, fill="x", expand=True)
+
+    def _obtener_candidato_seleccionado(self):
+        """Devuelve el candidato seleccionado o None"""
+        idx = self.radio_var.get()
+        if idx >= 0 and idx < len(self.candidatos_hubspot):
+            return self.candidatos_hubspot[idx]
+        return None
+
+    def _lanzar_comparacion_mejorada(self):
+        """Nueva versión que usa el candidato seleccionado"""
+        candidato = self._obtener_candidato_seleccionado()
+
+        if not candidato:
+            self.ui_log("⚠️  Selecciona un candidato para comparar", "warning")
+            return
+
+        self.ui_log("🔄 Extrayendo FSD y buscando en Sunrun...", "info")
+
+        try:
+            resultado = self.comparador.comparar_con_fsd_automatico(candidato)
+
+            if "error" in resultado:
+                self.ui_log(f"❌ {resultado['error']}", "error")
+                return
+
+            self._mostrar_resultado(resultado)
+            self.ui_log("✅ Comparación completada", "success")
+
+        except Exception as e:
+            self.ui_log(f"❌ Error en comparación: {str(e)}", "error")
 
     def _limpiar_resultados(self):
         for widget in self._frame_resultados.winfo_children():
