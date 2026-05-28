@@ -225,3 +225,40 @@ def puerto_activo(host: str = "127.0.0.1", puerto: int = PUERTO_DEBUG) -> bool:
             return True
     except OSError:
         return False
+
+
+def normalizar_fsd(fsd: str | None) -> str | None:
+    """
+    Normaliza el FSD para búsqueda inteligente en pestañas.
+
+    - Si es None, vacío o solo espacios: devuelve None (backward compatibility)
+    - Si es "980124": convierte a "FSD-980124"
+    - Si es "FSD-980124": lo mantiene igual
+    - Case-insensitive: siempre devuelve mayúsculas
+
+    Ejemplos:
+        normalizar_fsd("980124") → "FSD-980124"
+        normalizar_fsd("FSD-980124") → "FSD-980124"
+        normalizar_fsd("fsd-980124") → "FSD-980124"
+        normalizar_fsd("") → None
+        normalizar_fsd(None) → None
+    """
+    if not fsd or not isinstance(fsd, str):
+        return None
+
+    fsd = fsd.strip().upper()
+
+    if not fsd:
+        return None
+
+    # Si ya comienza con "FSD-", devuelve como está
+    if fsd.startswith("FSD-"):
+        return fsd
+
+    # Si es solo números o solo números con guiones, antepone "FSD-"
+    # Solo agregar "FSD-" si es un patrón de números
+    if fsd.replace("-", "").isdigit():
+        return f"FSD-{fsd}"
+
+    # Si tiene otra forma, devolverlo como está (por si el usuario ingresa un formato especial)
+    return fsd

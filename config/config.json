@@ -3,10 +3,10 @@
   "ultimo_monitor": 1,
   "regiones_apps": {
     "Wolkbox": {
-      "top": 55,
-      "left": -1705,
-      "width": 265,
-      "height": 561
+      "top": 156,
+      "left": 20,
+      "width": 326,
+      "height": 69
     },
     "App 2": {
       "top": 448,
@@ -58,7 +58,8 @@
   },
   "auto_submit_nota": false,
   "monitores_apps": {
-    "Wolkbox": 0,
-    "App 5": 0
+    "Wolkbox": 1,
+    "App 5": 0,
+    "B2Chat": 0
   }
 }

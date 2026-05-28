@@ -873,3 +873,31 @@ La lógica es: recorre los tickets uno por uno, en cuanto encuentres uno con fsd
 
 En resumen, el error ❌ No se pudo extraer FSD del candidato era el síntoma final de una cadena larga — los bugs 1, 2 y 3 hacían que la búsqueda fallara antes de llegar a los tickets, y el bug 4 hacía que aunque llegara, trajera el ticket equivocado.
 
+ver @image.png
+
+28/05/2026
+Se arreglo una parte de la ventana_comparacion para que los resultados de busqueda no taparan los resultados de comparacion, se trabajo en el archivo plugin_sunrun que es el archivo que controla la subida de archivos / capturas a sunrun, la idea es que detecte la pestaña con el fsd-0000000 y haga el proceso de subida, la pestaña debe estar abierta desde antes, PERO, me gustaria mejorar eso y tengo 4 opciones:
+1- input manual con el fsd
+2- leer el fsd desde el nombre del archivo (no sirve)
+3- clipboard - ocr - pdf (me gustaria)
+4- que el usuario pueda elegir entre las distintas pestañas abiertas: con el fsd
+1. FSD-980124
+2. FSD-981555
+3. FSD-777222
+realmente se pueden implementar las 4 pero la mejor por ahora es la 1
+
+Lo complicado es que el bot detecte la pestaña correcta, para esto se agrego un input donde el usuario ingresa el fsd y el bot busca entre las pestañas abiertas mediante su titulo hasta encontrar la que tenga el fsd igual al ingresado, se agrego un switch para poder poner o quitar esta opcion, no importa como este ingresado el fsd si tiene guion o no tiene "fsd" escrito el lo va a encontrar, las subidas a cada plataforma funcionan excelente, FALTA: agregar ocr y la captura por celda al calendar, falta agregar el id del ticket a los campos comparados, tambien falta hacer la busqueda pero con subida en el fsd con sunrun, usar parte del scraping_sunrun para los selectores, ya que desde ahi se hace la busqueda del fsd para luego sacar la info del fsd. Actualmente la subida funciona, la comparacion igual, las demas ventanas tambien
+
+COVERAGE
+coverage run main.py
+coverage lcov
+coverage html
+Start-Process htmlcov/index.html
+
+
+Hola mi rey, necesito configurar la subida a SUNRUN, en mi script de automatizacion para subida de capturas, ya tengo los selectores y todo, te digo el flujo y le damos, cuando el usuario esta en un fsd-0000000, en la interfaz hay un boton que dice RELATED, hay que darle a ese boton y esperar un momento a que cargue el contenido, ahi es donde estan las notas "notes y attachments" y hay un boton que dice "upload files" ahi ya se abre el administrador de archivos para subir el archivo, la verdad el flujo no es complicado,
+
+OTRA COSA NOTAS:
+
+"Actúa como un desarrollador frontend experto. Escribe el código HTML y CSS para [describe tu componente, ej: una tarjeta de producto]. El diseño debe verse profesional, minimalista y humano. Sigue estas reglas estrictas:Usa un sistema de espaciado consistente (ej. usando variables CSS para márgenes y rellenos).No uses sombras paralelas (box-shadow) exageradas; usa bordes muy sutiles o espacios en blanco (white space) para la separación.La tipografía debe ser limpia, usando fuentes modernas del sistema (ej. system-ui, -apple-system).El diseño debe ser adaptable (responsive) por naturaleza utilizando Flexbox o Grid, sin depender de alturas fijas.Evita que parezca generado por IA; usa transiciones suaves, colores coherentes y una paleta de colores contenida."
+

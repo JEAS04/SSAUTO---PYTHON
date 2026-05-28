@@ -15,7 +15,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable
 
-
 # ── Tipos compartidos ─────────────────────────────────────────────────
 
 
@@ -27,12 +26,18 @@ class RegionCaptura:
     height: int
 
     def as_dict(self) -> dict:
-        return {"top": self.top, "left": self.left, "width": self.width, "height": self.height}
+        return {
+            "top": self.top,
+            "left": self.left,
+            "width": self.width,
+            "height": self.height,
+        }
 
 
 @dataclass
 class ResultadoSubida:
     """Resultado estructurado que cada plugin devuelve tras intentar subir."""
+
     exitoso: bool
     mensaje: str = ""
     detalle: str = ""
@@ -46,11 +51,15 @@ class ContextoSubida:
     Se construye en el servicio y se pasa al plugin — el plugin no toca
     la UI ni la configuración global.
     """
+
     ruta_imagen: str
     log: Callable[[str], None]
-    driver: object                          # WebDriver (tipado débil para no forzar selenium aquí)
-    credenciales: dict = field(default_factory=dict)   # {"usuario": ..., "clave": ...}
-    opciones: dict = field(default_factory=dict)        # flags extra por sitio (auto_submit, etc.)
+    driver: object  # WebDriver (tipado débil para no forzar selenium aquí)
+    credenciales: dict = field(default_factory=dict)  # {"usuario": ..., "clave": ...}
+    opciones: dict = field(
+        default_factory=dict
+    )  # flags extra por sitio (auto_submit, etc.)
+    fsd: str | None = None  # FSD para búsqueda inteligente de pestaña
 
 
 # ── Contrato base ─────────────────────────────────────────────────────

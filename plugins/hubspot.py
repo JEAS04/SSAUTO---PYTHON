@@ -98,6 +98,58 @@ class HubSpotPlugin(SitioPlugin):
     TIMEOUT = 15
     TIMEOUT_LARGO = 20
 
+    # ── Detección de pestaña ──────────────────────────────────────────
+
+    def _encontrar_pestana_fsd(
+        self, driver, log: Callable, fsd_objetivo: str | None = None
+    ) -> bool:
+        """
+        Búsqueda inteligente de pestaña por FSD en HubSpot.
+
+        Si fsd_objetivo es proporcionado:
+        - Busca en driver.title case-insensitive el FSD
+        - También intenta en URL como fallback
+
+        Si no se proporciona FSD:
+        - Simplemente usa la pestaña activa (compatibilidad con flujo legacy)
+
+        Devuelve True si encontró/cambió a la pestaña correcta.
+        """
+        if not fsd_objetivo:
+            # Modo legacy: usa la pestaña activa
+            return True
+
+        handles = driver.window_handles
+        log(
+            f"  → [HubSpot] Buscando pestaña con FSD: {fsd_objetivo} ({len(handles)} pestaña(s) abierta(s))…"
+        )
+        fsd_lower = fsd_objetivo.lower()  # "fsd-1251275"
+        fsd_sin_guion = fsd_lower.replace("fsd-", "fsd")  # "fsd1251275"
+        fsd_numero = fsd_lower.replace("fsd-", "")  # "1251275"
+
+        for handle in handles:
+            driver.switch_to.window(handle)
+            title = driver.title.lower()
+            url = driver.current_url.lower()
+
+            # El dominio debe ser HubSpot — evita confundir pestañas de otros
+            # sitios (ej: Sunrun) que tengan el mismo FSD en el título.
+            if self.dominio not in url:
+                continue
+
+            # Buscar en título: acepta "FSD-1251275" y "FSD1251275" (sin guion)
+            if fsd_lower in title or fsd_sin_guion in title:
+                log(f"  ✓ [HubSpot] Pestaña encontrada por título: {driver.title}")
+                return True
+
+            # Fallback: buscar número en URL
+            if fsd_numero in url:
+                log(f"  ✓ [HubSpot] Pestaña encontrada por URL: {fsd_objetivo}")
+                return True
+
+        log(f"  ✗ [HubSpot] No se encontró pestaña para FSD: {fsd_objetivo}")
+        return False
+
     # ── Interfaz pública ──────────────────────────────────────────────
 
     def verificar_sesion(self, driver, log: Callable) -> bool:
@@ -150,6 +202,17 @@ class HubSpotPlugin(SitioPlugin):
         driver = ctx.driver
         ruta_abs = os.path.abspath(ctx.ruta_imagen)
         auto_submit = ctx.opciones.get("auto_submit_nota", True)
+        fsd_objetivo = ctx.fsd  # Búsqueda inteligente por FSD
+
+        # Búsqueda inteligente: si hay FSD, buscar pestaña correcta
+        if fsd_objetivo and not self._encontrar_pestana_fsd(driver, log, fsd_objetivo):
+            log(f"  ✗ [HubSpot] No se pudo encontrar pestaña para FSD: {fsd_objetivo}")
+            return ResultadoSubida(
+                exitoso=False,
+                mensaje="No se encontró pestaña del FSD",
+                detalle="Abre el ticket de HubSpot en Chrome antes de ejecutar.",
+            )
+
         contexto_activo = self._capturar_contexto_activo(driver)
 
         log(f"  → [HubSpot] Iniciando subida: {ruta_abs}")

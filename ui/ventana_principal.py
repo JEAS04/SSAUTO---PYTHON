@@ -530,6 +530,48 @@ class App(CustomCTkFrame):
         self.auto_submit_var.trace_add(
             "write", lambda *_: guardar_auto_submit(self.auto_submit_var.get())
         )
+        self._separador(padre)
+
+        # ── FSD (Búsqueda inteligente) ────────────────────────────────
+        self.usar_fsd_var = ctk.BooleanVar(value=False)
+        fila_fsd_toggle = ctk.CTkFrame(padre, fg_color="transparent")
+        fila_fsd_toggle.pack(fill="x", pady=(4, 0))
+        ctk.CTkSwitch(
+            fila_fsd_toggle,
+            text="Búsqueda inteligente por FSD",
+            variable=self.usar_fsd_var,
+            font=ctk.CTkFont(size=11),
+            command=self._actualizar_estado_fsd,
+        ).pack(side="left", expand=True, anchor="w")
+
+        fila_fsd = ctk.CTkFrame(padre, fg_color="transparent")
+        fila_fsd.pack(fill="x", pady=(4, 0))
+        ctk.CTkLabel(
+            fila_fsd,
+            text="FSD:",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray60"),
+        ).pack(side="left", padx=(0, 8))
+        self.fsd_var = ctk.StringVar(value="")
+        self.fsd_entry = ctk.CTkEntry(
+            fila_fsd,
+            textvariable=self.fsd_var,
+            placeholder_text="Ej: 980124 o FSD-980124",
+            font=ctk.CTkFont(size=11),
+            state="disabled",
+        )
+        self.fsd_entry.pack(side="left", padx=(0, 8), fill="x", expand=True)
+        ctk.CTkButton(
+            fila_fsd,
+            text="Limpiar",
+            command=self._limpiar_fsd,
+            font=ctk.CTkFont(size=10),
+            width=70,
+            height=28,
+            state="disabled",
+        ).pack(side="left")
+        self.fsd_btn_limpiar = fila_fsd.winfo_children()[-1]
+        self._separador(padre)
 
         fila_atajo = ctk.CTkFrame(padre, fg_color="transparent")
         fila_atajo.pack(fill="x")
@@ -789,6 +831,7 @@ class App(CustomCTkFrame):
             usar_existente = self.chrome_existente_var.get()
             auto_submit = self.auto_submit_var.get()
             destino = self.destino_var.get()
+            fsd = self._obtener_fsd_actual()  # FSD para búsqueda inteligente
 
             plugins = (
                 PluginRegistry.todos()
@@ -812,6 +855,7 @@ class App(CustomCTkFrame):
                     usar_chrome_existente=usar_existente,
                     credenciales_sesion=self._credenciales_sesion,
                     opciones={"auto_submit_nota": auto_submit},
+                    fsd=fsd,
                 )
                 ui("")
 
@@ -980,6 +1024,13 @@ class App(CustomCTkFrame):
             font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray60"),
         ).pack(side="left", padx=(4, 0))
+        self._label_estado_app = ctk.CTkLabel(
+            frame_estado,
+            text="",
+            font=ctk.CTkFont(size=10),
+            text_color=("gray50", "gray50"),
+        )
+        self._label_estado_app.pack(side="left", padx=(12, 0), fill="x", expand=True)
         self._label_ultimo_proceso = ctk.CTkLabel(
             frame_estado,
             text="",
@@ -1013,6 +1064,30 @@ class App(CustomCTkFrame):
             .replace("Return", "Enter")
             .replace("-", "+")
         )
+
+    def _actualizar_estado_fsd(self):
+        """Habilita/deshabilita el campo FSD según el switch."""
+        if self.usar_fsd_var.get():
+            self.fsd_entry.configure(state="normal")
+            self.fsd_btn_limpiar.configure(state="normal")
+            self._log("✓ Búsqueda inteligente por FSD activada.")
+        else:
+            self.fsd_entry.configure(state="disabled")
+            self.fsd_btn_limpiar.configure(state="disabled")
+            self.fsd_var.set("")
+            self._log("✗ Búsqueda inteligente por FSD desactivada.")
+
+    def _limpiar_fsd(self):
+        """Limpia el campo FSD."""
+        self.fsd_var.set("")
+        self._log("✓ Campo FSD limpiado.")
+
+    def _obtener_fsd_actual(self) -> str | None:
+        """Devuelve el FSD si está habilitado, None en caso contrario."""
+        if not self.usar_fsd_var.get():
+            return None
+        fsd = self.fsd_var.get().strip()
+        return fsd if fsd else None
 
     # ── Sitios status ─────────────────────────────────────────────────
 
@@ -1284,6 +1359,7 @@ class App(CustomCTkFrame):
             usar_existente = self.chrome_existente_var.get()
             auto_submit = self.auto_submit_var.get()
             destino = self.destino_var.get()
+            fsd = self._obtener_fsd_actual()  # FSD para búsqueda inteligente
 
             if destino == "AMBOS":
                 plugins = PluginRegistry.todos()
@@ -1307,6 +1383,7 @@ class App(CustomCTkFrame):
                     usar_chrome_existente=usar_existente,
                     credenciales_sesion=self._credenciales_sesion,
                     opciones={"auto_submit_nota": auto_submit},
+                    fsd=fsd,
                 )
                 ui("")
 

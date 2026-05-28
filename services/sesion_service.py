@@ -18,7 +18,14 @@ import time
 from pathlib import Path
 from typing import Callable
 from core.base_plugin import ContextoSubida, ResultadoSubida, SitioPlugin
-from core.browser import BrowserFactory, ErrorBrowser, esperar_carga, puerto_activo
+from core.browser import (
+    BrowserFactory,
+    ErrorBrowser,
+    esperar_carga,
+    puerto_activo,
+    encontrar_pestana,
+    normalizar_fsd,
+)
 from core.plugin_registry import PluginRegistry
 from config.credenciales import cargar_cookies, cargar_credenciales
 
@@ -49,12 +56,16 @@ class SesionService:
         usar_chrome_existente: bool = True,
         credenciales_sesion: dict | None = None,
         opciones: dict | None = None,
+        fsd: str | None = None,
     ) -> ResultadoSubida:
         """
         Ciclo completo: driver → sesión → plugin.subir() → resultado.
 
         Nunca cierra el driver del usuario (Chrome existente).
         Siempre cierra el driver propio (Chrome nuevo) al terminar.
+
+        Args:
+            fsd: FSD para búsqueda inteligente de pestaña (ej: "980124" o "FSD-980124")
         """
         plugin = PluginRegistry.obtener(nombre_plugin)
         driver = None
@@ -76,12 +87,14 @@ class SesionService:
             credenciales = cls._obtener_credenciales(
                 plugin.nombre, credenciales_sesion or {}
             )
+            fsd_normalizado = normalizar_fsd(fsd)
             ctx = ContextoSubida(
                 ruta_imagen=ruta_imagen,
                 log=log,
                 driver=driver,
                 credenciales=credenciales,
                 opciones=opciones or {},
+                fsd=fsd_normalizado,
             )
             log(f"  → [{plugin.nombre}] Iniciando subida…")
             resultado = plugin.subir(ctx)
@@ -129,30 +142,22 @@ class SesionService:
 
     @staticmethod
     def _posicionar_pestana(driver, plugin: SitioPlugin, log: Callable) -> None:
-        """Valida SOLO la pestaña actual; nunca recorre ni cambia tabs del usuario."""
+        """Valida la pestaña del plugin y recorre tabs si hace falta."""
         if plugin.usar_pagina_actual and plugin.dominio:
             log(f"  → Validando pestaña activa de {plugin.nombre}…")
-            handle = driver.current_window_handle
             url = driver.current_url.lower()
             if plugin.dominio.lower() not in url:
-                raise RuntimeError(
-                    f"La pestaña activa no es {plugin.nombre}. "
-                    f"Ubicate en la pestaña visible/enfocada de {plugin.nombre} y reintentá."
+                log(
+                    f"  · Pestaña activa no es {plugin.nombre}, buscando entre las abiertas..."
                 )
-            try:
-                mismo_handle = driver.current_window_handle == handle
-                visible = driver.execute_script(
-                    "return document.visibilityState === 'visible'"
-                )
-                focused = driver.execute_script("return document.hasFocus()")
-            except Exception:
-                mismo_handle = visible = focused = False
-            if not mismo_handle or not visible or not focused:
-                raise RuntimeError(
-                    "Subida cancelada: la pestaña/ventana activa perdió foco. "
-                    "No se subió información."
-                )
-            log(f"  ✓ Pestaña activa validada.")
+                if not encontrar_pestana(driver, plugin.dominio, log):
+                    raise RuntimeError(
+                        f"No se encontró una pestaña de {plugin.nombre}. "
+                        f"Ubica la pestaña de {plugin.nombre} en Chrome y reintentá."
+                    )
+                log(f"  ✓ Cambiada a la pestaña de {plugin.nombre}.")
+            else:
+                log(f"  ✓ Pestaña activa validada.")
         elif not plugin.usar_pagina_actual and plugin.dominio:
             log(f"  · [{plugin.nombre}] No se cambia de pestaña automáticamente.")
 

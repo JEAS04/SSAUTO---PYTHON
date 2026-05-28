@@ -152,10 +152,11 @@ class VentanaComparacion(CustomCTkFrame):
         ancho, alto = 820, 560
         px = max(0, (self.winfo_screenwidth() - ancho) // 2)
         py = max(0, (self.winfo_screenheight() - alto) // 2)
-        self.search_strategy = "direccion"
+        self.search_strategy = "fsd"
         self.candidatos_hubspot = []
         self.candidato_seleccionado = None
         self.radio_var = ctk.IntVar()
+        self.criterio_inputs = []
         self._construir_ui()
 
         self.after(50, self._traer_al_frente)
@@ -193,6 +194,9 @@ class VentanaComparacion(CustomCTkFrame):
         """Construye la UI completa"""
 
         # CONFIGURACIÓN GENERAL
+        self.grid_rowconfigure(0, weight=0)
+        self.grid_rowconfigure(1, weight=0)
+        self.grid_rowconfigure(3, weight=0)
         self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
         # ── Encabezado ────────────────────────────────────────────────
@@ -229,14 +233,25 @@ class VentanaComparacion(CustomCTkFrame):
             frame_busqueda,
             values=estrategias,
             state="readonly",
+            height=34,
+            width=220,
+            font=ctk.CTkFont(size=12),
             command=self._al_cambiar_tipo_busqueda,
         )
 
         self.combo_tipo_busqueda.grid(
-            row=1, column=0, sticky="ew", padx=14, pady=(0, 10)
+            row=1, column=0, sticky="w", padx=14, pady=(0, 10)
         )
 
-        self.combo_tipo_busqueda.set(SEARCH_STRATEGIES["direccion"]["label"])
+        self.combo_tipo_busqueda.set(SEARCH_STRATEGIES["fsd"]["label"])
+
+        # Hacer todo el combo clickeable (no solo la flecha)
+        def _abrir_combo(e):
+            self.combo_tipo_busqueda._open_dropdown_menu()
+
+        self.combo_tipo_busqueda.bind("<Button-1>", _abrir_combo)
+        for hijo in self.combo_tipo_busqueda.winfo_children():
+            hijo.bind("<Button-1>", _abrir_combo)
 
         # FRAME INPUTS DINÁMICOS
         self.frame_inputs = ctk.CTkFrame(frame_busqueda, fg_color="transparent")
@@ -245,20 +260,8 @@ class VentanaComparacion(CustomCTkFrame):
 
         self.frame_inputs.grid_columnconfigure(0, weight=1)
 
-        # INPUT FSD DEFAULT
-        self._fsd_var = ctk.StringVar()
-
-        self._entry_fsd = ctk.CTkEntry(
-            self.frame_inputs,
-            textvariable=self._fsd_var,
-            placeholder_text="Ej: FSD983316",
-            font=ctk.CTkFont(size=12),
-            height=34,
-        )
-
-        self._entry_fsd.grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=2)
-
-        self._entry_fsd.bind("<Return>", lambda e: self._buscar_candidatos())
+        # Los inputs se crean dinámicamente en _al_cambiar_tipo_busqueda
+        # Se llama al final de _construir_ui para inicializar con la estrategia por defecto
 
         # BOTÓN BUSCAR
         self._btn_buscar = ctk.CTkButton(
@@ -276,12 +279,15 @@ class VentanaComparacion(CustomCTkFrame):
         # ÁREA PRINCIPAL         # ── Área de resultados ────────────────────────────────────────
         self._frame_main = ctk.CTkFrame(self, fg_color="transparent")
 
-        self._frame_main.grid(row=2, column=0, sticky="nsew", padx=12, pady=(10, 0))
-
+        self._frame_main.grid(
+            row=2,
+            column=0,
+            sticky="nsew",
+            padx=12,
+            pady=(0, 0),
+        )
+        self._frame_main.grid_rowconfigure(3, weight=1)
         self._frame_main.grid_columnconfigure(0, weight=1)
-        self._frame_main.grid_rowconfigure(1, weight=1)
-        self._frame_main.grid_rowconfigure(3, weight=2)
-
         # TABLA CANDIDATOS
         ctk.CTkLabel(
             self._frame_main,
@@ -289,16 +295,20 @@ class VentanaComparacion(CustomCTkFrame):
             font=ctk.CTkFont(size=12, weight="bold"),
         ).grid(row=0, column=0, sticky="w", pady=(0, 6))
 
-        self.frame_tabla = ctk.CTkScrollableFrame(
+        self.frame_tabla = ctk.CTkFrame(
             self._frame_main,
             fg_color=("gray95", "gray18"),
-            height=180,
+            height=120,
         )
 
-        self.frame_tabla.grid(row=1, column=0, sticky="nsew")
-
+        self.frame_tabla.grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(0, 10),
+        )
+        self.frame_tabla.grid_propagate(False)
         self.frame_tabla.grid_columnconfigure(0, weight=1)
-
         # Placeholder tabla
         self._label_placeholder_tabla = ctk.CTkLabel(
             self.frame_tabla,
@@ -307,8 +317,11 @@ class VentanaComparacion(CustomCTkFrame):
             text_color=("gray50", "gray50"),
         )
 
-        self._label_placeholder_tabla.grid(row=0, column=0, pady=30)
-
+        self._label_placeholder_tabla.grid(
+            row=0,
+            column=0,
+            pady=30,
+        )
         # BOTÓN COMPARAR
         self._btn_comparar = ctk.CTkButton(
             self._frame_main,
@@ -342,6 +355,9 @@ class VentanaComparacion(CustomCTkFrame):
         )
 
         self._label_placeholder.grid(row=0, column=0, pady=40)
+
+        # Inicializar inputs con la estrategia por defecto
+        self._al_cambiar_tipo_busqueda(SEARCH_STRATEGIES[self.search_strategy]["label"])
 
         # ── Barra de estado ───────────────────────────────────────────
         self._status_var = ctk.StringVar(value="Listo")
@@ -479,23 +495,32 @@ class VentanaComparacion(CustomCTkFrame):
             entrada = ctk.CTkEntry(
                 self.frame_inputs,
                 placeholder_text=estrategia.get("placeholder", "Buscar..."),
+                height=34,
+                font=ctk.CTkFont(size=12),
             )
             entrada.pack(fill="x")
+            entrada.bind("<Return>", lambda e: self._buscar_candidatos())
             self.criterio_inputs.append(entrada)
 
         elif input_count == 2:
             entrada1 = ctk.CTkEntry(
                 self.frame_inputs,
                 placeholder_text=estrategia.get("placeholder_1", "Campo 1"),
+                height=34,
+                font=ctk.CTkFont(size=12),
             )
             entrada1.pack(fill="x", pady=(0, 5))
+            entrada1.bind("<Return>", lambda e: self._buscar_candidatos())
             self.criterio_inputs.append(entrada1)
 
             entrada2 = ctk.CTkEntry(
                 self.frame_inputs,
                 placeholder_text=estrategia.get("placeholder_2", "Campo 2"),
+                height=34,
+                font=ctk.CTkFont(size=12),
             )
             entrada2.pack(fill="x")
+            entrada2.bind("<Return>", lambda e: self._buscar_candidatos())
             self.criterio_inputs.append(entrada2)
 
     def _obtener_criterio_busqueda(self):
@@ -542,7 +567,6 @@ class VentanaComparacion(CustomCTkFrame):
 
     def _mostrar_candidatos(self):
         """Muestra los candidatos en la tabla"""
-        # Limpiar tabla anterior
         for widget in self.frame_tabla.winfo_children():
             widget.destroy()
 
@@ -550,17 +574,21 @@ class VentanaComparacion(CustomCTkFrame):
 
         for idx, candidato in enumerate(self.candidatos_hubspot):
             frame_fila = ctk.CTkFrame(
-                self.frame_tabla, fg_color="#2a2a2a", corner_radius=5
+                self.frame_tabla,
+                fg_color=("#e8e8e8", "#2a2a2a"),
+                corner_radius=5,
+                cursor="hand2",
             )
             frame_fila.pack(fill="x", pady=3, padx=5)
 
-            # Radio button
+            def seleccionar(e, i=idx):
+                self.radio_var.set(i)
+
             rb = ctk.CTkRadioButton(
                 frame_fila, text="", variable=self.radio_var, value=idx
             )
             rb.pack(side="left", padx=5)
 
-            # Datos del candidato
             nombre = candidato.get("nombre", "N/A")
             direccion = candidato.get("direccion", "N/A")
             municipio = candidato.get("municipio", "N/A")
@@ -568,13 +596,19 @@ class VentanaComparacion(CustomCTkFrame):
 
             info_text = f"{nombre} | {direccion} | {municipio} | FSD: {fsd}"
 
-            ctk.CTkLabel(
+            lbl = ctk.CTkLabel(
                 frame_fila,
                 text=info_text,
                 font=("Segoe UI", 10),
-                text_color="#CCCCCC",
+                text_color=("#333333", "#CCCCCC"),
                 justify="left",
-            ).pack(side="left", padx=10, fill="x", expand=True)
+                cursor="hand2",
+            )
+            lbl.pack(side="left", padx=10, fill="x", expand=True)
+
+            # Clickear fila o label selecciona el radio
+            frame_fila.bind("<Button-1>", seleccionar)
+            lbl.bind("<Button-1>", seleccionar)
 
     def _obtener_candidato_seleccionado(self):
         """Devuelve el candidato seleccionado o None"""
@@ -654,6 +688,23 @@ class VentanaComparacion(CustomCTkFrame):
             text=f"  Ticket: {resultado['fsd']}",
             font=ctk.CTkFont(size=13, weight="bold"),
         ).grid(row=0, column=0, sticky="w", padx=14, pady=10)
+
+        # Botón copiar resultado al portapapeles
+        self._btn_copiar = ctk.CTkButton(
+            hdr,
+            text="📋 Copiar",
+            width=90,
+            height=28,
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray60", "gray50"),
+            text_color=("gray30", "gray70"),
+            hover_color=("gray80", "gray30"),
+            command=lambda r=resultado: self._copiar_resultado(r),
+        )
+        self._btn_copiar.grid(row=0, column=1, sticky="e", padx=14, pady=8)
+
         fila += 1
         sunrun_extra = resultado.get("_sunrun_extra")
 
@@ -887,6 +938,53 @@ class VentanaComparacion(CustomCTkFrame):
                 font=ctk.CTkFont(size=10),
                 text_color=col["texto"],
             ).pack(side="left", padx=8, pady=10)
+
+    def _copiar_resultado(self, resultado: dict):
+        """Copia el resultado de la comparación al portapapeles como texto plano."""
+        lineas = []
+        lineas.append(f"COMPARACIÓN FSD: {resultado.get('fsd', '')}")
+        lineas.append("=" * 50)
+
+        # Datos Sunrun extra
+        sunrun_extra = resultado.get("_sunrun_extra", {})
+        if sunrun_extra:
+            lineas.append("\n☀ SUNRUN")
+            for k, v in sunrun_extra.items():
+                if v:
+                    lineas.append(f"  {k.replace('_', ' ').title()}: {v}")
+
+        # Campos comparados
+        lineas.append("\n📋 CAMPOS COMPARADOS")
+        lineas.append(f"{'Campo':<20} {'HubSpot':<25} {'Sunrun':<25} Estado")
+        lineas.append("-" * 80)
+        for cr in resultado.get("campos", []):
+            campo = str(cr.get("campo", "")).ljust(20)
+            val_hs = str(cr.get("valor_hs") or "-").ljust(25)
+            val_sr = str(cr.get("valor_sr") or "-").ljust(25)
+            estado = ETIQUETAS_ESTADO.get(cr.get("estado", ""), cr.get("estado", ""))
+            lineas.append(f"{campo} {val_hs} {val_sr} {estado}")
+
+        # Resumen
+        resumen = resultado.get("resumen", {})
+        if resumen:
+            lineas.append("\n📊 RESUMEN")
+            for estado, count in resumen.items():
+                if count:
+                    lineas.append(f"  {ETIQUETAS_ESTADO.get(estado, estado)}: {count}")
+
+        texto = "\n".join(lineas)
+
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(texto)
+            # Feedback visual: el botón cambia a "✅ Copiado" por 2 segundos
+            self._btn_copiar.configure(text="✅ Copiado", state="disabled")
+            self.after(
+                2000,
+                lambda: self._btn_copiar.configure(text="📋 Copiar", state="normal"),
+            )
+        except Exception as e:
+            self.ui_log(f"No se pudo copiar: {e}", "error")
 
     def _mostrar_error(self, mensaje: str):
         self._limpiar_resultados()
