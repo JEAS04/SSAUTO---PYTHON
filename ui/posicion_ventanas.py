@@ -7,7 +7,7 @@ monitor, instead of letting Windows/Tk place them on monitor 1 by default.
 
 from __future__ import annotations
 
-from config.configuracion import obtener_monitores
+from core.monitors import obtener_monitores
 
 
 def _parse_geometry(widget) -> tuple[int, int, int, int]:

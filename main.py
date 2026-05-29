@@ -19,7 +19,6 @@ from config.configuracion import (
     TEMA_COLOR,
     cargar_config,
     guardar_config,
-    SITIOS,
 )
 
 # ── Registro de plugins ───────────────────────────────────────────────
@@ -88,7 +87,11 @@ def abrir_generador():
 
 
 def abrir_credenciales():
-    win = VentanaCredenciales(launcher, SITIOS)
+    sitios_compat = [
+        {"nombre": p.nombre, "necesita_login": p.necesita_login}
+        for p in PluginRegistry.con_login()
+    ]
+    win = VentanaCredenciales(launcher, sitios_compat)
     if win.confirmado:
         vista_principal._credenciales_sesion = win.credenciales_sesion
 

@@ -156,3 +156,67 @@ class SitioPlugin(ABC):
         login = "con login" if self.necesita_login else "sin login"
         pagina = " · usa página actual" if self.usar_pagina_actual else ""
         return f"{self.nombre} ({login}{pagina})"
+
+    # ── Búsqueda de pestaña por FSD (compartido entre plugins) ────────
+
+    def _encontrar_pestana_fsd(
+        self, driver, log: Callable, fsd_objetivo: str | None = None
+    ) -> bool:
+        """
+        Busca y activa la pestaña correspondiente al FSD objetivo.
+
+        Si fsd_objetivo es None, delega en _encontrar_pestana_legacy().
+        Si se proporciona, itera las pestañas abiertas buscando el FSD
+        en el título y la URL (solo pestañas del dominio del plugin).
+
+        Returns True si encontró/cambió a la pestaña correcta.
+        """
+        if not fsd_objetivo:
+            return self._encontrar_pestana_legacy(driver, log)
+
+        handles = driver.window_handles
+        fsd_lower = fsd_objetivo.lower()
+        fsd_sin_guion = fsd_lower.replace("fsd-", "fsd")
+        fsd_numero = fsd_lower.replace("fsd-", "")
+
+        log(
+            f"  -> [{self.nombre}] Buscando pestaña con FSD: {fsd_objetivo} "
+            f"({len(handles)} pestaña(s) abierta(s))..."
+        )
+
+        for handle in handles:
+            driver.switch_to.window(handle)
+            title = driver.title.lower()
+            url = driver.current_url.lower()
+
+            if self.dominio and self.dominio not in url:
+                continue
+
+            if fsd_lower in title or fsd_sin_guion in title:
+                log(
+                    f"  v [{self.nombre}] Pestaña encontrada por título: "
+                    f"{driver.title}"
+                )
+                return True
+
+            if fsd_numero in url:
+                log(
+                    f"  v [{self.nombre}] Pestaña encontrada por URL: "
+                    f"{fsd_objetivo}"
+                )
+                return True
+
+        log(
+            f"  x [{self.nombre}] No se encontró pestaña para FSD: "
+            f"{fsd_objetivo}"
+        )
+        return False
+
+    def _encontrar_pestana_legacy(self, driver, log: Callable) -> bool:
+        """
+        Modo legacy: búsqueda sin FSD específico.
+        Override en plugins que necesiten lógica especial (ej: Sunrun).
+
+        Por defecto, confía en la pestaña activa.
+        """
+        return True

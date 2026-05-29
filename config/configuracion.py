@@ -1,200 +1,205 @@
 """
-configuracion.py — Constantes globales y configuración de la aplicación.
+configuracion.py — Constantes globales y configuracion de la aplicacion.
 
-Este módulo centraliza todo lo que puede necesitar cambiarse sin tocar
-la lógica del programa: sitios destino, rutas de archivos y funciones
-para leer/guardar el archivo config.json.
-Separarlo evita que los demás módulos dependan unos de otros solo para
-leer un valor de configuración.
+Centraliza config.json I/O, perfiles, toggles, y re-exporta utilidades
+de sistema para mantener compatibilidad con codigo existente.
 """
 
-import os
-import sys
 import json
+import os
+import threading
+from dataclasses import dataclass
+from typing import Any
 
-
-def resource_path(relative_path):
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
-
+from utils.paths import resource_path
+from core.monitors import (            # re-exportado para compatibilidad
+    obtener_monitores,
+    obtener_nombres_monitores,
+    obtener_monitor_por_indice,
+)
+from core.browser import (             # re-exportado para compatibilidad
+    PUERTO_DEBUG,
+    CHROME_USER_DATA,
+    CHROME_PATHS,
+    obtener_chrome_exe,
+)
 
 # ── Apariencia de la interfaz ─────────────────────────────────────────
-# Se definen aquí para aplicarlos antes de importar CustomTkinter en main.
 TEMA_APARIENCIA = "dark"
 TEMA_COLOR = "blue"
 
 # ── Archivos del proyecto ─────────────────────────────────────────────
-# Archivo canónico de configuración de la app.
-# Mantenerlo dentro de la carpeta config/ evita duplicidad y deja claro
-# dónde vive la configuración editable de la aplicación.
 ARCHIVO_CONFIG = resource_path(os.path.join("config", "config.json"))
-
-# Nombre clave usado en el llavero del sistema operativo para guardar
-# credenciales de forma segura (no en texto plano).
 KEYRING_APP = "AutoCapturaApp"
 
-# ── Control de subida de nota ─────────────────────────────────────────
-# Clave en config.json para el toggle de auto-submit de nota en HubSpot.
-CLAVE_AUTO_SUBMIT = "auto_submit_nota"
-AUTO_SUBMIT_DEFAULT = True
 
+# ── ToggleConfig: reemplaza las 8 funciones cargar_X/guardar_X ────────
+
+@dataclass
+class ToggleConfig:
+    """Toggle de configuracion persistente con clave, default, cargar y guardar."""
+    clave: str
+    default: Any
+
+    def cargar(self):
+        config = cargar_config()
+        return config.get(self.clave, self.default)
+
+    def guardar(self, valor) -> None:
+        config = cargar_config()
+        config[self.clave] = valor
+        guardar_config(config)
+
+    def __call__(self):
+        """Permite usar toggle() como shortcut para toggle.cargar()."""
+        return self.cargar()
+
+
+# ── Instancias de toggles (reemplazan las 8 funciones repetitivas) ────
+
+toggle_auto_submit = ToggleConfig("auto_submit_nota", True)
+toggle_headless = ToggleConfig("headless", False)
+toggle_chrome_existente = ToggleConfig("chrome_existente", True)
+toggle_destino_subida = ToggleConfig("destino_subida", "AMBOS")
+
+
+# ── Backward-compatible wrappers (las funciones antiguas siguen funcionando) ──
 
 def cargar_auto_submit() -> bool:
-    """Lee de config.json si el auto-submit de nota está activado.
-
-    Returns
-    -------
-    bool : True si la nota debe enviarse automáticamente, False en caso contrario.
-           Por defecto devuelve True.
-    """
-    config = cargar_config()
-    return config.get(CLAVE_AUTO_SUBMIT, AUTO_SUBMIT_DEFAULT)
-
+    return toggle_auto_submit.cargar()
 
 def guardar_auto_submit(valor: bool) -> None:
-    """Persiste el valor del toggle auto-submit en config.json.
+    toggle_auto_submit.guardar(valor)
 
-    Parámetros
-    ----------
-    valor : bool - nuevo estado del toggle.
-    """
-    config = cargar_config()
-    config[CLAVE_AUTO_SUBMIT] = valor
-    guardar_config(config)
+def cargar_headless() -> bool:
+    return toggle_headless.cargar()
 
+def guardar_headless(valor: bool) -> None:
+    toggle_headless.guardar(valor)
 
-# ── Constantes de temporización y reintentos ──────────────────────────
-#
-# Valores globales que usan los módulos de automatización y scraping.
-# Ajusta estos valores si los sitios destino son particularmente lentos
-# o si experimentas timeouts frecuentes.
+def cargar_chrome_existente() -> bool:
+    return toggle_chrome_existente.cargar()
 
-# Timeout general para esperar elementos individuales (segundos).
-TIMEOUT_ELEMENTO = 15
-# Timeout para páginas completas o listas que tardan en cargar.
-TIMEOUT_PAGINA = 30
-# Timeout máximo para confirmación de subida.
-TIMEOUT_CONFIRMACION = 30
-# Número de reintentos para elementos obsoletos (stale elements).
-REINTENTOS_STALE = 3
-# Pausa entre reintentos de stale elements (segundos).
-PAUSA_REINTENTO_STALE = 0.3
-# Pausa breve estándar para animaciones SPA/React/Vue (segundos).
-PAUSA_ANIMACION_SPA = 0.5
+def guardar_chrome_existente(valor: bool) -> None:
+    toggle_chrome_existente.guardar(valor)
+
+def cargar_destino_subida() -> str:
+    return toggle_destino_subida.cargar()
+
+def guardar_destino_subida(valor: str) -> None:
+    toggle_destino_subida.guardar(valor)
 
 
-# ── Sitios destino ────────────────────────────────────────────────────
-#
-# Cada dict describe un sitio: si requiere login, sus URLs y los
-# selectores CSS/XPath de los elementos con los que interactúa Selenium.
-#
-# Validación de selectores:
-#   ✓ #username / #password → selectores por ID estándar.
-#   ✓ #loginBtn             → ID de botón en HubSpot.
-#   ✓ [data-test-id="..."]  → selectores data-test-id (estables frente a
-#                              cambios de clase, típicos en React).
-#   ✓ input[type="file"]    → selector genérico para input file.
-#   ✓ #file-upload / #file-submit → selectores de the-internet.herokuapp.com.
-#   ✓ h3, h1                → selectores de confirmación de subida.
-#
-# Para agregar un sitio nuevo, copia uno de estos bloques y ajusta
-# los valores sin modificar el resto del código.
-SITIOS = [
-    {
-        "nombre": "HUBSPOT",
-        "necesita_login": True,
-        "usar_pagina_actual": True,
-        "url_login": "https://app.hubspot.com/login/",
-        "selector_user": "#username",
-        "selector_pass": "#password",
-        "selector_btn_login": "#loginBtn",
-        # URL base del ticket: se usaba anteriormente para navegar a una URL
-        # fija. Ahora con 'usar_pagina_actual: True' se omite la navegación
-        # y se trabaja directamente con la página de HubSpot que el usuario
-        # tenga abierta en su Chrome de depuración.
-        "url_upload": "https://app.hubspot.com/contacts/TICKET_ID",
-        # ── Selectores específicos para subir captura a nota ──────────
-        # Flujo: Notas → Crear nota → botón adjuntar → Subir → input file → Guardar
-        # Selector para la pestaña "Actividades" (se hace clic primero)
-        "selector_tab_actividades": 'a[data-tab-id="1"]',
-        "selector_tab_actividades_fallback": 'a[data-tab-link="true"]',
-        "selector_tab_notas": '[data-test-id="timeline-tab-filter-notes"]',
-        "selector_btn_crear_nota": 'button[data-selenium-test="create-engagement-note-button"]',
-        "selector_btn_adjuntar": '[data-test-id="select-file-dropdown"]',
-        "selector_btn_subir": '[data-test-id="select-file-dropdown"]',
-        "selector_btn_subir_opcion": 'i18n-string[data-key="customerDataRte.attachmentOptions.upload"]',
-        "selector_input_file": 'input[type="file"]',
-        "selector_nota_editor": '[data-test-id="rte-content"]',
-        "selector_nota_editor_alt": 'div.ProseMirror[contenteditable="true"]',
-        "selector_btn_guardar": '[data-test-id="activity-creator-window-footer-save-button"]',
-        "selector_confirmacion": "h3, h1",
-        "palabras_confirmacion": [
-            "uploaded",
-            "success",
-            "exitoso",
-            "subido",
-            "note",
-            "nota",
-            "guardado",
-        ],
-    },
-    {
-        "nombre": "SUNRUN",
-        "necesita_login": True,
-        "url_login": "https://sunrun.my.site.com/partner/login?locale=us",
-        "selector_user": "#username",
-        "selector_pass": "#password",
-        "selector_btn_login": "#Login",
-        # url_base_upload se usa cuando la URL de subida varía por número
-        # (p. ej. /upload/1, /upload/2…). Si es fija, usa url_upload.
-        "url_base_upload": "https://miejemplo.com/upload",
-        "url_upload": "https://the-internet.herokuapp.com/upload",
-        "selector_input_file": "#file-upload",
-        "selector_submit": "#file-submit",
-        "selector_confirmacion": "h3, h1",
-        "palabras_confirmacion": ["uploaded", "success", "exitoso", "subido"],
-    },
-]
+# ── Backward-compat constants (replaced by ToggleConfig instances) ────
+CLAVE_AUTO_SUBMIT = toggle_auto_submit.clave
+AUTO_SUBMIT_DEFAULT = toggle_auto_submit.default
+CLAVE_HEADLESS = toggle_headless.clave
+HEADLESS_DEFAULT = toggle_headless.default
+CLAVE_CHROME_EXISTENTE = toggle_chrome_existente.clave
+CHROME_EXISTENTE_DEFAULT = toggle_chrome_existente.default
+CLAVE_DESTINO_SUBIDA = toggle_destino_subida.clave
+DESTINO_SUBIDA_DEFAULT = toggle_destino_subida.default
 
 
-# ── Funciones de configuración ────────────────────────────────────────
+# ── Cache de configuracion (evita lecturas repetitivas de disco) ──────
+_config_cache: dict | None = None
+_config_lock = threading.Lock()
+_ultimo_error_config: str | None = None
+
+
+# ── Funciones de configuracion ────────────────────────────────────────
 
 
 def cargar_config() -> dict:
     """
     Lee config.json y devuelve su contenido como diccionario.
 
-    Si el archivo no existe o está corrupto, devuelve un dict vacío
-    para que la app arranque con valores por defecto sin fallar.
+    Si el archivo no existe, devuelve un dict vacío para que la app
+    arranque con valores por defecto sin fallar.
+
+    Si el JSON está corrupto, intenta restaurar desde una copia de
+    respaldo (.bak) antes de devolver un dict vacío, para no perder
+    todos los ajustes del usuario.
+
+    Usa un caché en memoria con thread-lock para evitar lecturas
+    repetitivas de disco.
     """
+    global _config_cache
+    with _config_lock:
+        if _config_cache is not None:
+            return dict(_config_cache)
+    resultado: dict = {}
     try:
         with open(ARCHIVO_CONFIG, "r", encoding="utf-8") as f:
-            return json.load(f)
+            resultado = json.load(f)
     except FileNotFoundError:
         pass
-    except Exception as e:
-        print(f"[✗] Error cargando config desde {ARCHIVO_CONFIG}: {e}")
-    return {}
+    except json.JSONDecodeError:
+        ruta_backup = ARCHIVO_CONFIG + ".bak"
+        try:
+            with open(ruta_backup, "r", encoding="utf-8") as fb:
+                resultado = json.load(fb)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+    except Exception:
+        pass
+    with _config_lock:
+        _config_cache = resultado
+    return dict(resultado)
+
+
+def _invalidar_cache_config() -> None:
+    """Fuerza la próxima llamada a cargar_config() a leer de disco."""
+    global _config_cache
+    with _config_lock:
+        _config_cache = None
+
+
+_ultimo_error_config: str | None = None
+
+
+def _obtener_ultimo_error_config() -> str | None:
+    """Devuelve el último error ocurrido al guardar/cargar config, o None."""
+    return _ultimo_error_config
 
 
 def guardar_config(datos: dict) -> None:
     """
     Escribe el diccionario 'datos' en config.json con indentación legible.
 
-    Se llama cada vez que el usuario cambia el atajo de teclado o la
-    región, para que esos valores persistan en la próxima ejecución.
-    En caso de error de escritura, lo reporta por consola sin lanzar excepción.
+    Estrategia de escritura segura:
+      1. Escribe el JSON en un archivo temporal (.tmp).
+      2. Si existe un config.json previo válido, lo renombra como .bak.
+      3. Renombra el temporal a config.json (atómico en el mismo volumen).
+
+    Usa thread-lock para evitar escrituras concurrentes desde hilos
+    distintos que podrían corromper el archivo.
     """
-    try:
-        os.makedirs(os.path.dirname(ARCHIVO_CONFIG), exist_ok=True)
-        with open(ARCHIVO_CONFIG, "w", encoding="utf-8") as f:
-            json.dump(datos, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"[✗] Error guardando config: {e}")
+    global _ultimo_error_config, _config_cache
+    _ultimo_error_config = None
+    with _config_lock:
+        try:
+            os.makedirs(os.path.dirname(ARCHIVO_CONFIG), exist_ok=True)
+            tmp_path = ARCHIVO_CONFIG + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(datos, f, indent=2, ensure_ascii=False)
+            if os.path.isfile(ARCHIVO_CONFIG):
+                respaldo = ARCHIVO_CONFIG + ".bak"
+                try:
+                    with open(respaldo, "w", encoding="utf-8") as fb:
+                        with open(ARCHIVO_CONFIG, "r", encoding="utf-8") as fo:
+                            fb.write(fo.read())
+                except Exception:
+                    pass
+            os.replace(tmp_path, ARCHIVO_CONFIG)
+            _config_cache = dict(datos)
+        except Exception as e:
+            _ultimo_error_config = str(e)
+            try:
+                if os.path.isfile(ARCHIVO_CONFIG + ".tmp"):
+                    os.unlink(ARCHIVO_CONFIG + ".tmp")
+            except Exception:
+                pass
 
 
 # ── Perfiles de región ────────────────────────────────────────────────
@@ -235,80 +240,3 @@ def guardar_perfiles(perfiles: dict) -> None:
     config = cargar_config()
     config[CLAVE_PERFILES] = perfiles
     guardar_config(config)
-
-
-# ── Funciones de detección de monitores ───────────────────────────────
-
-
-def obtener_monitores() -> list:
-    """
-    Devuelve la lista de monitores detectados por mss.
-
-    El índice 0 es el monitor virtual (todos los monitores combinados).
-    Los índices 1, 2, ... son monitores físicos individuales.
-    Cada monitor es un dict con: left, top, width, height, (is_primary, name, unique_id).
-
-    Returns
-    -------
-    list : lista de dicts de monitores, o lista vacía si no se pudo detectar.
-    """
-    try:
-        import mss
-
-        with mss.MSS() as sct:
-            return sct.monitors
-    except Exception as e:
-        print(f"[✗] Error detectando monitores: {e}")
-        return []
-
-
-from typing import List
-
-
-def obtener_nombres_monitores() -> List[str]:
-    """
-    Devuelve una lista de nombres legibles para mostrar en la UI.
-
-    Formato: "Monitor 1 (principal)", "Monitor 2", "Todos los monitores".
-
-    Returns
-    -------
-    List[str] : nombres legibles para cada monitor detectado.
-    """
-    monitores = obtener_monitores()
-    nombres = []
-    for i, mon in enumerate(monitores):
-        if i == 0:
-            nombres.append("Todos los monitores")
-        elif mon.get("is_primary"):
-            nombre_extra = mon.get("name", "").strip()
-            if nombre_extra:
-                nombres.append(f"Monitor {i} — {nombre_extra} (principal)")
-            else:
-                nombres.append(f"Monitor {i} (principal)")
-        else:
-            nombre_extra = mon.get("name", "").strip()
-            if nombre_extra:
-                nombres.append(f"Monitor {i} — {nombre_extra}")
-            else:
-                nombres.append(f"Monitor {i}")
-    return nombres
-
-
-def obtener_monitor_por_indice(indice: int) -> dict:
-    """
-    Devuelve el dict del monitor en la posición 'indice' de la lista.
-
-    Parámetros
-    ----------
-    indice : int - índice del monitor (0 = virtual, 1 = primer físico, ...)
-
-    Returns
-    -------
-    dict | None : el monitor o None si no existe.
-    """
-    monitores = obtener_monitores()
-    indice = int(indice)
-    if 0 <= indice < len(monitores):
-        return monitores[indice]
-    return None

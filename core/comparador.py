@@ -15,7 +15,7 @@ correspondientes ( api.py y scraping_sunrun.py).
 
 import re
 from rapidfuzz import fuzz
-from data.api import HubSpotAPI, _buscar_fsd_por_id_cliente
+from data.api import HubSpotAPI, buscar_fsd_por_id_cliente
 
 # ══════════════════════════════════════════════════════════════════════
 #  Helpers de normalización
@@ -150,134 +150,132 @@ UMBRAL_SIMILAR = 0.85
 # Se comparan usando _normalizar_telefono() en lugar de _norm() genérico.
 CAMPOS_TELEFONO = {"Telefono", "Telefono Alterno"}
 
-# Agregar a la clase Comparador
+class Comparador:
+    """Encapsula las operaciones de busqueda y comparacion usadas por la UI."""
 
+    def __init__(self, scraper=None):
+        """
+        Args:
+            scraper: instancia de ScraperSunrun para DI en tests.
+                     Si es None, se usa ScraperSunrun() bajo demanda.
+        """
+        self.api = HubSpotAPI()
+        self._scraper = scraper
 
-def buscar_hubspot_por_estrategia(self, criterio, tipo_busqueda):
-    """
-    Envuelve la búsqueda de api.py
-    """
-    return self.api.buscar_contactos_por_criterio(criterio, tipo_busqueda)
+    def _obtener_scraper(self):
+        """Lazy init del scraper Sunrun (evita import en tests sin selenium)."""
+        if self._scraper is not None:
+            return self._scraper
+        from scraping.sunrun import ScraperSunrun
+        self._scraper = ScraperSunrun()
+        return self._scraper
 
+    def buscar_hubspot_por_estrategia(self, criterio, tipo_busqueda):
+        """Envia la busqueda a HubSpotAPI."""
+        return self.api.buscar_contactos_por_criterio(criterio, tipo_busqueda)
 
-def extraer_fsd_desde_candidato(self, candidato_hubspot):
-    """
-    Extrae el FSD de un candidato HubSpot.
+    def extraer_fsd_desde_candidato(self, candidato_hubspot):
+        """
+        Extrae el FSD de un candidato HubSpot.
 
-    Estrategia de búsqueda:
-    1. Si el candidato tiene campo 'fsd' directo → usarlo
-    2. Si tiene 'id_cliente' → buscar FSD en tickets por id_goformz
-    3. Si nada → devolver vacío
-    """
-    if not isinstance(candidato_hubspot, dict):
+        Estrategia:
+        1. Si el candidato tiene campo 'fsd' directo -> usarlo
+        2. Si tiene 'id_cliente' -> buscar FSD en tickets por id_goformz
+        3. Si nada -> devolver vacio
+        """
+        if not isinstance(candidato_hubspot, dict):
+            return ""
+
+        fsd = (
+            candidato_hubspot.get("fsd")
+            or candidato_hubspot.get("fsd__", "")
+            or candidato_hubspot.get("properties", {}).get("fsd__", "")
+            or candidato_hubspot.get("properties", {}).get("fsd_codigo", "")
+        )
+        if fsd:
+            return str(fsd).strip()
+
+        id_cliente = candidato_hubspot.get("id_cliente") or candidato_hubspot.get(
+            "properties", {}
+        ).get("id_de_goformz__contacto_", "")
+
+        if id_cliente and str(id_cliente).strip():
+            try:
+                fsd = buscar_fsd_por_id_cliente(str(id_cliente).strip())
+                if fsd:
+                    return fsd
+            except Exception as e:
+                print(f"[DEBUG] Error buscando FSD por id_cliente={id_cliente}: {e}")
+
         return ""
 
-    # Intentar 1: FSD directo en el candidato
-    fsd = (
-        candidato_hubspot.get("fsd")
-        or candidato_hubspot.get("fsd__", "")
-        or candidato_hubspot.get("properties", {}).get("fsd__", "")
-        or candidato_hubspot.get("properties", {}).get("fsd_codigo", "")
-    )
+    def comparar_con_fsd_automatico(self, candidato_hubspot):
+        """
+        Extrae FSD automaticamente, obtiene datos de HubSpot y Sunrun, y compara.
+        """
+        fsd = self.extraer_fsd_desde_candidato(candidato_hubspot)
 
-    if fsd:
-        return str(fsd).strip()
+        if not fsd:
+            return {"error": "No se pudo extraer FSD del candidato"}
 
-    # Intentar 2: Buscar FSD por id_cliente usando la función probada
-    id_cliente = candidato_hubspot.get("id_cliente") or candidato_hubspot.get(
-        "properties", {}
-    ).get("id_de_goformz__contacto_", "")
+        if not isinstance(candidato_hubspot, dict):
+            return {"error": "Candidato HubSpot invalido."}
 
-    if id_cliente and str(id_cliente).strip():
-        try:
-            # ✅ CORRECCIÓN: Usar _buscar_fsd_por_id_cliente que ya existe
-            # y está diseñada para esto (maneja validación y errores)
-            fsd = _buscar_fsd_por_id_cliente(str(id_cliente).strip())
-            if fsd:
-                return fsd
-        except Exception as e:
-            # Log silencioso, pero no romper
-            print(f"[DEBUG] Error buscando FSD por id_cliente={id_cliente}: {e}")
+        from data.api import extraer_datos_hubspot
 
-    return ""
+        if candidato_hubspot.get("contact_id") and not candidato_hubspot.get("ticket_id"):
+            datos_hs = {
+                "fsd": fsd,
+                "ticket_id": None,
+                "contact_id": candidato_hubspot.get("contact_id"),
+                "nombre": candidato_hubspot.get("nombre", ""),
+                "id_cliente": candidato_hubspot.get("id_cliente", ""),
+                "direccion": candidato_hubspot.get("direccion", ""),
+                "telefono": candidato_hubspot.get("telefono", ""),
+                "telefono_alterno": candidato_hubspot.get("telefono_alterno", ""),
+                "email": candidato_hubspot.get("email", ""),
+                "estado": candidato_hubspot.get("estado", ""),
+                "municipio": candidato_hubspot.get("municipio", ""),
+                "zip": candidato_hubspot.get("zip", ""),
+                "nota": "",
+                "fuente_nombre": "",
+                "fuente_id": "",
+                "error": None,
+            }
+            try:
+                datos_ticket = extraer_datos_hubspot(fsd)
+                if not datos_ticket.get("error"):
+                    for campo in ("telefono_alterno", "nota", "municipio", "estado", "zip"):
+                        if not datos_hs.get(campo) and datos_ticket.get(campo):
+                            datos_hs[campo] = datos_ticket[campo]
+            except Exception:
+                pass
+        else:
+            datos_hs = extraer_datos_hubspot(fsd)
+            if datos_hs.get("error"):
+                return {"error": datos_hs["error"]}
 
+        scraper = self._obtener_scraper()
+        datos_sr = scraper.obtener_datos_por_fsd(fsd)
 
-def comparar_con_fsd_automatico(self, candidato_hubspot):
-    """
-    Versión mejorada de comparar() que extrae FSD automáticamente,
-    obtiene los datos completos de HubSpot y luego busca los datos de Sunrun.
-    """
-    fsd = self.extraer_fsd_desde_candidato(candidato_hubspot)
+        if datos_sr.get("error"):
+            return {"error": f"Sunrun: {datos_sr['error']}"}
 
-    if not fsd:
-        return {"error": "No se pudo extraer FSD del candidato"}
-
-    if not isinstance(candidato_hubspot, dict):
-        return {"error": "Candidato HubSpot inválido."}
-
-    try:
-        from scraping_sunrun import ScraperSunrun
-    except ImportError as e:
-        return {"error": f"No se pudo cargar ScraperSunrun: {e}"}
-
-    from data.api import extraer_datos_hubspot
-
-    # Si el candidato vino de búsqueda por contacto ya tiene los campos
-    # poblados (nombre, direccion, telefono, etc.). Usarlos directamente
-    # evita una segunda búsqueda que puede fallar si el FSD del ticket no
-    # coincide exactamente con el extraído.
-    if candidato_hubspot.get("contact_id") and not candidato_hubspot.get("ticket_id"):
-        # Construir datos_hs desde el candidato que ya tenemos
-        datos_hs = {
-            "fsd": fsd,
-            "ticket_id": None,
-            "contact_id": candidato_hubspot.get("contact_id"),
-            "nombre": candidato_hubspot.get("nombre", ""),
-            "id_cliente": candidato_hubspot.get("id_cliente", ""),
-            "direccion": candidato_hubspot.get("direccion", ""),
-            "telefono": candidato_hubspot.get("telefono", ""),
-            "telefono_alterno": candidato_hubspot.get("telefono_alterno", ""),
-            "email": candidato_hubspot.get("email", ""),
-            "estado": candidato_hubspot.get("estado", ""),
-            "municipio": candidato_hubspot.get("municipio", ""),
-            "zip": candidato_hubspot.get("zip", ""),
-            "nota": "",
-            "fuente_nombre": "",
-            "fuente_id": "",
-            "error": None,
+        resultado = comparar(datos_hs, datos_sr)
+        resultado["fsd"] = fsd
+        resultado["_hubspot_extra"] = {
+            "ticket_id": datos_hs.get("ticket_id", ""),
+            "contact_id": datos_hs.get("contact_id", ""),
         }
-        # Intentar enriquecer con datos del ticket (puede añadir campos que
-        # el contacto no tenía, como nota o telefono_alterno del ticket)
-        try:
-            datos_ticket = extraer_datos_hubspot(fsd)
-            if not datos_ticket.get("error"):
-                # Preferir datos del contacto (ya los tenemos) pero completar
-                # campos vacíos con lo que venga del ticket
-                for campo in ("telefono_alterno", "nota", "municipio", "estado", "zip"):
-                    if not datos_hs.get(campo) and datos_ticket.get(campo):
-                        datos_hs[campo] = datos_ticket[campo]
-        except Exception:
-            pass  # Si falla el enriquecimiento, seguimos con lo que tenemos
-    else:
-        # Búsqueda original por FSD: traer todo desde el ticket
-        datos_hs = extraer_datos_hubspot(fsd)
-        if datos_hs.get("error"):
-            return {"error": datos_hs["error"]}
+        resultado["_sunrun_extra"] = {
+            "dispatch_state": datos_sr.get("dispatch_state", ""),
+            "appointment_date": datos_sr.get("appointment_date", ""),
+            "case_reason": datos_sr.get("case_reason", ""),
+        }
+        return resultado
 
-    scraper = ScraperSunrun()
-    datos_sr = scraper.obtener_datos_por_fsd(fsd)
-
-    if datos_sr.get("error"):
-        return {"error": f"Sunrun: {datos_sr['error']}"}
-
-    resultado = comparar(datos_hs, datos_sr)
-    resultado["fsd"] = fsd
-    resultado["_sunrun_extra"] = {
-        "dispatch_state": datos_sr.get("dispatch_state", ""),
-        "appointment_date": datos_sr.get("appointment_date", ""),
-        "case_reason": datos_sr.get("case_reason", ""),
-    }
-    return resultado
+    def comparar(self, datos_hubspot: dict, datos_sunrun: dict) -> dict:
+        return comparar(datos_hubspot, datos_sunrun)
 
 
 def comparar_campo(campo: str, valor_hs: str, valor_sunrun: str) -> dict:
@@ -513,22 +511,3 @@ def datos_hs_desde_ticket(ticket_dict: dict) -> dict:
     resultado["fuente"] = "HubSpot"
     resultado["error"] = ticket_dict.get("error", None)
     return resultado
-
-
-class Comparador:
-    """Encapsula las operaciones de búsqueda y comparación usadas por la UI."""
-
-    def __init__(self):
-        self.api = HubSpotAPI()
-
-    def buscar_hubspot_por_estrategia(self, criterio, tipo_busqueda):
-        return self.api.buscar_contactos_por_criterio(criterio, tipo_busqueda)
-
-    def extraer_fsd_desde_candidato(self, candidato_hubspot):
-        return extraer_fsd_desde_candidato(self, candidato_hubspot)
-
-    def comparar_con_fsd_automatico(self, candidato_hubspot):
-        return comparar_con_fsd_automatico(self, candidato_hubspot)
-
-    def comparar(self, datos_hubspot: dict, datos_sunrun: dict) -> dict:
-        return comparar(datos_hubspot, datos_sunrun)

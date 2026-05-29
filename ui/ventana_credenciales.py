@@ -51,8 +51,7 @@ class VentanaCredenciales(ctk.CTkToplevel):
         # wait_window() pausa la ejecución hasta que esta ventana se cierre.
         self.wait_window()
         self._config = cargar_config()
-        config = cargar_config()
-        ctk.set_appearance_mode(config.get("tema", "dark"))
+        ctk.set_appearance_mode(self._config.get("tema", "dark"))
 
     def _construir_ui(self):
         """Construye el formulario con un bloque por cada sitio con login."""

@@ -4,14 +4,14 @@ test_buscar_fsd.py — Test mínimo de _buscar_fsd_por_id_cliente
 Copia este archivo a tu proyecto y ejecuta: python test_buscar_fsd.py
 """
 
-from data.api import _buscar_fsd_por_id_cliente
+from data.api import buscar_fsd_por_id_cliente
 
 # Test 1: id_cliente válido (267334 del ejemplo)
 print("=" * 60)
 print("TEST 1: id_cliente='267334'")
 print("=" * 60)
 
-resultado = _buscar_fsd_por_id_cliente("267334")
+resultado = buscar_fsd_por_id_cliente("267334")
 print(f"Resultado: {repr(resultado)}")
 print(f"¿Es vacío? {not resultado}")
 print(f"Tipo: {type(resultado)}")
@@ -21,7 +21,7 @@ print("\n" + "=" * 60)
 print("TEST 2: id_cliente=''")
 print("=" * 60)
 
-resultado = _buscar_fsd_por_id_cliente("")
+resultado = buscar_fsd_por_id_cliente("")
 print(f"Resultado: {repr(resultado)}")
 print(f"¿Es vacío? {not resultado}")
 
@@ -30,7 +30,7 @@ print("\n" + "=" * 60)
 print("TEST 3: id_cliente=None")
 print("=" * 60)
 
-resultado = _buscar_fsd_por_id_cliente(None)
+resultado = buscar_fsd_por_id_cliente(None)
 print(f"Resultado: {repr(resultado)}")
 print(f"¿Es vacío? {not resultado}")
 
@@ -66,7 +66,7 @@ if candidatos:
         print(f"    fsd (antes): {repr(c.get('fsd'))}")
 
         # Intentar extraer FSD
-        fsd = _buscar_fsd_por_id_cliente(c.get("id_cliente", ""))
+        fsd = buscar_fsd_por_id_cliente(c.get("id_cliente", ""))
         print(f"    fsd (después de _buscar_fsd): {repr(fsd)}")
 else:
     print("No se encontraron candidatos")

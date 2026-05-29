@@ -13,11 +13,15 @@ import keyring
 from pathlib import Path
 
 from config.configuracion import KEYRING_APP
+from utils.paths import get_project_root
+
+# ── Directorio base del proyecto (independiente del working directory) ──
+_COOKIES_DIR = get_project_root() / "cookies"
 
 # ── Cookies de sesión ─────────────────────────────────────────────────
 
 
-def guardar_cookies(driver, sitio_nombre: str) -> None:
+def guardar_cookies(driver, sitio_nombre: str, carpeta: Path | None = None) -> None:
     """
     Guarda las cookies actuales del driver en un archivo .pkl.
 
@@ -28,15 +32,17 @@ def guardar_cookies(driver, sitio_nombre: str) -> None:
     ----------
     driver       : instancia activa de Selenium WebDriver.
     sitio_nombre : nombre del sitio (se convierte en nombre de archivo).
+    carpeta      : directorio donde guardar. Por defecto: <raíz>/cookies/
     """
-    Path("cookies").mkdir(exist_ok=True)
-    ruta = f"cookies/{sitio_nombre.replace(' ', '_')}.pkl"
+    dest = carpeta or _COOKIES_DIR
+    dest.mkdir(exist_ok=True)
+    ruta = dest / f"{sitio_nombre.replace(' ', '_')}.pkl"
     with open(ruta, "wb") as f:
         pickle.dump(driver.get_cookies(), f)
     print(f"[cookies] Guardadas en: {ruta}")
 
 
-def cargar_cookies(driver, sitio: dict, url_base: str) -> bool:
+def cargar_cookies(driver, sitio: dict, url_base: str, carpeta: Path | None = None) -> bool:
     """
     Intenta restaurar la sesión inyectando cookies guardadas en el driver.
 
@@ -49,9 +55,11 @@ def cargar_cookies(driver, sitio: dict, url_base: str) -> bool:
     driver   : instancia activa de Selenium WebDriver.
     sitio    : dict del sitio (necesita la clave 'nombre').
     url_base : URL del dominio donde se van a inyectar las cookies.
+    carpeta  : directorio donde leer. Por defecto: <raíz>/cookies/
     """
-    ruta = f"cookies/{sitio['nombre'].replace(' ', '_')}.pkl"
-    if not Path(ruta).exists():
+    dest = carpeta or _COOKIES_DIR
+    ruta = dest / f"{sitio['nombre'].replace(' ', '_')}.pkl"
+    if not ruta.exists():
         print(f"[cookies] No existe archivo: {ruta}")
         return False
 
@@ -63,11 +71,8 @@ def cargar_cookies(driver, sitio: dict, url_base: str) -> bool:
             try:
                 driver.add_cookie(cookie)
             except Exception as e:
-                # Algunas cookies tienen atributos que el driver rechaza;
-                # se omiten sin detener el proceso.
                 print(f"[cookies] Omitida: {cookie.get('name')} — {e}")
 
-    driver.refresh()
     return True
 
 
@@ -81,19 +86,27 @@ def guardar_credenciales(sitio_nombre: str, usuario: str, clave: str) -> None:
     El llavero cifra los valores; nunca se escriben en texto plano en
     ningún archivo del proyecto.
     """
-    keyring.set_password(KEYRING_APP, f"{sitio_nombre}_usuario", usuario)
-    keyring.set_password(KEYRING_APP, f"{sitio_nombre}_clave", clave)
+    try:
+        keyring.set_password(KEYRING_APP, f"{sitio_nombre}_usuario", usuario)
+        keyring.set_password(KEYRING_APP, f"{sitio_nombre}_clave", clave)
+    except Exception as e:
+        print(f"[credenciales] Error guardando en keyring: {e}")
 
 
 def cargar_credenciales(sitio_nombre: str) -> tuple[str, str]:
     """
     Recupera usuario y contraseña desde el llavero del SO.
 
-    Devuelve cadenas vacías si no se encuentran, para que el código
-    llamador pueda verificar con `if not usuario` sin manejar None.
+    Devuelve cadenas vacías si no se encuentran o si el keyring falla,
+    para que el código llamador pueda verificar con `if not usuario`
+    sin manejar None ni excepciones.
     """
-    usuario = keyring.get_password(KEYRING_APP, f"{sitio_nombre}_usuario") or ""
-    clave = keyring.get_password(KEYRING_APP, f"{sitio_nombre}_clave") or ""
+    try:
+        usuario = keyring.get_password(KEYRING_APP, f"{sitio_nombre}_usuario") or ""
+        clave = keyring.get_password(KEYRING_APP, f"{sitio_nombre}_clave") or ""
+    except Exception as e:
+        print(f"[credenciales] Error leyendo de keyring: {e}")
+        usuario, clave = "", ""
     return usuario, clave
 
 

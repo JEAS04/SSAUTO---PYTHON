@@ -95,60 +95,27 @@ class HubSpotPlugin(SitioPlugin):
     SEL_EDITOR_ALT = 'div.ProseMirror[contenteditable="true"]'
     SEL_BTN_GUARDAR = '[data-test-id="activity-creator-window-footer-save-button"]'
 
+    # XPaths de fallback para la pestaña Actividades (orden de intento)
+    XPATH_ACTIVIDADES = [
+        "//a[contains(@data-tab-id,'activity') or contains(@data-tab-id,'1')]",
+        "//a[contains(@href,'activity') and contains(@class,'tab')]",
+        "//a[contains(text(),'Actividades') or contains(text(),'Activities')]",
+        "//button[contains(text(),'Actividades') or contains(text(),'Activities')]",
+        "//*[@role='tab' and (contains(text(),'Actividades') or contains(text(),'Activities'))]",
+        "//a[contains(@aria-label,'Activities') or contains(@aria-label,'Actividades')]",
+    ]
+
+    # XPaths de fallback para el filtro Notas
+    XPATH_NOTAS = [
+        "//button[contains(text(),'Notas') or contains(text(),'Notes')]",
+        "//a[contains(text(),'Notas') or contains(text(),'Notes')]",
+        "//*[contains(@data-test-id,'note') or contains(@data-test-id,'Note')]",
+        "//*[contains(@aria-label,'Note') or contains(@aria-label,'Nota')]",
+        "//span[contains(text(),'Notas') or contains(text(),'Notes')]/..",
+    ]
+
     TIMEOUT = 15
     TIMEOUT_LARGO = 20
-
-    # ── Detección de pestaña ──────────────────────────────────────────
-
-    def _encontrar_pestana_fsd(
-        self, driver, log: Callable, fsd_objetivo: str | None = None
-    ) -> bool:
-        """
-        Búsqueda inteligente de pestaña por FSD en HubSpot.
-
-        Si fsd_objetivo es proporcionado:
-        - Busca en driver.title case-insensitive el FSD
-        - También intenta en URL como fallback
-
-        Si no se proporciona FSD:
-        - Simplemente usa la pestaña activa (compatibilidad con flujo legacy)
-
-        Devuelve True si encontró/cambió a la pestaña correcta.
-        """
-        if not fsd_objetivo:
-            # Modo legacy: usa la pestaña activa
-            return True
-
-        handles = driver.window_handles
-        log(
-            f"  → [HubSpot] Buscando pestaña con FSD: {fsd_objetivo} ({len(handles)} pestaña(s) abierta(s))…"
-        )
-        fsd_lower = fsd_objetivo.lower()  # "fsd-1251275"
-        fsd_sin_guion = fsd_lower.replace("fsd-", "fsd")  # "fsd1251275"
-        fsd_numero = fsd_lower.replace("fsd-", "")  # "1251275"
-
-        for handle in handles:
-            driver.switch_to.window(handle)
-            title = driver.title.lower()
-            url = driver.current_url.lower()
-
-            # El dominio debe ser HubSpot — evita confundir pestañas de otros
-            # sitios (ej: Sunrun) que tengan el mismo FSD en el título.
-            if self.dominio not in url:
-                continue
-
-            # Buscar en título: acepta "FSD-1251275" y "FSD1251275" (sin guion)
-            if fsd_lower in title or fsd_sin_guion in title:
-                log(f"  ✓ [HubSpot] Pestaña encontrada por título: {driver.title}")
-                return True
-
-            # Fallback: buscar número en URL
-            if fsd_numero in url:
-                log(f"  ✓ [HubSpot] Pestaña encontrada por URL: {fsd_objetivo}")
-                return True
-
-        log(f"  ✗ [HubSpot] No se encontró pestaña para FSD: {fsd_objetivo}")
-        return False
 
     # ── Interfaz pública ──────────────────────────────────────────────
 
@@ -213,7 +180,7 @@ class HubSpotPlugin(SitioPlugin):
                 detalle="Abre el ticket de HubSpot en Chrome antes de ejecutar.",
             )
 
-        contexto_activo = self._capturar_contexto_activo(driver)
+        contexto_activo = self._capturar_contexto_activo(driver, fsd_objetivo)
 
         log(f"  → [HubSpot] Iniciando subida: {ruta_abs}")
         esperar_carga(driver)
@@ -221,15 +188,10 @@ class HubSpotPlugin(SitioPlugin):
         try:
             self._validar_contexto_activo(driver, contexto_activo)
             self._paso_actividades(driver, log, contexto_activo)
-            self._validar_contexto_activo(driver, contexto_activo)
             self._paso_notas(driver, log, contexto_activo)
-            self._validar_contexto_activo(driver, contexto_activo)
             self._paso_crear_nota(driver, log, contexto_activo)
-            self._validar_contexto_activo(driver, contexto_activo)
             self._paso_editor(driver, log, contexto_activo)
-            self._validar_contexto_activo(driver, contexto_activo)
             self._paso_adjuntar(driver, log, ruta_abs, contexto_activo)
-            self._validar_contexto_activo(driver, contexto_activo)
             self._paso_esperar_archivo(driver, log, ruta_abs, contexto_activo)
 
             if not auto_submit:
@@ -238,7 +200,6 @@ class HubSpotPlugin(SitioPlugin):
                     exitoso=True, mensaje="Archivo adjunto (guardado manual)"
                 )
 
-            self._validar_contexto_activo(driver, contexto_activo)
             self._paso_guardar(driver, log, contexto_activo)
             return ResultadoSubida(exitoso=True, mensaje="Nota guardada correctamente")
 
@@ -250,32 +211,59 @@ class HubSpotPlugin(SitioPlugin):
     def _espera(self, driver) -> WebDriverWait:
         return WebDriverWait(driver, self.TIMEOUT)
 
-    def _capturar_contexto_activo(self, driver) -> dict:
+    def _es_pagina_registro(self, url: str) -> bool:
+        url = url.lower()
+        return ("/ticket/" in url or "/contact/" in url
+                or "/company/" in url or "/deal/" in url
+                or "/record/" in url or "contacts/" in url)
+
+    def _capturar_contexto_activo(self, driver, fsd_objetivo: str | None = None) -> dict:
         url = driver.current_url.lower()
         if self.dominio not in url:
             raise RuntimeError("La pestaña activa no es HubSpot. Subida cancelada.")
-        ctx = {
-            "handle": driver.current_window_handle,
-            "url": url,
-            "title": driver.title,
-        }
-        self._validar_contexto_activo(driver, ctx)
-        return ctx
+
+        if self._es_pagina_registro(url):
+            ctx = {
+                "handle": driver.current_window_handle,
+                "url": url,
+                "title": driver.title,
+            }
+            self._validar_contexto_activo(driver, ctx)
+            return ctx
+
+        handle_actual = driver.current_window_handle
+        for handle in driver.window_handles:
+            if handle == handle_actual:
+                continue
+            try:
+                driver.switch_to.window(handle)
+                if self._es_pagina_registro(driver.current_url):
+                    ctx = {
+                        "handle": driver.current_window_handle,
+                        "url": driver.current_url.lower(),
+                        "title": driver.title,
+                    }
+                    self._validar_contexto_activo(driver, ctx)
+                    return ctx
+            except Exception:
+                continue
+
+        driver.switch_to.window(handle_actual)
+        raise RuntimeError(
+            "No se encontró ninguna pestaña de un registro (ticket/contacto). "
+            "Abre el ticket de HubSpot en Chrome antes de ejecutar."
+        )
 
     def _validar_contexto_activo(self, driver, ctx: dict) -> None:
         try:
             misma_tab = driver.current_window_handle == ctx["handle"]
             url_ok = self.dominio in driver.current_url.lower()
-            visible = driver.execute_script(
-                "return document.visibilityState === 'visible'"
-            )
-            focused = driver.execute_script("return document.hasFocus()")
         except Exception as e:
             raise RuntimeError(f"No se pudo validar pestaña activa: {e}") from e
 
-        if not misma_tab or not url_ok or not visible or not focused:
+        if not misma_tab or not url_ok:
             raise RuntimeError(
-                "Subida cancelada: cambiaste de pestaña/ventana o HubSpot perdió foco. "
+                "Subida cancelada: cambiaste de pestaña/ventana de HubSpot. "
                 "No se subió información."
             )
 
@@ -289,38 +277,111 @@ class HubSpotPlugin(SitioPlugin):
         elemento.send_keys(ruta_abs)
         self._validar_contexto_activo(driver, ctx)
 
+    @staticmethod
+    def _guardar_dom(driver, nombre: str) -> None:
+        try:
+            ruta = f"debug_dom_hubspot_{nombre}.html"
+            with open(ruta, "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+        except Exception:
+            pass
+
     def _paso_actividades(self, driver, log: Callable, ctx: dict) -> None:
         log("  → [HubSpot] Paso 1/7: Pestaña Actividades…")
-        try:
-            tab = self._espera(driver).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_TAB_ACTIVIDADES))
-            )
-            self._safe_click(driver, tab, ctx)
-            time.sleep(0.5)
-            log("  ✓ [HubSpot] Pestaña Actividades abierta.")
-        except (TimeoutException, NoSuchElementException):
-            log("  · [HubSpot] Selector principal falló, intentando fallback…")
+
+        selectores = [
+            (By.CSS_SELECTOR, self.SEL_TAB_ACTIVIDADES, "CSS primary"),
+            (By.CSS_SELECTOR, self.SEL_TAB_ACTIVIDADES_FB, "CSS fallback"),
+        ] + [(By.XPATH, xp, f"XPath {i+1}") for i, xp in enumerate(self.XPATH_ACTIVIDADES)]
+
+        for by, sel, label in selectores:
             try:
-                xpath_fb = f"//{self.SEL_TAB_ACTIVIDADES_FB}[text()='Actividades']"
-                tab = self._espera(driver).until(
-                    EC.element_to_be_clickable((By.XPATH, xpath_fb))
+                tab = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((by, sel))
                 )
                 self._safe_click(driver, tab, ctx)
-                time.sleep(0.5)
+                log(f"  ✓ [HubSpot] Pestaña Actividades abierta ({label}).")
+                return
+            except (TimeoutException, NoSuchElementException):
+                continue
             except Exception:
-                log("  · [HubSpot] Actividades no encontrado, continuando igual.")
+                continue
+
+        # Fallback JS: buscar por texto visible
+        try:
+            encontrado = driver.execute_script("""
+                var textos = ['Actividades', 'Activities'];
+                var todos = document.querySelectorAll('a, button, [role="tab"]');
+                for (var i = 0; i < todos.length; i++) {
+                    var t = todos[i].textContent.trim();
+                    for (var j = 0; j < textos.length; j++) {
+                        if (t === textos[j] || t.startsWith(textos[j])) {
+                            if (todos[i].offsetParent !== null) {
+                                todos[i].click();
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            """)
+            if encontrado:
+                log("  ✓ [HubSpot] Pestaña Actividades abierta (JS fallback).")
+                return
+        except Exception:
+            pass
+
+        self._guardar_dom(driver, "actividades")
+        log("  · [HubSpot] Actividades no encontrado, continuando igual.")
 
     def _paso_notas(self, driver, log: Callable, ctx: dict) -> None:
         log("  → [HubSpot] Paso 2/7: Pestaña Notas…")
+
+        selectores = [
+            (By.CSS_SELECTOR, self.SEL_TAB_NOTAS, "CSS primary"),
+        ] + [(By.XPATH, xp, f"XPath {i+1}") for i, xp in enumerate(self.XPATH_NOTAS)]
+
+        for by, sel, label in selectores:
+            try:
+                tab = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((by, sel))
+                )
+                self._safe_click(driver, tab, ctx)
+                log(f"  ✓ [HubSpot] Pestaña Notas abierta ({label}).")
+                return
+            except (TimeoutException, NoSuchElementException):
+                continue
+            except Exception:
+                continue
+
+        # Fallback JS: buscar por texto visible
         try:
-            tab = self._espera(driver).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_TAB_NOTAS))
-            )
-            self._safe_click(driver, tab, ctx)
-            time.sleep(0.5)
-            log("  ✓ [HubSpot] Pestaña Notas abierta.")
-        except Exception as e:
-            raise RuntimeError(f"No se pudo abrir pestaña Notas: {e}") from e
+            encontrado = driver.execute_script("""
+                var textos = ['Notas', 'Notes', 'Note', 'Nota'];
+                var todos = document.querySelectorAll('a, button, span, [role="tab"]');
+                for (var i = 0; i < todos.length; i++) {
+                    var t = todos[i].textContent.trim();
+                    for (var j = 0; j < textos.length; j++) {
+                        if (t === textos[j] || t.startsWith(textos[j])) {
+                            if (todos[i].offsetParent !== null) {
+                                todos[i].click();
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            """)
+            if encontrado:
+                log("  ✓ [HubSpot] Pestaña Notas abierta (JS fallback).")
+                return
+        except Exception:
+            pass
+
+        self._guardar_dom(driver, "notas")
+        raise RuntimeError(
+            "No se pudo abrir pestaña Notas. DOM guardado en debug_dom_hubspot_notas.html"
+        )
 
     def _paso_crear_nota(self, driver, log: Callable, ctx: dict) -> None:
         log("  → [HubSpot] Paso 3/7: Crear nota…")
@@ -330,7 +391,6 @@ class HubSpotPlugin(SitioPlugin):
             )
             self._safe_click(driver, btn, ctx)
             esperar_carga(driver, timeout=5)
-            time.sleep(0.5)
             log("  ✓ [HubSpot] Nueva nota creada.")
         except Exception as e:
             raise RuntimeError(f"No se pudo crear nota: {e}") from e
@@ -353,7 +413,6 @@ class HubSpotPlugin(SitioPlugin):
                     EC.element_to_be_clickable((By.CSS_SELECTOR, sel))
                 )
                 self._safe_click(driver, editor, ctx)
-                time.sleep(0.3)
                 self._validar_contexto_activo(driver, ctx)
                 driver.execute_script(
                     """
@@ -368,7 +427,6 @@ class HubSpotPlugin(SitioPlugin):
                     editor,
                 )
                 self._validar_contexto_activo(driver, ctx)
-                time.sleep(0.8)
                 log(f"  ✓ [HubSpot] Editor enfocado ({label}).")
                 editor_ok = True
             except Exception as e:
@@ -384,10 +442,9 @@ class HubSpotPlugin(SitioPlugin):
                 EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_BTN_ADJUNTAR))
             )
             self._safe_click(driver, btn, ctx)
-            WebDriverWait(driver, 10).until(
+            file_input = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_INPUT_FILE))
             )
-            file_input = driver.find_element(By.CSS_SELECTOR, self.SEL_INPUT_FILE)
             self._safe_send_file(driver, file_input, ruta_abs, ctx)
             log(f"  ✓ [HubSpot] Archivo enviado al input.")
         except Exception as e:
@@ -408,7 +465,14 @@ class HubSpotPlugin(SitioPlugin):
         try:
             WebDriverWait(driver, 15).until(
                 lambda d: (self._validar_contexto_activo(d, ctx) is None)
-                and nombre.lower() in d.page_source.lower()
+                and (
+                    d.find_elements(
+                        By.XPATH, f"//*[contains(text(),'{nombre}')]"
+                    )
+                    or d.find_elements(
+                        By.XPATH, f"//*[contains(@title,'{nombre}')]"
+                    )
+                )
             )
             log(f"  ✓ [HubSpot] Archivo '{nombre}' confirmado en página.")
         except TimeoutException:
@@ -435,7 +499,6 @@ class HubSpotPlugin(SitioPlugin):
             btn = WebDriverWait(driver, self.TIMEOUT_LARGO).until(_boton_habilitado)
             log("  ✓ [HubSpot] Botón guardar habilitado.")
             self._safe_click(driver, btn, ctx)
-            time.sleep(1)
             log("  ✓ [HubSpot] Nota guardada.")
         except Exception as e:
             try:

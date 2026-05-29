@@ -1,5 +1,5 @@
 """
-medidor.py — Herramienta visual para seleccionar una región de pantalla.
+core/medidor_code — Herramienta visual para seleccionar una región de pantalla.
 
 Contiene el código del medidor como string (MEDIDOR_CODE) porque se lanza
 en un subproceso separado con `subprocess.Popen([sys.executable, "-c", ...])`.

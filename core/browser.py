@@ -14,22 +14,56 @@ Uso:
 from __future__ import annotations
 
 import logging
+import os
 import time
+from pathlib import Path
 from typing import Callable
 
 from selenium import webdriver
 from subprocess import Popen
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from pathlib import Path
-import socket
-import time
 
 logger = logging.getLogger("ssauto.browser")
 
-# Puerto estándar de Chrome remote debugging
+# ── Constantes de Chrome ───────────────────────────────────────────────
 PUERTO_DEBUG = 9222
 CHROME_USER_DATA = r"C:\chrome_sesion_ssauto"
+CHROME_PATHS = [
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    str(Path.home() / "AppData/Local/Google/Chrome/Application/chrome.exe"),
+]
+
+_chrome_exe_cache: str | None = None
+
+# ── Cache de chromedriver (evita descargarlo dos veces) ────────────────
+_chromedriver_path: str | None = None
+
+
+def _obtener_chromedriver_path() -> str:
+    """Devuelve la ruta al chromedriver, descargandolo solo la primera vez."""
+    global _chromedriver_path
+    if _chromedriver_path is not None and Path(_chromedriver_path).exists():
+        return _chromedriver_path
+    _chromedriver_path = ChromeDriverManager().install()
+    return _chromedriver_path
+
+
+def obtener_chrome_exe() -> str | None:
+    """Devuelve la primera ruta de Chrome que exista en el sistema (cacheada)."""
+    global _chrome_exe_cache
+    if _chrome_exe_cache is not None:
+        return _chrome_exe_cache if os.path.isfile(_chrome_exe_cache) else None
+    for p in CHROME_PATHS:
+        if os.path.isfile(p):
+            _chrome_exe_cache = p
+            return p
+    return None
+
+
+# ── Referencia global al proceso de Chrome lanzado por la app ──────────
+_ultimo_chrome_proc: Popen | None = None
 
 
 class ErrorBrowser(Exception):
@@ -58,24 +92,15 @@ class BrowserFactory:
         """
 
         def puerto_activo_local():
-            try:
-                with socket.create_connection(("127.0.0.1", puerto), timeout=1):
-                    return True
-            except:
-                return False
+            return puerto_activo("127.0.0.1", puerto)
 
         if not puerto_activo_local():
-            chrome_paths = [
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                str(Path.home() / "AppData/Local/Google/Chrome/Application/chrome.exe"),
-            ]
-
-            chrome_path = next((p for p in chrome_paths if Path(p).exists()), None)
+            chrome_path = obtener_chrome_exe()
             if not chrome_path:
                 raise ErrorBrowser(f"Chrome no encontrado en el puerto: {puerto}.")
 
-            Popen(
+            global _ultimo_chrome_proc
+            _ultimo_chrome_proc = Popen(
                 [
                     chrome_path,
                     f"--remote-debugging-port={puerto}",
@@ -85,20 +110,20 @@ class BrowserFactory:
                 ]
             )
 
-            for _ in range(20):
+            for intento in range(20):
                 if puerto_activo_local():
                     break
-                time.sleep(0.5)
+                time.sleep(0.1 + intento * 0.05)  # backoff progresivo
 
         opciones = webdriver.ChromeOptions()
         opciones.add_experimental_option("debuggerAddress", f"127.0.0.1:{puerto}")
 
         try:
             driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
+                service=Service(_obtener_chromedriver_path()),
                 options=opciones,
             )
-            cls._inyectar_antideteccion(driver)
+            _inyectar_antideteccion(driver)
             logger.debug(f"Conectado al Chrome en puerto {puerto}.")
             return driver
         except Exception as e:
@@ -125,10 +150,10 @@ class BrowserFactory:
 
         try:
             driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
+                service=Service(_obtener_chromedriver_path()),
                 options=opciones,
             )
-            cls._inyectar_antideteccion(driver)
+            _inyectar_antideteccion(driver)
             return driver
         except Exception as e:
             raise ErrorBrowser(f"No se pudo abrir Chrome nuevo: {e}") from e
@@ -148,8 +173,8 @@ class BrowserFactory:
 
     # ── Antidetección ─────────────────────────────────────────────────
 
-    @staticmethod
-    def _inyectar_antideteccion(driver: webdriver.Chrome) -> None:
+
+def _inyectar_antideteccion(driver: webdriver.Chrome) -> None:
         """
         Intenta ocultar navigator.webdriver.
 
@@ -202,7 +227,6 @@ def encontrar_pestana(driver, subcadena_url: str, log: Callable | None = None) -
 
 def esperar_carga(driver, timeout: float = 10.0) -> bool:
     """Espera a que document.readyState sea 'complete'."""
-    import time as _time
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.common.exceptions import TimeoutException, WebDriverException
 
@@ -210,7 +234,6 @@ def esperar_carga(driver, timeout: float = 10.0) -> bool:
         WebDriverWait(driver, timeout).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
-        _time.sleep(0.5)
         return True
     except (TimeoutException, WebDriverException):
         return False
@@ -225,40 +248,3 @@ def puerto_activo(host: str = "127.0.0.1", puerto: int = PUERTO_DEBUG) -> bool:
             return True
     except OSError:
         return False
-
-
-def normalizar_fsd(fsd: str | None) -> str | None:
-    """
-    Normaliza el FSD para búsqueda inteligente en pestañas.
-
-    - Si es None, vacío o solo espacios: devuelve None (backward compatibility)
-    - Si es "980124": convierte a "FSD-980124"
-    - Si es "FSD-980124": lo mantiene igual
-    - Case-insensitive: siempre devuelve mayúsculas
-
-    Ejemplos:
-        normalizar_fsd("980124") → "FSD-980124"
-        normalizar_fsd("FSD-980124") → "FSD-980124"
-        normalizar_fsd("fsd-980124") → "FSD-980124"
-        normalizar_fsd("") → None
-        normalizar_fsd(None) → None
-    """
-    if not fsd or not isinstance(fsd, str):
-        return None
-
-    fsd = fsd.strip().upper()
-
-    if not fsd:
-        return None
-
-    # Si ya comienza con "FSD-", devuelve como está
-    if fsd.startswith("FSD-"):
-        return fsd
-
-    # Si es solo números o solo números con guiones, antepone "FSD-"
-    # Solo agregar "FSD-" si es un patrón de números
-    if fsd.replace("-", "").isdigit():
-        return f"FSD-{fsd}"
-
-    # Si tiene otra forma, devolverlo como está (por si el usuario ingresa un formato especial)
-    return fsd

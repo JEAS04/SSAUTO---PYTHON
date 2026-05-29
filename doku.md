@@ -901,3 +901,497 @@ OTRA COSA NOTAS:
 
 "Actúa como un desarrollador frontend experto. Escribe el código HTML y CSS para [describe tu componente, ej: una tarjeta de producto]. El diseño debe verse profesional, minimalista y humano. Sigue estas reglas estrictas:Usa un sistema de espaciado consistente (ej. usando variables CSS para márgenes y rellenos).No uses sombras paralelas (box-shadow) exageradas; usa bordes muy sutiles o espacios en blanco (white space) para la separación.La tipografía debe ser limpia, usando fuentes modernas del sistema (ej. system-ui, -apple-system).El diseño debe ser adaptable (responsive) por naturaleza utilizando Flexbox o Grid, sin depender de alturas fijas.Evita que parezca generado por IA; usa transiciones suaves, colores coherentes y una paleta de colores contenida."
 
+29/05/2026
+
+¡Perdón por la confusión! Déjame explicártelo de forma súper sencilla, porque tienes toda la razón en asustarte si lo ves así, pero no funciona como piensas.
+Tu suscripción NO se va a acabar en un día. El truco es que OpenCode Go te da "dinero de mentira" para gastar en tokens.
+
+¿Cómo funciona realmente el dinero que ves?
+Tú pagas $10 reales al mes de tu bolsillo. A cambio, OpenCode te regala un límite de consumo virtual equivalente a $60 de saldo al mes en peticiones de inteligencia artificial.
+Ese mensaje de $0.03 spent (3 centavos gastados) se va restando de ese regalo de $60 virtuales, no de tus $10 reales.
+
+Los límites reales de tu plan (El sistema de control)
+Para evitar que un usuario gaste todos los $60 virtuales el primer día y sature los servidores, el sistema te pone "candados" de tiempo:
+Límite de 5 horas: Puedes gastar un máximo de $12 virtuales cada 5 horas.
+Límite semanal: Puedes gastar un máximo de $30 virtuales a la vigencia de la semana.
+Límite mensual: Puedes gastar un máximo de $60 virtuales al mes.
+
+Si en un día de trabajo súper intenso te acabas el presupuesto asignado para esas horas, no tienes que pagar más dinero. Lo que sucede es:
+El sistema te frena temporalmente para proteger el servidor.
+Solo debes esperar a que se cumpla el ciclo de tiempo (las 5 horas o la semana) para que tu saldo se vuelva a rellenar automáticamente a tope gratis
+Si te urge seguir programando de inmediato y no quieres esperar, puedes cambiarte a un modelo "Flash" (como DeepSeek V4 Flash), que son prácticamente ilimitados porque consumen casi cero centavos.
+En resumen: Quédate tranquilo. Tus $10 te cubren todo el mes de uso normal. El contador de centavos es solo una métrica para que veas qué tan "caro" o "barato" es el modelo de IA que elegiste.
+
+Jajaja, lo siento de verdad! No era mi intención darte ese susto. 🙏Quédate totalmente tranquilo. Esos centavos que ves en la pantalla son solo el contador interno del programa con sus "monedas del juego". Nadie te va a cobrar de más, ni te vas a quedar sin IA a mitad de la tarde. Tu mes de suscripción está 100% asegurado.Ahora que ya sabemos que tu saldo está a salvo y que todo está bien configurado en tu VS Code, ¿qué te parece si empezamos a tirar código?Si quieres, dime qué tecnología estás usando (Python, JavaScript, React, HTML...) o qué función quieres programar, y ponemos a trabajar a ese asistente para sacarle el jugo a la suscripción.
+
+
+Algunos de los switches no se estaban guardando entonces no estaban persistiendo en el archivo de config.json algunas como:
+
+Modo sin ventana de Chrome ventana_principal.py:506 headless_var False
+
+Usar Chrome ya abierto (puerto 9222) ventana_principal. py: 510 chrome_existente_var True
+
+Destino de subida (HUBSPOT/SUNRUN/AMBOS) ventana_principal.py:475 destino_var "AMBOS"
+
+Búsqueda inteligente por FSD (toggle) ventana_principal.py:536 usar_fsd_var False
+
+Ninguno de estos switches/selectores tiene codigo para guardar su valor en config. json.
+
+Configuración con persistencia ROTA
+
+Último monitor -> Se lee al iniciar (ventana_principal.py:327), pero el codigo que lo guarda esta en _al_cerrar() (ventana_principal.py:1411-1414), un metodo que nunca se llama - no esta vinculado a WM_DELETE_WINDOW ni a ningun protocolo de cierre. Es codigo muerto.
+
+Configuraciones que SI se persisten correctamente
+
+- Tema (oscuro/claro) + config.json["tema"]
+- Atajo de teclado (keybind) + config. json["keybind"]
+- Auto-submit nota (HubSpot) + config. json["auto_submit_nota"]
+- Perfiles de region + config.json["perfiles_region"]
+- Regiones por aplicacion + config. json["regiones_apps"]
+- Monitores por aplicacion + config. json["monitores_apps"]
+- Credenciales OS Keychain (keyring)
+- Plantillas de mensajes + config/plantillas. json
+- Cookies de sesion cookies/ *. pkl
+
+Resumen
+
+3 toggles principales (headless, Chrome existente, destino de subida) y 1 toggle opcional (FSD) no tienen ninguna logica de persistencia. Ademas, la
+seleccion de monitor tiene codigo de guardado que nunca se ejecuta por no estar vinculado al evento de cierre de ventana.
+
+Cambios aplicados. Resumen de lo modificado:
+
+config/configuracion.py - nuevas claves (headless, chrome_existente, destino_subida) con sus helpers cargar _* /guardar _*.
+
+ui/ventana_principal.py - 4 correcciones:
+
+1. headless_var + carga desde config + trace para guardar al cambiar
+2. chrome_existente_var + carga desde config + trace para guardar al cambiar
+3. destino_var carga desde config + guarda en _seleccionar_destino(). Tambien se corrigio que la inicializacion sobreescribia el valor cargado con
+"AMBOS" hardcodeado
+4. ultimo_monitor + se agrego persistencia en _actualizar_info_monitor() (trace existente). El metodo muerto _al_cerrar() fue eliminado
+
+Todas las configuraciones nuevas aparecen ahora en config. json con sus valores por defecto.
+
+README actualizado. Los cambios principales:
+- Estructura de directorios actualizada con la arquitectura modular actual (config/, core/, services/, plugins/, ui/, data/)
+- Nuevas funcionalidades documentadas: comparador HubSpot/Sunrun, generador de mensajes, editor de plantillas
+- Sección de configuración inicial (.env, credenciales)
+- Instrucciones para agregar nuevos plugins
+- Referencias a archivos obsoletos eliminadas (configuracion.py, automatizacion.py, etc.)
+
+
+Es muy común al empezar con agentes de código. Muchas IAs interpretan "revisa" como una tarea de auditoría y te devuelven un informe, pero no hacen cambios.
+
+La clave es ser explícito sobre qué quieres que haga después del análisis.
+
+Por ejemplo, en lugar de:
+
+Revisa que todas las configuraciones y switches persistentes se guarden correctamente.
+
+Prueba:
+
+Revisa todo el proyecto y detecta configuraciones, switches, toggles o preferencias que deberían persistirse. No te limites a generar un informe. Implementa los cambios necesarios en el código para que se guarden y restauren correctamente. Al finalizar, muestra los archivos modificados y explica brevemente qué cambiaste.
+
+O incluso más directo:
+
+Actúa como desarrollador. Analiza el código, identifica configuraciones que no se estén guardando correctamente y corrige el problema. Aplica los cambios directamente en los archivos del proyecto. No quiero solo un diagnóstico; quiero una implementación funcional.
+
+Si usas OpenCode o herramientas similares, suele funcionar bien este flujo:
+
+Análisis
+
+Inspecciona el proyecto y enumera todas las configuraciones que deberían persistirse.
+
+Plan
+
+Propón un plan de cambios concreto.
+
+Implementación
+
+Ahora implementa todos los cambios del plan directamente en el código.
+
+Verificación
+
+Comprueba que cada configuración se carga al iniciar y se guarda al modificarse.
+
+Muchas veces el agente sí puede editar archivos, pero si no le dices explícitamente "implementa", "modifica", "edita los archivos" o "aplica los cambios", se queda en modo consultor y solo genera documentación.
+
+Si me pegas exactamente el prompt que le enviaste y el resumen que te devolvió, puedo ayudarte a convertirlo en un prompt que haga cambios reales en OpenCode.
+
+
+Plan de Modularización y Limpieza — SSAuto
+
+A. Archivos No Utilizados (potencialmente eliminables)
+
+Archivo	            Estado	        Recomendación
+
+data/test.ticket.py	Huérfano, sin imports ni referencias en docs	Eliminar
+version.py	Define __version__ = "0.1.1" pero ningún código lo importa	Eliminar o importarlo desde main.py
+plugins/template_new_site.py	Plantilla boilerplate (por diseño)	Conservar
+
+B. Plan de Modularización (priorizado)
+
+Fase 1 — Alta Prioridad (ganancias rápidas, bajo riesgo)
+1.1 Eliminar SITIOS de config/configuracion.py:151-206
+- Código muerto. Los selectores ya viven en plugins/hubspot.py y plugins/sunrun.py vía SitioPlugin.
+- Revisar si aún hay referencias a SITIOS y migrarlas a PluginRegistry.
+1.2 Unificar normalización de FSD en utils/fsd.py
+- Fusionar normalizar_fsd() (core/browser.py:230), _solo_digitos() (scraping_sunrun.py:180), _fsd_display() (scraping_sunrun.py:192).
+- Único punto de verdad para transformaciones de FSD.
+1.3 Eliminar código duplicado del medidor en ventana_principal.py
+- _medir_region_app() (línea 927) y _lanzar_medidor() (línea 1173) son ~90% idénticos.
+- Extraer a core/medidor_runner.py un MedidorRunner con el subprocess.Popen + parsing.
+1.4 Eliminar _proceso_comparacion() duplicado en ventana_comparacion.py:405-438
+- Ya existe Comparador.comparar_con_fsd_automatico() (core/comparador.py) que hace lo mismo.
+- Reemplazar con llamada al comparador existente.
+1.5 Consolidar rutas de Chrome en un solo lugar
+- core/browser.py:69-71 y ui/ventana_principal.py:1290-1291 duplican las rutas.
+- Mover a config/configuracion.py como constantes CHROME_PATHS.
+1.6 Eliminar puerto_activo_local() duplicada en core/browser.py:60-65
+- Es idéntica a puerto_activo() a nivel módulo (línea 219). Usar la de módulo.
+Fase 2 — Media Prioridad (mejora estructural)
+2.1 Dividir ui/ventana_principal.py (1429 líneas → ~600 líneas)
+Extraer a archivos nuevos:
+Componente	Líneas	Archivo nuevo
+Panel de apps de captura	648-1014 (~366)	ui/paneles/panel_apps.py
+Panel de perfiles de región	235-325, 388-435 (~137)	ui/paneles/panel_regiones.py
+Panel de selección de monitor	326-377	ui/paneles/panel_monitor.py
+Selector de destino (HubSpot/Sunrun/Ambos)	487-646 (~159)	ui/paneles/panel_destino.py
+Widget de log	1145-1169 + 144-165	ui/widgets/log_widget.py
+Selector de keybind	1312-1351	ui/widgets/keybind_widget.py
+2.2 Dividir ui/ventana_comparacion.py (1006 líneas → ~400 líneas)
+Extraer:
+Componente	Líneas	Archivo nuevo
+Constantes de tema/comparación	30-98	ui/comparacion/tema.py
+Panel de búsqueda	215-360, 476-538 (~207)	ui/comparacion/panel_busqueda.py
+Tabla de candidatos	568-618	ui/comparacion/tabla_candidatos.py
+Renderer de resultados	659-940 (~280)	ui/comparacion/renderer.py
+Panel de info extra de Sunrun	709-819	ui/comparacion/panel_sunrun_extra.py
+2.3 Mover funciones de monitores fuera de config/configuracion.py
+- obtener_monitores(), obtener_nombres_monitores(), obtener_monitor_por_indice() (líneas 288-359) son utilidades de sistema, no configuración.
+- Mover a core/monitors.py.
+2.4 Dividir data/api.py (710 líneas → módulos especializados)
+Módulo nuevo	Contenido
+data/hubspot_constants.py	Constantes de propiedades (líneas 32-90)
+data/hubspot_searches.py	Funciones _buscar_* (líneas 216-490)
+data/hubspot_extractor.py	_parsear_asunto(), extraer_datos_hubspot()
+data/hubspot_client.py	HubSpotAPI + inicialización
+2.5 Crear utils/ con funciones compartidas
+Función	Origen	Destino
+_oscurecer(color_hex, factor)	ui/ventana_principal.py:1017	utils/colors.py
+normalizar_fsd() + _solo_digitos() + _fsd_display()	browser.py + scraping_sunrun.py	utils/fsd.py
+_normalizar_telefono() + NANP	core/comparador.py:120 + ventana_generador_mensajes.py:76	utils/phone.py
+_norm() + _vacio()	core/comparador.py:25,115	utils/text.py
+resource_path()	config/configuracion.py:16	utils/paths.py
+_fuente_existe()	ui/ventana_principal.py:1075	utils/fonts.py
+_keybind_legible()	ui/ventana_principal.py:1078	utils/keys.py
+_calcular_ui_scale() + _r() + _fs()	ui/ventana_principal.py:189-199	utils/ui_scale.py
+DISPATCH_STATES	ui/ventana_comparacion.py:72-98	config/ (es lógica de negocio, no UI)
+Fase 3 — Baja Prioridad (limpieza de largo plazo)
+3.1 Dividir scraping_sunrun.py (1020 líneas)
+- scraping/sunrun_selectors.py — selectores (líneas 56-172)
+- scraping/sunrun_search.py — _buscar_en_lista() + _buscar_desde_sunrun() unificadas
+- scraping/sunrun_extractor.py — _extraer_campo() + _extraer_detalle()
+- scraping/scraper.py — clase ScraperSunrun
+3.2 Unificar _buscar_en_lista() y _buscar_desde_sunrun() (80% idénticas)
+- En scraping_sunrun.py:334-502 y :506-595. Solo difieren en navegación inicial.
+- Unificar con un flag navegar_primero: bool.
+3.3 Crear ConfigAccessor genérico para eliminar código repetido en configuracion.py
+- 4 pares getter/setter (auto_submit, headless, chrome_existente, destino_subida) siguen el mismo patrón.
+- Reemplazar ~60 líneas con una fábrica _make_toggle_accessor(clave, default).
+3.4 Eliminar imports privados
+- core/comparador.py:18 y data/buscador.py:10 importan _buscar_fsd_por_id_cliente (función privada de data/api.py).
+- Exponer vía método público en HubSpotAPI.
+C. Acoplamientos Problemáticos
+Desde	Hacia	Problema	Solución
+core/comparador.py	data/api.py	Importa función privada _buscar_fsd_por_id_cliente	Método público en HubSpotAPI
+data/buscador.py	data/api.py	Mismo import privado	Misma solución
+ui/ventana_comparacion.py	scraping_sunrun.py	Usa ScraperSunrun directamente en vez de pasar por Comparador	Usar Comparador.comparar_con_fsd_automatico()
+config/configuracion.py	mss	Funciones de monitores viven en módulo de config	Mover a core/monitors.py
+D. Resumen del Plan
+Fase	Tareas	Archivos afectados	Nuevos archivos
+Fase 1 (alta)	Eliminar código muerto, unificar duplicados, consolidar config	7	1 (utils/fsd.py)
+Fase 2 (media)	Dividir ventanas grandes, crear utils/, mover monitores	10	~18
+Fase 3 (baja)	Dividir scraper, unificar búsquedas, limpiar imports privados	4	4
+¿Quieres que proceda con alguna fase en particular o ajustar el plan?
+
+
+Fase 1 completada. Resumen de cambios:
+1.1 — Eliminada la lista SITIOS muerta de config/configuracion.py (56 líneas)
+- main.py ahora construye la lista de sitios desde PluginRegistry.con_login()
+1.2 — Creado utils/fsd.py con las 3 funciones de normalización FSD
+- solo_digitos(), fsd_display(), normalizar_fsd() unificadas en un solo módulo
+- scraping_sunrun.py importa desde utils.fsd
+- core/browser.py re-exporta normalizar_fsd para compatibilidad con sesion_service.py
+1.3 — Creado core/medidor_runner.py
+- ejecutar_medidor(monitor_idx) centraliza la lógica del subproceso del medidor
+- _lanzar_medidor() pasó de ~28 líneas a ~12
+- _medir_region_app() pasó de ~87 líneas a ~46
+- Eliminados imports innecesarios (subprocess, sys, MEDIDOR_CODE) de ventana_principal.py
+1.4 — Eliminadas 3 funciones muertas de ventana_comparacion.py (~85 líneas)
+- _lanzar_comparacion(), _proceso_comparacion(), _obtener_hubspot() — todas referenciaban self._fsd_var que ya no existe
+- Eliminados imports huérfanos: ScraperSunrun, messagebox, threading, datos_hs_desde_ticket
+1.5 — Consolidados CHROME_PATHS, PUERTO_DEBUG, CHROME_USER_DATA en config/configuracion.py
+- core/browser.py y ui/ventana_principal.py importan desde config
+1.6 — Eliminada puerto_activo_local() duplicada en core/browser.py
+- Ahora delega en la función puerto_activo() a nivel módulo
+- Eliminado import socket huérfano, corregido import time duplicado
+- Movido from typing import List al inicio de config/configuracion.py
+
+
+Fase 2 completada. Resumen:
+Nuevos módulos (8 archivos)
+
+Archivo                                    Contenido                                                    Origen
+core/monitors.py	obtener_monitores(), obtener_nombres_monitores(), obtener_monitor_por_indice()	config/configuracion.py
+utils/colors.py	                    oscurecer()	                                         ui/ventana_principal.py:_oscurecer
+utils/paths.py	resource_path()	config/configuracion.py
+ui/comparacion/tema.py	COLORES_ESTADO, ETIQUETAS_ESTADO, DISPATCH_STATES	ui/ventana_comparacion.py
+ui/widgets/log_widget.py	LogWidget (CTkTextbox con tags + .log() y .clear())	ui/ventana_principal.py
+data/hubspot_constants.py	TICKET_PROPS, CONTACT_PROPS, SEARCH_*_FIELDS, etc.	data/api.py
+
+Archivos existentes reducidos
+Archivo	Antes	Después	Reducción
+config/configuracion.py	359 líneas	~185 líneas	-174
+ui/ventana_principal.py	1429 líneas	~1340 líneas	-89
+ui/ventana_comparacion.py	1006 → 918 líneas (ya en fase 1)	~845 líneas	-73
+data/api.py	710 líneas	~630 líneas	-80
+
+Backward compatibilidad
+- config.configuracion.py re-exporta obtener_monitores, obtener_nombres_monitores, obtener_monitor_por_indice y resource_path — ningún import externo se rompe.
+- core/browser.py re-exporta normalizar_fsd desde utils.fsd — sesion_service.py y plugins no cambian.
+
+
+
+Fase 3 completada. Resumen de las 3 fases:
+3.1 — Selectores de Sunrun extraídos a scraping/sunrun_selectors.py
+- Usa PATRON_CAMPO como plantilla reutilizable en vez de repetir el mismo XPath 12 veces
+- scraping_sunrun.py: -118 líneas
+3.2 — _buscar_en_lista() y _buscar_desde_sunrun() unificadas
+- Nueva _buscar_con_barra_global() con la lógica compartida (dropdown → ENTER → resultados)
+- _buscar_en_lista() ahora solo navega a la lista + llama al core + fallback de tabla
+- _buscar_desde_sunrun() es una línea que delega
+- scraping_sunrun.py: -170 líneas
+3.3 — Toggle accessors simplificados en config/configuracion.py
+- _toggle_cargar(clave, default) y _toggle_guardar(clave, valor) como helpers compartidos
+- 4 pares getter/setter reducidos a llamadas de una línea
+3.4 — _buscar_fsd_por_id_cliente → buscar_fsd_por_id_cliente (público)
+- Actualizados todos los imports en core/comparador.py, data/buscador.py, test/test_*.py
+Reducción total por archivo (antes → después)
+Archivo	Original	Final	Reducción
+scraping_sunrun.py	1020	679	-341 (-33%)
+config/configuracion.py	359	128	-231 (-64%)
+ui/ventana_principal.py	1429	1191	-238 (-17%)
+ui/ventana_comparacion.py	1006	697	-309 (-31%)
+data/api.py	710	502	-208 (-29%)
+core/browser.py	264	172	-92 (-35%)
+
+Lo que se hizo fue:
+Fase 1 — Eliminar código muerto y unificar duplicados
+- SITIOS eliminado de config/configuracion.py (-56 líneas)
+- utils/fsd.py creado con solo_digitos, fsd_display, normalizar_fsd
+- core/medidor_runner.py creado con ejecutar_medidor() — elimina duplicación en ventana_principal.py
+- 3 métodos muertos eliminados de ventana_comparacion.py (usaban self._fsd_var inexistente)
+- CHROME_PATHS, PUERTO_DEBUG, CHROME_USER_DATA consolidados en config
+- puerto_activo_local() eliminada de browser.py, ahora usa la de módulo
+Fase 2 — Nuevos módulos (8 archivos)
+- core/monitors.py — funciones de monitores movidas desde config
+- utils/colors.py — oscurecer() desde ventana_principal.py
+- utils/paths.py — resource_path() desde config
+- ui/comparacion/tema.py — COLORES_ESTADO, DISPATCH_STATES desde ventana_comparacion.py
+- ui/widgets/log_widget.py — LogWidget desde ventana_principal.py
+- data/hubspot_constants.py — constantes de propiedades HubSpot desde data/api.py
+Fase 3 — Refactorización profunda
+- scraping/sunrun_selectors.py — selectores extraídos con PATRON_CAMPO reutilizable
+- _buscar_con_barra_global() unifica _buscar_en_lista + _buscar_desde_sunrun (-170 líneas)
+- _toggle_cargar/_toggle_guardar reemplazan 4 pares getter/setter repetidos en config
+- _buscar_fsd_por_id_cliente renombrado a buscar_fsd_por_id_cliente (público)
+Resultado neto: 1419 líneas eliminadas de los 6 archivos principales (-29%).
+
+Cambios aplicados en ui/ventana_principal.py:
+Nuevo helper _crear_grupo() (línea ~1009) — crea un CTkFrame con borde sutil, título tenue en la esquina superior, y devuelve el interior para empaquetar controles.
+_crear_opciones() refactorizado en 4 sub-grupos:
+- Destino — label "Subir a:" + botones compactos (width=80)
+- Comportamiento — 3 switches verticales: headless, Chrome existente (+ botón "Abrir" a la derecha), auto-submit
+- Búsqueda — toggle FSD + entrada width=220 + botón "Limpiar"
+- Atajo de teclado — entrada width=220 + "Aplicar" + label de estado
+Eliminados los 7 _separador(), espaciado unificado con pady=2 entre filas y pady=(0, 8) entre grupos. Las entradas de texto tienen ancho fijo (220px) en vez de estirarse a todo el ancho de ventana.
+
+Cambios aplicados:
+Nuevo helper _tarjeta() — similar a _crear_grupo() pero devuelve (frame, interior) para posicionar la tarjeta vía grid.
+Layout rediseñado en 2 columnas centradas:
+- wrap con 3 columnas: spacers laterales (weight=1) + contenido centrado (weight=0)
+- 4 tarjetas con ancho fijo _r(420, 460, 520) y pack_propagate(False)
+┌────────────────── Destino ─────┬─── Comportamiento ──────────────────┐
+│  Subir a: [HS] [SR] [AMBOS]    │  [ ] Modo sin ventana               │
+│                                │  [ ] Chrome ya abierto  [Abrir Chr] │
+│                                │  [ ] Auto-submit nota               │
+├─────────────── Búsqueda ───────┼────────── Herramientas ─────────────┤
+│  [ ] Búsqueda inteligente FSD  │  Atajo: [_Ctrl+Enter_] [Aplicar]    │
+│  FSD: [____________] [Limpiar] │  Combinación activa: Ctrl+Enter     │
+└────────────────────────────────┴─────────────────────────────────────┘
+- Botones de destino más compactos (width=72), botón Chrome acortado a "Abrir Chrome" (width=110)
+- Entradas FSD y Atajo usan fill="x", expand=True dentro de su tarjeta (no se estiran más allá del ancho fijo de la tarjeta)
+- Switches usan pack(anchor="w") sin expandirse innecesariamente
+
+
+Refactorización completa de ui/ventana_principal.py (1372 → 1098 líneas, -20%).
+Cambios realizados
+Arquitectura de layout:
+- _seccion() ahora usa ancho fijo (_section_w = _r(880, 980, 1120)) con pack_propagate(False) y sticky="n" para mantener el contenido centrado.
+- _frame_scroll tiene 3 columnas: spacers laterales (weight=1) + contenido centrado (col 1). Todo el contenido se ancla en columna 1 sin estirarse.
+Secciones fusionadas:
+- _crear_panel_captura() — unifica perfiles, monitor y coordenadas. Perfiles/Monitor en 2 columnas lado a lado (columna fija 460px c/u → caben perfecto en ~980px total). Coordenadas con entradas de ancho 80px. Botones "Medir" + "Capturar y subir" en fila compartida.
+- _crear_panel_destino() — unifica sitios status + botones de destino. Izquierda: lista de sesiones + Credenciales Renovar. Derecha: "Subir a:" + botones de plugin.
+- _crear_opciones() — eliminada la tarjeta "Destino" (movida arriba). 3 tarjetas en 2 columnas: Comportamiento | Búsqueda / Herramientas (sola).
+- _crear_panel_apps() — 2-columnas grid con tarjetas compactas (botón + dropdown + gear en cada una). Eliminada la etiqueta de instrucción redundante.
+Código muerto eliminado:
+- _fila_toggle(), _crear_grupo(), _separador() — ya no se usaban.
+- Bloque comentado de ~70 líneas en _crear_panel_apps (código viejo).
+- colspan eliminado de _seccion().
+Controles con anchos limitados:
+- OptionMenu de perfil: width=150, de monitor: width=190
+- Entradas de coordenadas: width=80 (compactas, no se estiran)
+- Botones de destino: width=72
+- Tarjetas de opciones: width=_r(420, 470, 540)
+
+
+
+TESTS:
+Suite de tests implementada — 273 tests, 100% pass
+Estructura de archivos
+tests/
+├── __init__.py
+├── conftest.py              # Fixtures compartidos (temp dirs, mocks, datos de prueba)
+├── test_configuracion.py    # 67 tests — Persistencia config.json (todas las claves)
+├── test_credenciales.py     # 14 tests — Keyring (guardar/cargar/borrar credenciales)
+├── test_cookies.py          #  8 tests — Pickle de cookies (guardar/cargar/round-trip)
+├── test_plantillas.py       # 17 tests — Persistencia plantillas.json (CRUD)
+├── test_base_plugin.py      # 17 tests — DataClasses (RegionCaptura, ResultadoSubida, ContextoSubida) + ABC SitioPlugin
+├── test_plugin_registry.py  # 25 tests — Registro de plugins (registrar, obtener, filtrar, limpiar)
+├── test_fsd.py              # 27 tests — Normalización FSD (solo_digitos, fsd_display, normalizar_fsd)
+├── test_colors.py           # 10 tests — Utilidad oscurecer()
+├── test_paths.py            #  5 tests — Utilidad resource_path()
+├── test_comparador.py       # 56 tests — Motor de comparación (norm, vacio, telefono, nombres, comparar_campo, comparar)
+├── test_apps_captura.py     # 12 tests — Definiciones de APPS_CAPTURA (estructura, consistencia)
+└── test_integration.py      # 15 tests — Flujos completos de guardado/carga + auditoría UI
+Cobertura por área funcional
+Área	Cobertura	Detalle
+config.json	tema, ultimo_monitor, regiones_apps, monitores_apps, perfiles_region, keybind, headless, chrome_existente, destino_subida, auto_submit_nota	Cada clave con round-trip, defaults, no-sobreescritura
+Perfiles	CRUD completo, monitor_index opcional, nombres Unicode	@93-95%
+Credenciales (keyring)	guardar, cargar, borrar, sitios múltiples, caracteres especiales	@100%
+Cookies (pickle)	guardar, cargar, archivo inexistente, cookies con error individual	@100%
+Plantillas	defaults, CRUD, categorías, archivo corrupto, Unicode	@95%
+Base plugin	RegionCaptura, ResultadoSubida, ContextoSubida, SitioPlugin ABC	@100%
+Plugin registry	registrar, desregistrar, obtener, filtrar, con_login, edge cases	@100%
+FSD	solo_digitos, fsd_display, normalizar_fsd, round-trips	@100%
+Colors	oscurecer con factores, errores, formato hex	@100%
+Paths	resource_path, PyInstaller, rutas absolutas	@100%
+Comparador	_norm, _vacio, _normalizar_telefono, _comparar_nombres, comparar_campo, comparar, datos_hs_desde_ticket	@95%
+Apps captura	estructura, unicidad, colores, regiones válidas	@100%
+Integración	round-trip completo, reinicio simulado, auditoría UI	@100%
+Funcionalidades NO cubiertas (con razón)
+Funcionalidad	Motivo
+ScraperSunrun.obtener_datos_por_fsd()	Requiere Selenium + navegador real (Sunrun Salesforce)
+HubSpotAPI.buscar_contactos_por_criterio()	Requiere API token real de HubSpot
+extraer_datos_hubspot()	Requiere API HubSpot + token válido
+SesionService.ejecutar_subida()	Orquesta browser + captura + plugins (integración pesada)
+CapturaService.capturar()	Requiere mss + monitores reales
+BrowserFactory	Requiere ChromeDriver + navegador real
+ventana_principal.py (UI completa)	Depende de CustomTkinter + threading + GUI
+medidor_runner.py	Subproceso con GUI (medidor.py)
+Comando para ejecutar la suite
+python -m pytest tests/ -v
+
+
+
+Dos cambios aplicados:
+Problema de visibilidad: El pack_propagate(False) forzaba a todas las secciones a un ancho fijo de 980px, pero el contenido de las tarjetas de apps se solapaba o quedaba fuera. Se eliminó esa restricción del método _seccion().
+Nueva estrategia de centrado:
+- La columna 1 de _frame_scroll ahora usa minsize=_r(880, 980, 1120) para un ancho mínimo, sin pack_propagate.
+- Las secciones usan sticky="ew" y se expanden naturalmente según su contenido.
+- Las columnas 0 y 2 (weight=1) absorben el espacio sobrante en pantallas anchas, manteniendo el contenido centrado.
+- Las tarjetas de apps se distribuyen en 2 columnas con grid_columnconfigure((0, 1), weight=1, uniform="app_col") — cada una ocupa el 50% del ancho disponible.
+
+
+AGENTS.md creado con 55 líneas de alta densidad. Cubre:
+- Comandos exactos (python main.py, pytest tests/ -v, smoke test)
+- Entorno Windows-only + requisito .env
+- Arquitectura de plugins y entry point
+- Layout de UI: las 3 columnas del scroll frame con pesos, el problema de self.iconify() vs self.iconify_window(), la regla de no usar pack(side="left"/side="right") para filas de 2 columnas
+- Tabla de secciones → builders → widgets clave
+- Ubicación actual del FSD (en _crear_panel_apps, no en _crear_opciones)
+- Mapa de los módulos creados durante la modularización (fsd, colors, paths, monitors, medidor_runner, log_widget, tema, hubspot_constants, sunrun_selectors)
+- APIs, plugins, services y config
+
+
+#	Archivo	Problema	Solución
+1	config/configuracion.py	JSON corrupto → pérdida total de config	Backup .bak automático; restore desde backup si el principal falla
+2	config/configuracion.py	guardar_config falla sin feedback	Escritura atómica (.tmp → replace); respaldo .bak automático
+3	ui/ventana_principal.py	Doble clic lanza múltiples procesos solapados	Flag _proceso_en_curso en _ejecutar, _ejecutar_app, _medir_region_app
+4	ui/ventana_principal.py	_proceso ignora monitor seleccionado	Pasa monitor_idx a CapturaService.capturar(region, monitor=...)
+5	core/medidor_runner.py	communicate() sin timeout → bloqueo perpetuo	Timeout 60s + proc.kill() si expira
+6	config/credenciales.py	keyring sin try/except	try/except en guardar_credenciales y cargar_credenciales
+7	config/credenciales.py + utils/paths.py	Cookies usan paths relativos (dependen del CWD)	get_project_root() determinista + carpeta opcional en guardar/cargar
+8	data/api.py	ACCESS_TOKEN vacío sin validación	Warning al inicio + _requiere_token() en cada call site
+9	ui/ventana_principal.py	_medir_region_app sin finally → botones bloqueados	try/except/finally con _proceso_en_curso = False garantizado
+10	ui/ventana_principal.py	Doble cargar_config() en __init__	Una sola carga + self._config sincronizado con disco
+11	core/browser.py	Chrome lanzado como huérfano sin referencia	_ultimo_chrome_proc global para referencia del Popen
+12	plugins/sunrun.py	#password hardcodeado; _clic_done falla silenciosa	Selectores como atributos de clase (SEL_USER, SEL_PASS, SEL_BTN_LOGIN); _clic_done retorna bool
+
+
+
+
+Se corrigieron 18 bugs (race conditions, excepciones no manejadas, estados inconsistentes y problemas de persistencia) y se implementaron 14 optimizaciones de rendimiento en 10 archivos. En la primera fase se añadió backup automático de config.json, escritura atómica con lock anti-race-condition, flag _proceso_en_curso para evitar procesos solapados, timeout al medidor, try/except en keyring, paths absolutos para cookies (con carpeta inyectable para tests), validación del token HubSpot con fallo informativo en vez de None silencioso, y limpieza de finally faltantes. En la segunda fase se reemplazaron ~15s de time.sleep() ciegos por WebDriverWait condicionales en Sunrun y HubSpot (~11s en scraper + 3.6s en plugin), se eliminó el page_source en polling (ahorro de 100MB por upload), se cachearon cargar_config, obtener_monitores y obtener_chrome_exe (reduciendo ~17 lecturas de disco y 4 queries de display por sesión), y se eliminaron el driver.refresh() redundante, el sleep(0.5) post-readyState y los send_keys por carácter. Los 273 tests pasan sin regresiones.
+
+Analiza el flujo actual donde se realiza la búsqueda mediante FSD y posteriormente se ejecuta el proceso completo de web scraping.
+
+Quiero reutilizar únicamente la lógica de búsqueda FSD desde el input ubicado en `ventana_principal.py`.
+
+Objetivo:
+
+* Cuando el usuario introduzca un FSD en la ventana principal y ejecute la acción correspondiente, debe realizarse exactamente la misma búsqueda FSD que utiliza actualmente el módulo de scraping.
+* El flujo debe detenerse inmediatamente después de obtener los resultados de la búsqueda.
+* No debe ejecutarse ninguna fase posterior del proceso:
+
+  * No iniciar scraping.
+  * No abrir páginas adicionales.
+  * No extraer datos.
+  * No procesar resultados.
+  * No disparar automatizaciones posteriores.
+
+Requisitos:
+
+* Reutilizar el código existente de búsqueda FSD siempre que sea posible.
+* Evitar duplicar lógica.
+* Separar claramente la búsqueda FSD de la fase de scraping si actualmente están acopladas.
+* Crear una función o método reutilizable que permita ejecutar únicamente la búsqueda.
+* Conectar dicha función al input de `ventana_principal.py`.
+* Mantener intacto el comportamiento actual del flujo completo de scraping.
+
+Al finalizar:
+
+* Implementa los cambios directamente.
+* Indica qué archivos fueron modificados.
+* Explica cómo quedó separado el flujo "búsqueda FSD" del flujo "scraping completo".
+
+
+Se reemplazó el cliente HubSpot singleton a nivel módulo por _get_client() lazy con inyección de dependencias en HubSpotAPI(client=None), moviendo todas las funciones de búsqueda como métodos de clase con logging en vez de print. Se eliminó la duplicación del 90% entre _proceso y _proceso_app extrayendo _subir_a_destinos(ruta, ui, prefix). Se partió SesionService (8 responsabilidades, solo classmethods) en DriverProvider, SessionManager y SesionService instanciable con DI. Se extrajeron 3 widgets de _crear_panel_captura (CoordinateInputsWidget, MonitorSelectorWidget, ProfileManagerWidget) reduciéndolo de 156 a 54 líneas. Se unificó _encontrar_pestana_fsd en SitioPlugin base eliminando 111 líneas duplicadas entre HubSpot y Sunrun. Se reemplazaron 8 funciones toggle repetitivas por ToggleConfig dataclass con 4 instancias, se movieron constantes Chrome a core/browser.py, se eliminaron 6 constantes de timing muertas, y se partió _clic_resultado (127 líneas) en _clic_desde_resultados_globales + _clic_desde_otra_pagina y _extraer_detalle extrayendo _extraer_seccion_direccion (74 líneas). Se cacheó el path de chromedriver para evitar doble descarga, se eliminaron las 3 funciones huérfanas con self de comparador.py moviéndolas a Comparador con _obtener_scraper() lazy para DI del scraper, se limpiaron re-exports de config y browser actualizando imports a módulos canónicos, se consolidó la lógica de colores de dispatch state en info_dispatch_state() en tema.py eliminando 25 líneas duplicadas en ventana_comparacion.py, se bajó _inyectar_antideteccion a función de módulo, y se extrajeron _mostrar_input_oculto/_restaurar_input_oculto como helpers estáticos en Sunrun.
+
+
+Listo. Cambio en ui/comparacion/tema.py:92-93:
+- DISPATCH ACCEPTED / DISPATCH REJECTED → verde, bold, "Es trabajable" (sin cambios)
+- DISPATCH CANCELLED / DISPATCH REPORTED / DISPATCH APPROVED → rojo, bold, "No es trabajable" (sin cambios)
+- Cualquier otro estado → rojo, bold, "No es trabajable" (antes: sin color ni texto de estado, y el bloque aparecía azul — ahora es rojo como el resto de no-trabajables)
+
+
+1. Hilo principal vs. worker thread — _subir_a_destinos() leía self.headless_var.get(), self.destino_var.get(), etc. desde el hilo worker, lo cual no es thread-safe en tkinter/Windows y causaba crash. Ahora se pre-leen en el hilo principal (_leer_opciones_subida()) y se pasan como dict a los workers.
+2. Botones congelados — El finally de _proceso() solo re-habilitaba self.btn pero no los botones de apps ni FSD. Después del primer "Capturar y subir" quedaban todos deshabilitados permanentemente. Agregado self.after(0, self._rehabilitar_btns_apps).
+Cambios:
+- _ejecutar() → lee opciones en main thread, las pasa a _proceso(opciones)
+- _proceso(opciones) → recibe dict, lo pasa a _subir_a_destinos(ruta, ui, opciones=opciones)
+- _ejecutar_app() → mismo patrón, pasa opciones a _proceso_app()
+- _subir_a_destinos() → usa opciones dict en vez de leer self.*_var.get() directamente
+
+
+Hoy arrancamos documentando el proyecto con AGENTS.md y reordenando las secciones de la UI. Después extrajimos navegar_a_fsd() en ScraperSunrun para buscar tickets sin hacer scraping, y agregamos el botón "Buscar en Sunrun" en la fila FSD. Luego hicimos una revisión exhaustiva de bugs: arreglamos falsos positivos de substring en detección de FSD usando regex con boundaries, agregamos verificación post-navegación en los clics de Selenium, y corregimos la habilitación/deshabilitación de botones para que no queden congelados. En la ventana de comparación, movimos los bloques Sunrun y HubSpot lado a lado, intercambiamos los colores (HubSpot=naranja, Sunrun=azul), y agregamos el ticket_id de HubSpot. El problema más grande fue el botón "Capturar y subir": el plugin de HubSpot tenía chequeos de hasFocus() y visibilityState que rechazaban la subida apenas la app se minimizaba para la captura — los eliminamos. Después descubrimos analizando los DOMs que el Chrome estaba en la página de Property Settings, no en un ticket, así que no existían los tabs de "Actividades" ni "Notas". Actualizamos los selectores con múltiples estrategias de fallback (8 para Actividades, 6 para Notas, más fallback por JavaScript), y finalmente hicimos que el plugin busque automáticamente entre todas las pestañas abiertas la que sea un registro válido, en vez de fallar si la pestaña activa es settings.

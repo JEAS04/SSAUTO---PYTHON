@@ -1,4 +1,4 @@
-# iniciar_chrome_sesion.py
+# utils/iniciar_chrome_sesion.py
 import subprocess
 import time
 import sys

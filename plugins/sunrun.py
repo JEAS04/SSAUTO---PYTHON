@@ -59,6 +59,9 @@ class SunrunPlugin(SitioPlugin):
     # ── URLs y selectores ─────────────────────────────────────────────
 
     URL_LOGIN = "https://sunrun.my.site.com/partner/login?locale=us"
+    SEL_USER = "#username"
+    SEL_PASS = "#password"
+    SEL_BTN_LOGIN = "#Login"
 
     # Patrón de URL para identificar la pestaña del FSD activo
     PATRON_FSD = re.compile(r"FSD\d+", re.IGNORECASE)
@@ -83,68 +86,35 @@ class SunrunPlugin(SitioPlugin):
     TIMEOUT = 15
     TIMEOUT_SUBIDA = 30
 
-    # ── Detección de pestaña ──────────────────────────────────────────
+    # ── Legacy: búsqueda sin FSD específico ────────────────────────────
 
-    def _encontrar_pestana_fsd(
-        self, driver, log: Callable, fsd_objetivo: str | None = None
-    ) -> bool:
+    def _encontrar_pestana_legacy(self, driver, log) -> bool:
         """
-        Itera las pestañas abiertas del driver y hace switch a la que
-        corresponda a un FSD de Sunrun.
-
-        Modo búsqueda inteligente (fsd_objetivo proporcionado):
-        - Busca en driver.title case-insensitive el FSD objetivo
-        - También verifica URL como fallback
-
-        Modo legacy (sin fsd_objetivo):
-        - Busca cualquier pestaña con dominio correcto + 'FSD-' en URL
-
-        Devuelve True si encontró y cambió a la pestaña, False si no.
+        Busca cualquier pestaña de Sunrun con un FSD en la URL.
         """
         handles = driver.window_handles
-
-        if fsd_objetivo:
-            log(
-                f"  → [Sunrun] Buscando pestaña con FSD: {fsd_objetivo} ({len(handles)} pestaña(s) abierta(s))…"
-            )
-            fsd_lower = fsd_objetivo.lower()
-
-            for handle in handles:
-                driver.switch_to.window(handle)
-                title = driver.title.lower()
-                url = driver.current_url.lower()
-
-                # Buscar en title (método inteligente)
-                if fsd_lower in title:
-                    log(f"  ✓ [Sunrun] Pestaña encontrada por título: {driver.title}")
-                    return True
-
-                # Fallback: buscar en URL si el dominio coincide
-                if self.dominio in url and fsd_lower.replace("fsd-", "") in url:
-                    log(
-                        f"  ✓ [Sunrun] Pestaña encontrada por URL: {fsd_objetivo} — {url}"
-                    )
-                    return True
-
-            log(f"  ✗ [Sunrun] No se encontró pestaña para FSD: {fsd_objetivo}")
-            return False
-
-        # ── Modo legacy (backward compatibility) ─────────────────────
         log(
-            f"  → [Sunrun] Buscando pestaña FSD entre {len(handles)} pestaña(s) abierta(s)…"
+            f"  -> [Sunrun] Buscando pestaña FSD entre {len(handles)} "
+            f"pestaña(s) abierta(s)..."
         )
-
         for handle in handles:
             driver.switch_to.window(handle)
             url = driver.current_url
             if self.dominio in url and self.PATRON_FSD.search(url):
                 fsd_encontrado = self.PATRON_FSD.search(url).group(0).upper()
-                log(f"  ✓ [Sunrun] Pestaña encontrada: {fsd_encontrado} — {url}")
+                log(
+                    f"  v [Sunrun] Pestaña encontrada: {fsd_encontrado} "
+                    f"- {url}"
+                )
                 return True
 
-        log("  ✗ [Sunrun] No se encontró ninguna pestaña con un FSD de Sunrun abierto.")
         log(
-            "             Asegúrate de tener el FSD abierto en Chrome antes de ejecutar."
+            "  x [Sunrun] No se encontro ninguna pestaña con un FSD de "
+            "Sunrun abierto."
+        )
+        log(
+            "             Asegurate de tener el FSD abierto en Chrome "
+            "antes de ejecutar."
         )
         return False
 
@@ -182,11 +152,13 @@ class SunrunPlugin(SitioPlugin):
             espera = WebDriverWait(driver, self.TIMEOUT)
 
             espera.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "#username"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_USER))
             ).send_keys(usuario)
-            driver.find_element(By.CSS_SELECTOR, "#password").send_keys(clave)
             espera.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "#Login"))
+                EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_PASS))
+            ).send_keys(clave)
+            espera.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_BTN_LOGIN))
             ).click()
 
             esperar_carga(driver, timeout=20)
@@ -275,7 +247,6 @@ class SunrunPlugin(SitioPlugin):
 
             # Scroll el elemento a la vista
             driver.execute_script("arguments[0].scrollIntoView(true);", btn_related)
-            time.sleep(0.3)
 
             # Esperar a que esté realmente clickeable
             espera.until(EC.element_to_be_clickable((By.XPATH, self.SEL_RELATED)))
@@ -305,9 +276,44 @@ class SunrunPlugin(SitioPlugin):
             )
             log("  ✓ [Sunrun] Sección Related cargada.")
         except TimeoutException:
-            # No es fatal — la sección puede haber cargado sin ese elemento visible aún
-            log("  · [Sunrun] Upload Files no visible aún, continuando…")
-            time.sleep(2)
+            # No es fatal — la sección puede haber cargado sin ese elemento visible aún.
+            # Damos una espera condicional más larga como fallback.
+            log("  · [Sunrun] Upload Files no visible aún, esperando renderizado…")
+            try:
+                WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, self.SEL_INPUT_FILE)
+                    )
+                )
+                log("  ✓ [Sunrun] Input file detectado tras espera.")
+            except TimeoutException:
+                log("  . [Sunrun] Seccion Related puede no haber cargado completamente.")
+
+    @staticmethod
+    def _mostrar_input_oculto(driver, elemento) -> None:
+        """Hace visible un input file oculto para poder usar send_keys sin file picker."""
+        driver.execute_script(
+            "arguments[0].style.display='block';"
+            "arguments[0].style.visibility='visible';"
+            "arguments[0].style.opacity='1';"
+            "arguments[0].style.position='fixed';"
+            "arguments[0].style.top='0';"
+            "arguments[0].style.left='0';",
+            elemento,
+        )
+
+    @staticmethod
+    def _restaurar_input_oculto(driver, elemento) -> None:
+        """Restaura los estilos originales de un input file tras enviar el archivo."""
+        driver.execute_script(
+            "arguments[0].style.display='';"
+            "arguments[0].style.visibility='';"
+            "arguments[0].style.opacity='';"
+            "arguments[0].style.position='';"
+            "arguments[0].style.top='';"
+            "arguments[0].style.left='';",
+            elemento,
+        )
 
     def _enviar_archivo(self, driver, log: Callable, ruta_abs: str) -> None:
         """
@@ -337,37 +343,16 @@ class SunrunPlugin(SitioPlugin):
 
         # Hacer visible el input temporalmente — evita que Selenium abra
         # el file picker nativo del OS (que causaría la pérdida de foco)
-        driver.execute_script(
-            """
-            arguments[0].style.display    = 'block';
-            arguments[0].style.visibility = 'visible';
-            arguments[0].style.opacity    = '1';
-            arguments[0].style.position   = 'fixed';
-            arguments[0].style.top        = '0';
-            arguments[0].style.left       = '0';
-        """,
-            input_file,
-        )
-
+        # Hacer visible el input oculto para poder enviar el archivo
+        self._mostrar_input_oculto(driver, input_file)
         input_file.send_keys(ruta_abs)
         log(f"  ✓ [Sunrun] Archivo enviado: {os.path.basename(ruta_abs)}")
+        self._restaurar_input_oculto(driver, input_file)
 
-        # Restaurar estado original (Salesforce procesa el archivo desde aquí)
-        driver.execute_script(
-            """
-            arguments[0].style.display    = '';
-            arguments[0].style.visibility = '';
-            arguments[0].style.opacity    = '';
-            arguments[0].style.position   = '';
-            arguments[0].style.top        = '';
-            arguments[0].style.left       = '';
-        """,
-            input_file,
-        )
-
-    def _clic_done(self, driver, log: Callable) -> None:
+    def _clic_done(self, driver, log: Callable) -> bool:
         """
         Espera que la subida termine y hace clic en DONE.
+        Retorna True si se hizo clic en el botón, False si no se encontró.
         """
 
         log("  → [Sunrun] Esperando que la subida finalice…")
@@ -404,9 +389,11 @@ class SunrunPlugin(SitioPlugin):
             driver.execute_script("arguments[0].click();", btn_done)
 
             log("  ✓ [Sunrun] Clic en DONE. Modal cerrado.")
+            return True
 
         except TimeoutException:
-            log("  · [Sunrun] Botón DONE no disponible.")
+            log("  · [Sunrun] Botón DONE no disponible — el modal puede seguir abierto.")
+            return False
 
     def _confirmar_subida(self, driver, log: Callable, ruta_abs: str) -> bool:
         """

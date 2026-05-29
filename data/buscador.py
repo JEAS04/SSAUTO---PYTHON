@@ -7,7 +7,7 @@ NO mezcla arquitecturas
 NO usa clases innecesarias
 """
 
-from data.api import HubSpotAPI, _buscar_fsd_por_id_cliente
+from data.api import HubSpotAPI, buscar_fsd_por_id_cliente
 
 # =========================================================
 # CONFIG
@@ -92,7 +92,7 @@ def buscar_contactos(
         # Solo buscar FSD si hay un id_cliente válido
         if id_cliente and str(id_cliente).strip():
             try:
-                fsd = _buscar_fsd_por_id_cliente(str(id_cliente).strip())
+                fsd = buscar_fsd_por_id_cliente(str(id_cliente).strip())
                 if fsd:
                     candidato["fsd"] = fsd
                 else:
