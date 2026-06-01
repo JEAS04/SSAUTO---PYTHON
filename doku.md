@@ -1395,3 +1395,207 @@ Cambios:
 
 
 Hoy arrancamos documentando el proyecto con AGENTS.md y reordenando las secciones de la UI. Después extrajimos navegar_a_fsd() en ScraperSunrun para buscar tickets sin hacer scraping, y agregamos el botón "Buscar en Sunrun" en la fila FSD. Luego hicimos una revisión exhaustiva de bugs: arreglamos falsos positivos de substring en detección de FSD usando regex con boundaries, agregamos verificación post-navegación en los clics de Selenium, y corregimos la habilitación/deshabilitación de botones para que no queden congelados. En la ventana de comparación, movimos los bloques Sunrun y HubSpot lado a lado, intercambiamos los colores (HubSpot=naranja, Sunrun=azul), y agregamos el ticket_id de HubSpot. El problema más grande fue el botón "Capturar y subir": el plugin de HubSpot tenía chequeos de hasFocus() y visibilityState que rechazaban la subida apenas la app se minimizaba para la captura — los eliminamos. Después descubrimos analizando los DOMs que el Chrome estaba en la página de Property Settings, no en un ticket, así que no existían los tabs de "Actividades" ni "Notas". Actualizamos los selectores con múltiples estrategias de fallback (8 para Actividades, 6 para Notas, más fallback por JavaScript), y finalmente hicimos que el plugin busque automáticamente entre todas las pestañas abiertas la que sea un registro válido, en vez de fallar si la pestaña activa es settings.
+
+
+
+
+01/06/2026
+
+
+Se implementa captura de pantalla por celdas y extraccion de informacion de google sheets, se crea un input para elegir la celda importante donde esta la informacion, con pillow para composicion de imagenes, playwrigth para automatizar la captura. Se hace la extraccion de datos con la API de Google Cloud, pero aun no se utiliza para nada, con playwright podemos sacar las capturas de las celdas correspondientes, funciona de la siguiente forma: la celda de arriba a la izquierda siempre es la misma, es la que dice "USER", se toma esa, luego la del lado derecho arriba depende de la que ingrese el usuario, esta es la fecha, la que ingresa el usuario es la que esta abajo a la derecha, la de abajo a la izquierda es la del "nombre del usuario" o encargado de entregas y tambien depende de la ingresada por el usuario. La celda ingresada por el usuario es donde esta toda la informacion del cliente, ticket, fsd, municipio, telefono, notas y demas, esta cambia y es dinamica. 
+
+Se creó el paquete gsheets/ con 6 módulos: un parser que convierte una celda objetivo (ej. F6) en las 4 referencias (A3, F3, A6, F6), un cliente de Google Sheets API v4 autenticado por Service Account para leer valores, un capturador visual con Playwright que localiza celdas por los headers del DOM y guarda sesión para evitar re-login, un compositor de imágenes 2×2 con Pillow, y un servicio orquestador TicketCaptureService que ejecuta el flujo completo retornando valores + imagen compuesta + referencias. Para usar en producción se necesita: un archivo JSON de Service Account de Google con la Sheets API habilitada, compartir el spreadsheet con el email de esa cuenta de servicio, y opcionalmente hacer una primera ejecución con headless=False para autenticar manualmente la sesión de Playwright (luego se reutiliza automáticamente).
+
+Todo implementado. 70/70 tests pasan. Resumen:
+Estructura entregada
+gsheets/
+├── __init__.py                          # API pública del paquete
+├── requirements-gsheets.txt             # Dependencias nuevas
+├── utils/
+│   ├── cell_parser.py                   # Módulo 1: parse_target_cell("F6")
+│   └── image_compositor.py              # Módulo 4: compose_ticket_image()
+├── data/
+│   └── sheets_api.py                    # Módulo 2: GoogleSheetsClient
+├── core/
+│   └── playwright_capture.py            # Módulo 3: PlaywrightSheetsCapture
+├── services/
+│   └── ticket_capture_service.py        # Módulos 5+6: orquestador + placeholder
+├── tests/
+│   ├── conftest.py
+│   ├── test_cell_parser.py              # 37 tests
+│   ├── test_sheets_api.py               # 11 tests
+│   ├── test_playwright_capture.py       # 10 tests
+│   ├── test_image_compositor.py         # 5 tests
+│   └── test_ticket_capture_service.py   # 7 tests
+├── sessions/                            # Persistencia de sesión Playwright
+└── screenshots/                         # Capturas generadas
+Uso rápido
+import asyncio
+from gsheets import TicketCaptureService, TicketCaptureConfig
+
+async def main():
+    config = TicketCaptureConfig(
+        spreadsheet_id="https://docs.google.com/spreadsheets/d/ABC123/edit",
+        credentials_path="service_account.json",
+    )
+    async with TicketCaptureService(config) as svc:
+        payload = await svc.capture("F6")
+        # payload.cells       -> {"A3": "...", "F3": "...", "A6": "...", "F6": "..."}
+        # payload.image_path  -> "gsheets/screenshots/ticket_capture.png"
+        # payload.references  -> CellReferences(A3, F3, A6, F6)
+
+asyncio.run(main())
+Autenticación Google
+1. Crear Service Account en Google Cloud Console
+2. Habilitar Google Sheets API
+3. Compartir el spreadsheet con el email de la Service Account
+4. Guardar el JSON de credenciales y pasarlo a TicketCaptureConfig(credentials_path=...)
+Sesión Playwright
+- Las cookies + localStorage se guardan en gsheets/sessions/google_sheets_state.json al cerrar
+- Se restauran automáticamente en la siguiente ejecución para evitar re-login
+Limitaciones y mitigaciones
+- DOM dinámico de Sheets: La localización de celdas depende de selectores (#colheaders, #rowheaders). Si Google cambia el markup, hay fallbacks y reintentos implementados.
+- Canvas rendering: Si la celda no está visible en el viewport, la URL &range= fuerza el scroll. Usar headless=False para debug visual.
+- Rate limiting: La API de Sheets tiene cuotas. El batchGet de 4 celdas cuenta como 1 sola llamada, optimizando el consumo.
+
+
+Sincronía con el proyecto — Se agregaron wrappers síncronos (capture_cells_sync() en PlaywrightSheetsCapture, capture_sync() en TicketCaptureService) que usan asyncio.run() internamente. Compatibles con threading.Thread desde tkinter.
+.env integration — GoogleSheetsClient y TicketCaptureService ahora soportan la variable GOOGLE_SERVICE_ACCOUNT_PATH en .env, siguiendo el mismo patrón que ACCESS_TOKEN para HubSpot. Si no se pasa credentials_path, se busca ahí.
+Limpieza — Se eliminó gsheets/sessions/auth.py (OAuth local server innecesario), pycache acumulada, y se actualizó .gitignore para excluir gsheets/sessions/, gsheets/screenshots/, y gsheets/*.json.
+Dependencias — Se agregaron playwright, google-api-python-client, google-auth*, y pytest-asyncio a requirements.txt.
+348/348 tests pasan — 74 nuevos de gsheets + 274 existentes del proyecto, sin regresiones.
+
+Modificaciones en ui/ventana_principal.py:
+1. Import de os y del módulo gsheets (TicketCaptureService, TicketCaptureConfig)
+2. Botón Calendar (_crear_panel_apps:549-588):
+- Cambia su texto a "Capturar celda" en vez de "Capturar"
+- Su command ahora apunta a _abrir_modal_calendar() en vez de _ejecutar_app()
+- Se elimina el botón ⚙ (medir) para Calendar — ya no es necesario gracias a Playwright
+3. _abrir_modal_calendar() — nuevo método que:
+- Valida que existan GOOGLE_SERVICE_ACCOUNT_PATH y SHEETS_SPREADSHEET_ID en .env
+- Abre un CTkToplevel modal con un CTkEntry centrado para ingresar la celda (ej. F6)
+- Soporta Enter para confirmar
+- Muestra la URL/ID de la hoja configurada
+4. _ejecutar_captura_calendar() — nuevo método que:
+- Se ejecuta en threading.Thread (mismo patrón que _proceso_app)
+- Usa TicketCaptureService.capture_sync() para el flujo completo
+- Loggea los valores de las 4 celdas obtenidas desde la API
+- Sube la imagen compuesta a HubSpot/Sunrun vía _subir_a_destinos()
+.env — se agregaron las variables comentadas GOOGLE_SERVICE_ACCOUNT_PATH y SHEETS_SPREADSHEET_ID como guía de configuración.
+348/348 tests pasan — sin regresiones.
+
+350/350 tests pasan. Resumen de cambios:
+gsheets/data/sheets_api.py — nuevo método list_sheets(spreadsheet_id) que llama a spreadsheets().get() con fields="sheets.properties(title,sheetId,index)". Retorna [{"title": "Enero", "sheetId": 0, "index": 0}, ...] — dinámico, sin listas fijas.
+ui/ventana_principal.py:
+- Al abrir el modal de Calendar, se obtienen las pestañas automáticamente llamando a GoogleSheetsClient.list_sheets(). Si falla (sin red), el dropdown queda deshabilitado con "(sin pestañas)".
+- Se agregó un CTkComboBox con los nombres de las pestañas como dropdown antes del input de celda.
+- La pestaña seleccionada se pasa como sheet_name a TicketCaptureConfig, que a su vez construye los rangos como '{sheet_name}'!A3, '{sheet_name}'!F6, etc.
+- Si se agregan o eliminan pestañas en el futuro, el dropdown se actualiza solo — sin cambiar código.
+
+No bloquea el UI: la llamada a list_sheets() se posterga con modal.after(10, _load_sheets). El modal aparece al instante con "Cargando..." en el dropdown, y se actualiza automáticamente cuando la API responde.
+Layout corregido: todos los widgets usan width=240 y padx=28 uniforme. Se eliminó la línea de texto con la URL del spreadsheet (ocupaba espacio innecesario y era redundante).
+Misma altura de widgets: dropdown y entry usan height=34/height=38 y espaciado consistente (pady).
+Si falla la API: el dropdown queda deshabilitado con "(sin pestañas)" y el nombre de pestaña pasa como None a la captura (usa la primera hoja por defecto).
+
+Flujo real ahora:
+1. El usuario ya tiene Chrome abierto con sesión de Google (para Selenium)
+2. Al hacer clic en Calendar → Playwright se conecta a ese mismo Chrome vía CDP
+3. Navega a la hoja de cálculo → ya está autenticado → captura la celda
+clear_session() — borra el perfil C:\chrome_sesion_ssauto (el mismo que usa todo el proyecto).
+
+Flujo antes de cada captura final:
+1. Full-page debug screenshot → gsheets/screenshots/debug/validate_F6_130527_full.png
+2. Calcula centro del rect (cx, cy)
+3. Busca el elemento real en el DOM con 3 estrategias:
+   ├── elementFromPoint(cx, cy)       → elemento directo en esa posición
+   ├── Selectores de celda activa      → [class*="active-cell"], [class*="cell-selected"], etc.
+   └── Ancestro con dimensiones reales → sube hasta 8 niveles si el elemento es < 20px
+4. Loggea diagnóstico completo:
+   · Centro calculado: (160, 245)
+   · Selector usado: elementFromPoint
+   · Elemento directo: <div> class='cell' text='Juan' bbox=(98,198 120x25)
+   · Elemento final:   <div> class='cell' text='Juan' bbox=(98,198 120x25)
+   · ✓ Rect refinado: (98,198 120x25)
+5. Si dimensiones < 20px → considera que es un overlay/borde de selección
+   → busca ancestro contenedor de la celda real
+6. Si no encuentra elemento DOM válido → fallback al rect calculado por headers
+Esto evita capturar overlays, bordes de selección o elementos incorrectos. El log muestra exactamente qué elemento está fotografiando Playwright.
+
+
+Goal
+- Build a Python component (gsheets/) that captures specific cells from Google Sheets using Playwright (visual screenshot) + Google Sheets API (values), composes them into a 2×2 grid with Pillow, and integrates into the existing SSAuto project via a Calendar modal in the tkinter GUI.
+Constraints & Preferences
+- Use Playwright (not Selenium), Google Sheets API v4 (Service Account), Pillow
+- Modular, type-hinted, logged, production-ready
+- Must reuse existing Chrome session from the project (C:\chrome_sesion_ssauto, debug port 9222)
+- Modal appears on Calendar button click in ui/ventana_principal.py; ⚙ (medir) button removed for Calendar
+- Sheet tabs loaded dynamically via API (no hardcoded list)
+- Capture only the exact target cell (not large grid regions), with padding
+- Validate cell element dimensions and text vs API before screenshot
+Progress
+Done
+- Package gsheets/ created with 6 modules: utils/cell_parser.py, data/sheets_api.py, core/playwright_capture.py, utils/image_compositor.py, services/ticket_capture_service.py, tests/
+- parse_target_cell("F6") → {A3, F3, A6, F6} with multi-letter column support
+- GoogleSheetsClient with Service Account auth, read_cells(), list_sheets(), .env support (GOOGLE_SERVICE_ACCOUNT_PATH)
+- PlaywrightSheetsCapture with async + sync wrappers, persistent context, CDP connection to existing Chrome (connect_over_cdp("http://localhost:9222")), fallback to launch_persistent_context using C:\chrome_sesion_ssauto
+- compose_ticket_image() for 2×2 grid
+- TicketCaptureService orchestrator with capture() (async) + capture_sync() (sync for threads)
+- HubSpot placeholder upload_to_hubspot()
+- Calendar modal in ventana_principal.py: _abrir_modal_calendar() with sheet dropdown (fetched via list_sheets()), cell input, _ejecutar_captura_calendar() running in threading.Thread
+- Sheet name → gid resolution in service before Playwright call
+- _verify_google_auth(): pre-flight check navigating to myaccount.google.com
+- _validate_page(): blocks on accounts.google.com redirect with clear error
+- Navigation: domcontentloaded (not networkidle which times out), grid polling every 500ms for up to 10s
+- _validate_and_refine_rect(): finds exact cell element via positioned divs in grid, validates dimensions (20–500px), compares text with API value, saves debug highlight PNG with red rectangle, applies 8px padding
+- expected_values passed from API through capture_cells() → capture_cell() → _validate_and_refine_rect()
+- .gitignore updated, requirements.txt updated
+- 357 tests pass (gsheets + existing project)
+In Progress
+- None — last change was rewriting _validate_and_refine_rect() for precise cell-only capture
+Blocked
+- (none)
+Key Decisions
+- launch_persistent_context + connect_over_cdp: Uses project's existing Chrome session (C:\chrome_sesion_ssauto, port 9222) so Playwright inherits Google auth cookies automatically
+- domcontentloaded + grid polling: Google Sheets never reaches networkidle (persistent WebSockets); poll DOM every 500ms for grid elements instead
+- Cell detection via positioned divs: Google Sheets renders active cell selection as absolutely-positioned <div> elements with border styling inside #waffle-grid-container; score them by border presence and proximity to viewport center
+- Text validation against API: Compare innerText of found element with expected_value from Sheets API to confirm correct cell
+- Debug highlights: Save full-page screenshot with red rectangle drawn via Pillow on the found element before final crop
+Next Steps
+- Test with real Google Sheets to verify cell-only capture works correctly (not large regions)
+- Uncomment and configure GOOGLE_SERVICE_ACCOUNT_PATH and SHEETS_SPREADSHEET_ID in .env
+- Run first execution with headless=False to authenticate Google session manually if needed
+Critical Context
+- Chrome session lives at C:\chrome_sesion_ssauto (from core/browser.py), debug port 9222
+- Google Sheets renders cells on <canvas>; overlays (selection border, formula bar) are positioned HTML divs
+- _CELL_PADDING = 8 and _CELL_MAX_DIM = 500 control the final clip
+- _LOCATE_CELL calculates position from column/row headers (fallback); _validate_and_refine_rect overrides with precise element detection
+- All 357 tests pass across both gsheets/tests/ and tests/
+Relevant Files
+- gsheets/core/playwright_capture.py — Playwright browser, navigation, cell detection, validation, debug
+- gsheets/data/sheets_api.py — Google Sheets API client (Service Account)
+- gsheets/services/ticket_capture_service.py — orchestrator, gid resolution, HubSpot placeholder
+- gsheets/utils/cell_parser.py — cell reference parsing (F6 → A3, F3, A6, F6)
+- gsheets/utils/image_compositor.py — 2×2 image composition
+- ui/ventana_principal.py — Calendar modal (_abrir_modal_calendar, _ejecutar_captura_calendar)
+- core/browser.py — CHROME_USER_DATA = r"C:\chrome_sesion_ssauto", debug port 9222
+- .env — GOOGLE_SERVICE_ACCOUNT_PATH, SHEETS_SPREADSHEET_ID (commented out, needs config)
+
+
+Problema: asyncio.run() en Windows usa ProactorEventLoop que crea pipes para la comunicación con el subproceso de Playwright. En capture_sync(), el browser se iniciaba pero nunca se detenía antes de que el loop cerrara, dejando pipes abiertos que el GC intentaba limpiar después.
+Fix en gsheets/services/ticket_capture_service.py:
+- capture_sync() ahora llama a _capture_and_stop() en vez de capture() directamente
+- _capture_and_stop() ejecuta capture() + en el finally llama a self._capture.stop() (que cierra browser, contexto y _playwright.stop()) + await asyncio.sleep(0.3) para drenar pipes pendientes
+Esto asegura que todos los recursos de Playwright se cierran dentro del event loop, antes de que asyncio.run() lo destruya.
+
+Persistencia del modal Calendar:
+Clave en config.json	Qué guarda	Cuándo
+ultima_pestana_calendar	Pestaña seleccionada en el dropdown	Al hacer clic en "Capturar"
+ultima_celda_calendar	Referencia de celda (ej. "F6")	Al hacer clic en "Capturar"
+Al reabrir el modal, los campos aparecen pre-llenados con los últimos valores usados. Si la pestaña guardada ya no existe en el sheet, cae al primer elemento de la lista.
+
+Fix del parpadeo: El modal ahora se construye oculto (modal.withdraw()) y solo se muestra (modal.deiconify()) después de que todos los widgets están creados y posicionados. Antes se mostraba parcialmente construido y luego recibía actualizaciones (dropdown, posicionamiento), causando el parpadeo.
+
+Resumen de la sesión: En la sesión de hoy consolidamos la integración del nuevo módulo gsheets/ con la UI existente: corregimos las firmas de los mocks en los tests para reflejar la nueva estructura plana de _validate_and_refine_rect() ({x, y, w, h, tag, cls, text}), arreglamos 5 tests del servicio que fallaban porque _make_capture_cells_response() no aceptaba el nuevo parámetro expected_values, solucionamos las advertencias de _ProactorBasePipeTransport en Windows añadiendo un wrapper _capture_and_stop() que garantiza que PlaywrightSheetsCapture.stop() se ejecute dentro del event loop antes de que asyncio.run() lo destruya, implementamos persistencia de las selecciones del modal Calendar (ultima_pestana_calendar y ultima_celda_calendar) en config.json usando la infraestructura existente de cargar_config()/guardar_config(), y eliminamos el parpadeo del modal construyéndolo oculto con modal.withdraw() para solo mostrarlo completamente formado con modal.deiconify() después del posicionamiento.
+README actualizado con la estructura del módulo gsheets/, instrucciones para Calendar, y dependencias nuevas.
+Fue un proceso bien interesante la verdad — nadie hubiera adivinado sin los scripts de consola que Sheets usa canvas puro y dibuja la celda con 4 divs de 2px separados. Eso no está documentado en ningún lado, lo tuvimos que descubrir paso a paso.
+Si en algún momento Google actualiza Sheets y vuelve a fallar, ya sabes exactamente qué buscar: abrir consola y revisar los .active-cell-border

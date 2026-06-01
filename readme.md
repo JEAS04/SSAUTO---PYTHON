@@ -60,6 +60,20 @@ ssauto/
 │   ├── test_buscar_fsd.py          # Tests de búsqueda de FSD
 │   └── test_fix_final.py           # Tests de búsqueda de contactos
 │
+├── gsheets/                        # Captura de celdas de Google Sheets
+│   ├── __init__.py                  # Punto de entrada (TicketCaptureService)
+│   ├── utils/
+│   │   ├── cell_parser.py           # Parser de referencias A1 (F6 → A3,F3,A6,F6)
+│   │   └── image_compositor.py      # Compositor de grilla 2×2 (Pillow)
+│   ├── data/
+│   │   └── sheets_api.py            # Cliente de Google Sheets API v4 (Service Account)
+│   ├── core/
+│   │   └── playwright_capture.py    # Captura visual de celdas con Playwright
+│   ├── services/
+│   │   └── ticket_capture_service.py # Orquestador (parser → API → Playwright → imagen)
+│   ├── sessions/                    # Perfil persistente de Chrome para Playwright
+│   └── tests/                       # Tests del módulo gsheets (16 tests)
+│
 ├── screenshots/                    # Capturas generadas en runtime
 ├── cookies/                        # Cookies de sesión guardadas
 └── doms/                           # Snapshots de DOM para depuración
@@ -78,12 +92,14 @@ pip install -r requirements.txt
 | Categoría | Paquetes |
 |---|---|
 | GUI | `customtkinter`, `darkdetect` |
-| Navegador | `selenium`, `webdriver-manager` |
+| Navegador | `selenium`, `webdriver-manager`, `playwright` |
 | Captura | `mss`, `PyAutoGUI` |
 | HubSpot API | `hubspot-api-client` |
+| Google Sheets | `google-api-python-client`, `google-auth` |
+| Imágenes | `Pillow` |
 | Seguridad | `keyring` |
 | Datos | `pandas`, `numpy`, `rapidfuzz` |
-| Testing | `coverage`, `pytest` |
+| Testing | `coverage`, `pytest`, `pytest-asyncio` |
 
 ## Configuración inicial
 
@@ -106,6 +122,24 @@ pip install -r requirements.txt
 1. Define la región de pantalla con el botón **Medir** o introduce coordenadas manualmente.
 2. Selecciona el sitio de destino (HubSpot, Sunrun o Ambos).
 3. Presiona la tecla rápida (por defecto `Ctrl+P`) para capturar y subir automáticamente.
+
+### Calendar — Google Sheets
+
+El botón **Calendar** en el panel de aplicaciones abre un modal para capturar celdas de Google Sheets. El flujo interno:
+
+1. Parsea la referencia de celda (ej. `F6`) en 4 coordenadas A1 (A3, F3, A6, F6).
+2. Lee los valores de las 4 celdas desde Google Sheets API v4.
+3. Captura visualmente cada celda con Playwright (navegador real o perfil persistente).
+4. Compone las 4 capturas en una imagen 2×2 con Pillow.
+5. Genera un payload con valores + imagen + referencias.
+
+**Requisitos adicionales en `.env`:**
+```
+GOOGLE_SERVICE_ACCOUNT_PATH=ruta/al/service-account.json
+SHEETS_SPREADSHEET_ID=url-o-id-del-spreadsheet
+```
+
+La pestaña y la celda usadas en la última captura se persisten automáticamente en `config/config.json` para rellenar el modal en la siguiente ejecución.
 
 ### Comparación de datos
 

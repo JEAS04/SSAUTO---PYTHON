@@ -1,5 +1,5 @@
 {
-  "tema": "dark",
+  "tema": "light",
   "ultimo_monitor": 0,
   "regiones_apps": {
     "Wolkbox": {
@@ -37,6 +37,12 @@
       "left": 1109,
       "width": 0,
       "height": 0
+    },
+    "Correo": {
+      "top": 296,
+      "left": 1452,
+      "width": 226,
+      "height": 121
     }
   },
   "keybind": "<Control-z>",
@@ -64,5 +70,7 @@
   },
   "headless": false,
   "chrome_existente": true,
-  "destino_subida": "HUBSPOT"
+  "destino_subida": "HUBSPOT",
+  "ultima_celda_calendar": "g8",
+  "ultima_pestana_calendar": "Jun"
 }

@@ -9,6 +9,7 @@ Cambios respecto a la versión anterior:
 """
 
 import ast
+import os
 import shutil
 import threading
 import tkinter.font
@@ -55,6 +56,13 @@ from scraping.sunrun import ScraperSunrun
 from ui.widgets.coordinate_inputs import CoordinateInputsWidget
 from ui.widgets.monitor_selector import MonitorSelectorWidget
 from ui.widgets.profile_manager import ProfileManagerWidget
+
+# ── Google Sheets (Calendar) ────────────────────────────────────────────
+from gsheets.services.ticket_capture_service import (
+    TicketCaptureService,
+    TicketCaptureConfig,
+)
+from gsheets.data.sheets_api import GoogleSheetsClient
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)
@@ -545,14 +553,15 @@ class App(CustomCTkFrame):
             )
 
             r = region_efectiva
+            es_calendar = nombre == "Calendar"
             btn_main = ctk.CTkButton(
                 card,
-                text=f"{icono}  {nombre}   ▶  Capturar   ({r['width']}×{r['height']} px)",
+                text=f"{icono}  {nombre}   ▶  {'Capturar celda' if es_calendar else 'Capturar'}   ({r['width']}×{r['height']} px)",
                 font=ctk.CTkFont(size=12, weight="bold"),
                 height=38, corner_radius=7, anchor="w",
                 fg_color=color_base,
                 hover_color=(oscurecer(color_base[0]), oscurecer(color_base[1])),
-                command=lambda a=app: self._ejecutar_app(a),
+                command=lambda a=app: self._abrir_modal_calendar() if a["nombre"] == "Calendar" else self._ejecutar_app(a),
             )
             btn_main.pack(fill="x", padx=6, pady=(5, 2))
             self._btns_apps[nombre] = btn_main
@@ -578,14 +587,15 @@ class App(CustomCTkFrame):
             )
             dropdown_monitor.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
-            ctk.CTkButton(
-                bot_row, text="⚙",
-                font=ctk.CTkFont(size=14),
-                width=36, height=34, corner_radius=7,
-                fg_color=("gray70", "gray35"),
-                hover_color=("gray60", "gray45"),
-                command=lambda a=app: self._medir_region_app(a),
-            ).pack(side="right")
+            if not es_calendar:
+                ctk.CTkButton(
+                    bot_row, text="⚙",
+                    font=ctk.CTkFont(size=14),
+                    width=36, height=34, corner_radius=7,
+                    fg_color=("gray70", "gray35"),
+                    hover_color=("gray60", "gray45"),
+                    command=lambda a=app: self._medir_region_app(a),
+                ).pack(side="right")
 
     # ── Lanzador de app ───────────────────────────────────────────────
 
@@ -711,6 +721,246 @@ class App(CustomCTkFrame):
         for btn in self._btns_apps.values():
             btn.configure(state="normal")
         self.fsd_btn_buscar.configure(state="normal")
+
+    # ── Modal Calendar — captura de celda Google Sheets ───────────────
+
+    def _abrir_modal_calendar(self):
+        if self._proceso_en_curso:
+            self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
+            return
+
+        sheet_url = os.getenv("SHEETS_SPREADSHEET_ID", "")
+        service_account = os.getenv("GOOGLE_SERVICE_ACCOUNT_PATH", "")
+
+        if not service_account:
+            messagebox.showwarning(
+                "Configuración requerida",
+                "Falta GOOGLE_SERVICE_ACCOUNT_PATH en el archivo .env\n"
+                "Agrega la ruta al JSON de tu Service Account de Google.",
+            )
+            return
+
+        if not sheet_url:
+            messagebox.showwarning(
+                "Configuración requerida",
+                "Falta SHEETS_SPREADSHEET_ID en el archivo .env\n"
+                "Agrega el ID o URL de tu Google Sheets.",
+            )
+            return
+
+        # ── Construir modal ──────────────────────────────────────────
+        modal = ctk.CTkToplevel(self)
+        modal.title("Calendar — Google Sheets")
+        modal.resizable(False, False)
+        modal.transient(self)
+        modal.withdraw()  # ocultar durante construcción para evitar parpadeo
+
+        modal.grid_columnconfigure(0, weight=1)
+
+        # ── Dropdown de pestañas ─────────────────────────────────────
+        ctk.CTkLabel(
+            modal,
+            text="Pestaña:",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray50"),
+        ).grid(row=1, column=0, pady=(0, 2), padx=28, sticky="w")
+
+        # Cargar pestaña persistida
+        _config = cargar_config()
+        ultima_pestana = _config.get("ultima_pestana_calendar", "")
+
+        sheet_var = ctk.StringVar(value=ultima_pestana or "Cargando...")
+        sheet_dropdown = ctk.CTkComboBox(
+            modal,
+            values=[ultima_pestana] if ultima_pestana else ["Cargando pestañas..."],
+            variable=sheet_var,
+            state="disabled" if not ultima_pestana else "readonly",
+            width=240,
+            height=34,
+            font=ctk.CTkFont(size=12),
+            dropdown_font=ctk.CTkFont(size=12),
+        )
+        sheet_dropdown.grid(row=2, column=0, pady=(0, 12), padx=28)
+
+        # ── Input de celda ───────────────────────────────────────────
+        ctk.CTkLabel(
+            modal,
+            text="Referencia de celda (ej. F6, AA10):",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray50", "gray50"),
+        ).grid(row=3, column=0, pady=(0, 4), padx=28, sticky="w")
+
+        ultima_celda = _config.get("ultima_celda_calendar", "")
+
+        cell_var = ctk.StringVar(value=ultima_celda)
+        cell_entry = ctk.CTkEntry(
+            modal,
+            textvariable=cell_var,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            placeholder_text="F6",
+            width=240,
+            height=38,
+            justify="center",
+        )
+        cell_entry.grid(row=4, column=0, pady=(0, 12), padx=28)
+        cell_entry.focus_set()
+        if ultima_celda:
+            cell_entry.icursor("end")
+
+        # ── Referencia almacenada para el callback ───────────────────
+        _sheet_names: list[str] = []
+        _ultima_pestana_inicial = ultima_pestana
+
+        # Bind Enter key
+        def _on_enter(event):
+            _ejecutar()
+
+        cell_entry.bind("<Return>", _on_enter)
+
+        def _ejecutar():
+            cell_ref = cell_var.get().strip()
+            if not cell_ref:
+                messagebox.showwarning("Celda requerida", "Ingresa una referencia de celda (ej. F6).", parent=modal)
+                return
+            sheet_name = sheet_var.get().strip() if _sheet_names else None
+            # Persistir selecciones
+            config = cargar_config()
+            config["ultima_celda_calendar"] = cell_ref
+            if sheet_name:
+                config["ultima_pestana_calendar"] = sheet_name
+            guardar_config(config)
+            modal.destroy()
+            self._ejecutar_captura_calendar(cell_ref, sheet_url, service_account, sheet_name)
+
+        # ── Botones ──────────────────────────────────────────────────
+        btn_frame = ctk.CTkFrame(modal, fg_color="transparent")
+        btn_frame.grid(row=5, column=0, pady=(0, 16), padx=28, sticky="ew")
+        btn_frame.grid_columnconfigure((0, 1), weight=1)
+
+        ctk.CTkButton(
+            btn_frame,
+            text="Cancelar",
+            font=ctk.CTkFont(size=12),
+            fg_color=("gray70", "gray35"),
+            hover_color=("gray60", "gray45"),
+            command=modal.destroy,
+        ).grid(row=0, column=0, padx=(0, 6), sticky="ew")
+
+        ctk.CTkButton(
+            btn_frame,
+            text="Capturar",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=_ejecutar,
+        ).grid(row=0, column=1, padx=(6, 0), sticky="ew")
+
+        # ── Cargar pestañas en background (postergado para no bloquear) ──
+        def _load_sheets():
+            nonlocal _sheet_names
+            try:
+                sheets_client = GoogleSheetsClient(service_account)
+                spreadsheet_id = GoogleSheetsClient.extract_spreadsheet_id(sheet_url)
+                sheets = sheets_client.list_sheets(spreadsheet_id)
+                _sheet_names = [s["title"] for s in sheets]
+                self._log(f"→ Pestañas detectadas: {', '.join(_sheet_names)}")
+
+                sheet_dropdown.configure(values=_sheet_names, state="readonly")
+                if _sheet_names:
+                    if _ultima_pestana_inicial and _ultima_pestana_inicial in _sheet_names:
+                        sheet_var.set(_ultima_pestana_inicial)
+                    else:
+                        sheet_var.set(_sheet_names[0])
+            except Exception as e:
+                self._log(f"✗ No se pudieron obtener las pestañas: {e}")
+                sheet_dropdown.configure(values=["(sin pestañas)"], state="disabled")
+                sheet_var.set("")
+
+        modal.after(10, _load_sheets)
+
+        # Posicionar y mostrar
+        from ui.posicion_ventanas import ubicar_junto_a_padre
+        modal.deiconify()
+        ubicar_junto_a_padre(modal, self)
+        modal.grab_set()
+        modal.wait_window()
+
+    def _ejecutar_captura_calendar(
+        self, cell_ref: str, sheet_url: str, service_account: str,
+        sheet_name: str | None = None,
+    ):
+        nombre = "Calendar"
+        prefix = f"[{nombre}] "
+        sheet_label = f" ({sheet_name})" if sheet_name else ""
+
+        def ui(msg):
+            self.after(0, lambda m=msg: self._log(m))
+
+        self._proceso_en_curso = True
+        for btn in self._btns_apps.values():
+            btn.configure(state="disabled")
+        self.btn.configure(state="disabled")
+        self._set_status("Ejecutando...")
+        self.log_texto.clear()
+        self._label_estado_app.configure(
+            text=f"  ▶  {nombre} — capturando celda {cell_ref}{sheet_label}…"
+        )
+
+        def _ejecutar():
+            try:
+                ui(f"{prefix}→ Iniciando captura de celda {cell_ref} desde Google Sheets{sheet_label}…")
+                config = TicketCaptureConfig(
+                    spreadsheet_id=sheet_url,
+                    credentials_path=service_account,
+                    sheet_name=sheet_name,
+                    headless=True,
+                )
+                service = TicketCaptureService(config, log_callback=ui)
+                payload = service.capture_sync(cell_ref)
+
+                ui(f"{prefix}✓ Valores obtenidos:")
+                for ref, val in payload.cells.items():
+                    ui(f"{prefix}    {ref}: {val or '(vacío)'}")
+
+                ui(f"{prefix}✓ Imagen compuesta: {payload.image_path}")
+                ui("")
+
+                # Subir la imagen compuesta a los destinos configurados
+                self._subir_a_destinos(payload.image_path, ui, prefix)
+
+                ui(f"{prefix}✓ Proceso completado.")
+                self.after(0, lambda: self._set_status("Completado"))
+                ahora = datetime.now().strftime("%H:%M:%S")
+                self.after(
+                    0,
+                    lambda: self._label_ultimo_proceso.configure(
+                        text=f"Último proceso: {nombre} {ahora}"
+                    ),
+                )
+                self.after(
+                    0,
+                    lambda: self._label_estado_app.configure(
+                        text=f"  ✓ {nombre} — celda {cell_ref}{sheet_label} capturada a las {ahora}"
+                    ),
+                )
+                self.after(0, self._actualizar_sitios_status)
+
+            except Exception as e:
+                self.after(
+                    0, lambda err=e: self._log(f"✗ {prefix}Error: {err}")
+                )
+                self.after(0, lambda: self._set_status("Error"))
+                self.after(
+                    0,
+                    lambda: self._label_estado_app.configure(
+                        text=f"  ✗ {nombre} — error al capturar celda {cell_ref}"
+                    ),
+                )
+            finally:
+                self._proceso_en_curso = False
+                self.after(0, self.deiconify_window)
+                self.after(0, lambda: self.btn.configure(state="normal"))
+                self.after(0, self._rehabilitar_btns_apps)
+
+        threading.Thread(target=_ejecutar, daemon=True).start()
 
     # ── Medidor de región por app ─────────────────────────────────────
 

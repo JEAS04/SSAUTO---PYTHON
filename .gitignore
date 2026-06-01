@@ -20,3 +20,8 @@ coverage.xml
 *.cover
 
 screenshots/
+
+# gsheets — auto-generated + secrets
+gsheets/sessions/
+gsheets/screenshots/
+gsheets/*.json
