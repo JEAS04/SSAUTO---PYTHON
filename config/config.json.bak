@@ -1,6 +1,6 @@
 {
-  "tema": "light",
-  "ultimo_monitor": 0,
+  "tema": "dark",
+  "ultimo_monitor": 1,
   "regiones_apps": {
     "Wolkbox": {
       "top": 280,
@@ -45,32 +45,25 @@
       "height": 121
     }
   },
-  "keybind": "<Control-z>",
+  "keybind": "<Control-p>",
   "perfiles_region": {
-    "monitor 1": {
-      "top": 267,
-      "left": 91,
-      "width": 410,
-      "height": 220,
+    "Monitor 1": {
       "monitor_index": 1
     },
-    "monitor 2": {
-      "top": 81,
-      "left": -1885,
-      "width": 1416,
-      "height": 806,
-      "monitor_index": 2
+    "Monitor 2": {
+      "monitor_index": 1
     }
   },
   "auto_submit_nota": false,
   "monitores_apps": {
     "Wolkbox": 1,
     "App 5": 0,
-    "B2Chat": 0
+    "B2Chat": 0,
+    "Calendar": 0
   },
   "headless": false,
   "chrome_existente": true,
-  "destino_subida": "HUBSPOT",
-  "ultima_celda_calendar": "g8",
+  "destino_subida": "AMBOS",
+  "ultima_celda_calendar": "g20",
   "ultima_pestana_calendar": "Jun"
 }

@@ -11,7 +11,6 @@ módulos. Usa dos mecanismos complementarios:
 import pickle
 import keyring
 from pathlib import Path
-
 from config.configuracion import KEYRING_APP
 from utils.paths import get_project_root
 
@@ -42,7 +41,9 @@ def guardar_cookies(driver, sitio_nombre: str, carpeta: Path | None = None) -> N
     print(f"[cookies] Guardadas en: {ruta}")
 
 
-def cargar_cookies(driver, sitio: dict, url_base: str, carpeta: Path | None = None) -> bool:
+def cargar_cookies(
+    driver, sitio: dict, url_base: str, carpeta: Path | None = None
+) -> bool:
     """
     Intenta restaurar la sesión inyectando cookies guardadas en el driver.
 

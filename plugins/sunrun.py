@@ -77,11 +77,18 @@ class SunrunPlugin(SitioPlugin):
     SEL_ARCHIVO_SUBIDO = "//span[contains(@class,'file-selector-file-name')] | //a[contains(@class,'slds-file-card')]"
 
     # Botón DONE — cierra el modal al finalizar la subida
-    SEL_DONE = (
+    SEL_DONE_PRINCIPAL = (
         "//button[not(@disabled)]"
         "[contains(@class,'uiButton--brand')]"
         "[.//span[normalize-space()='Done']]"
     )
+    SEL_DONE_FALLBACKS = [
+        "//button[not(@disabled)][contains(@class,'slds-button')][.//span[normalize-space()='Done']]",
+        "//button[not(@disabled)][.//span[normalize-space()='Done']]",
+        "//button[not(@disabled)][contains(text(),'Done')]",
+        "//button[not(@disabled)][@title='Done']",
+        "//*[@role='button'][@title='Done']",
+    ]
 
     TIMEOUT = 15
     TIMEOUT_SUBIDA = 30
@@ -90,32 +97,76 @@ class SunrunPlugin(SitioPlugin):
 
     def _encontrar_pestana_legacy(self, driver, log) -> bool:
         """
-        Busca cualquier pestaña de Sunrun con un FSD en la URL.
+        Busca pestañas Sunrun con FSD en la URL usando CDP Target.getTargets,
+        SIN hacer switch_to.window (que activaría tabs y falsearía el foco).
+
+        Solo se activa una pestaña al final, con Target.activateTarget.
         """
-        handles = driver.window_handles
-        log(
-            f"  -> [Sunrun] Buscando pestaña FSD entre {len(handles)} "
-            f"pestaña(s) abierta(s)..."
-        )
-        for handle in handles:
-            driver.switch_to.window(handle)
-            url = driver.current_url
+        try:
+            targets_resp = driver.execute_cdp_cmd("Target.getTargets", {})
+            target_infos = targets_resp.get("targetInfos", [])
+        except Exception:
+            return self._encontrar_pestana_legacy_fallback(driver, log)
+
+        candidatos = []
+        for t in target_infos:
+            if t.get("type") != "page":
+                continue
+            url = t.get("url", "")
             if self.dominio in url and self.PATRON_FSD.search(url):
-                fsd_encontrado = self.PATRON_FSD.search(url).group(0).upper()
-                log(
-                    f"  v [Sunrun] Pestaña encontrada: {fsd_encontrado} "
-                    f"- {url}"
-                )
-                return True
+                fsd = self.PATRON_FSD.search(url).group(0).upper()
+                candidatos.append({"targetId": t["targetId"], "url": url, "fsd": fsd})
+
+        if not candidatos:
+            log("  x [Sunrun] No se encontro ninguna pestaña FSD de Sunrun abierta.")
+            log("             Asegurate de tener el FSD abierto en Chrome antes de ejecutar.")
+            return False
+
+        try:
+            handle_inicial = driver.current_window_handle
+            url_inicial = driver.current_url
+        except Exception:
+            handle_inicial = None
+            url_inicial = ""
+
+        tiene_foco = False
+        try:
+            tiene_foco = driver.execute_script("return document.hasFocus()")
+        except Exception:
+            pass
+
+        if tiene_foco and url_inicial and self.dominio in url_inicial and self.PATRON_FSD.search(url_inicial):
+            fsd = self.PATRON_FSD.search(url_inicial).group(0).upper()
+            log(f"  v [Sunrun] Pestaña con foco: {fsd}")
+            return True
+
+        if len(candidatos) == 1:
+            driver.execute_cdp_cmd("Target.activateTarget", {"targetId": candidatos[0]["targetId"]})
+            log(f"  v [Sunrun] Única pestaña FSD: {candidatos[0]['fsd']}")
+            return True
 
         log(
-            "  x [Sunrun] No se encontro ninguna pestaña con un FSD de "
-            "Sunrun abierto."
+            f"  ⚠ [Sunrun] Hay {len(candidatos)} pestañas Sunrun abiertas."
         )
-        log(
-            "             Asegurate de tener el FSD abierto en Chrome "
-            "antes de ejecutar."
-        )
+        log("           Usa el campo FSD para elegir, o navega a la pestaña deseada.")
+        driver.execute_cdp_cmd("Target.activateTarget", {"targetId": candidatos[0]["targetId"]})
+        log(f"  v [Sunrun] Usando la primera: {candidatos[0]['fsd']}")
+        return True
+
+    def _encontrar_pestana_legacy_fallback(self, driver, log) -> bool:
+        """Fallback si CDP Target.getTargets no funciona."""
+        handles = driver.window_handles
+        for handle in handles:
+            try:
+                driver.switch_to.window(handle)
+                url = driver.current_url
+            except Exception:
+                continue
+            if self.dominio in url and self.PATRON_FSD.search(url):
+                fsd = self.PATRON_FSD.search(url).group(0).upper()
+                log(f"  v [Sunrun] Pestaña (fallback): {fsd} - {url}")
+                return True
+        log("  x [Sunrun] No se encontro pestaña FSD (fallback).")
         return False
 
     # ── Verificación de sesión ────────────────────────────────────────
@@ -123,11 +174,28 @@ class SunrunPlugin(SitioPlugin):
     def verificar_sesion(self, driver, log: Callable) -> bool:
         """
         Busca la pestaña del FSD. Si la encuentra y no está en login, hay sesión.
+        Solo busca entre pestañas si la actual no es Sunrun.
         """
+        try:
+            url = driver.current_url.lower()
+        except Exception:
+            url = ""
+
+        if self.dominio in url:
+            if "login" in url or "signin" in url:
+                log("  ✗ [Sunrun] La pestaña actual apunta a login — sesión expirada.")
+                return False
+            log("  ✓ [Sunrun] Sesión activa detectada.")
+            return True
+
         if not self._encontrar_pestana_fsd(driver, log):
             return False
 
-        url = driver.current_url.lower()
+        try:
+            url = driver.current_url.lower()
+        except Exception:
+            url = ""
+
         if "login" in url or "signin" in url:
             log("  ✗ [Sunrun] La pestaña encontrada apunta a login — sesión expirada.")
             return False
@@ -188,6 +256,10 @@ class SunrunPlugin(SitioPlugin):
         driver = ctx.driver
         ruta_abs = os.path.abspath(ctx.ruta_imagen)
         fsd_objetivo = ctx.fsd  # Búsqueda inteligente por FSD
+        cancel = ctx.cancelado
+
+        def _check():
+            return cancel and hasattr(cancel, 'is_set') and cancel.is_set()
 
         if not os.path.isfile(ruta_abs):
             return ResultadoSubida(
@@ -196,28 +268,68 @@ class SunrunPlugin(SitioPlugin):
 
         log(f"  → [Sunrun] Iniciando subida: {ruta_abs}")
 
-        # Paso 1 — Localizar pestaña (con FSD inteligente si está disponible)
-        if not self._encontrar_pestana_fsd(driver, log, fsd_objetivo=fsd_objetivo):
-            return ResultadoSubida(
-                exitoso=False,
-                mensaje="No se encontró pestaña del FSD",
-                detalle="Abre el FSD en Chrome antes de ejecutar la automatización.",
-            )
+        if _check():
+            log("  ⚠ [Sunrun] Cancelado por el usuario.")
+            return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
+
+        # Paso 1 — Localizar pestaña (solo si se proporciona FSD explícito)
+        if fsd_objetivo:
+            if not self._encontrar_pestana_fsd(driver, log, fsd_objetivo=fsd_objetivo):
+                return ResultadoSubida(
+                    exitoso=False,
+                    mensaje="No se encontró pestaña del FSD",
+                    detalle="Abre el FSD en Chrome antes de ejecutar la automatización.",
+                )
+            if _check():
+                log("  ⚠ [Sunrun] Cancelado por el usuario.")
+                return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
 
         try:
+            # Refrescar la página para limpiar cualquier modal o archivo residual
+            log("  → [Sunrun] Refrescando página para limpiar estado…")
+            driver.refresh()
+            esperar_carga(driver, timeout=15)
+
+            # Esperar a que Salesforce termine de inicializar sus componentes lazys
+            try:
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.XPATH, self.SEL_RELATED))
+                )
+                log("  ✓ [Sunrun] Componentes de Salesforce cargados.")
+            except TimeoutException:
+                log("  ⚠ [Sunrun] RELATED no detectado tras refresh — continuando igual.")
+
             # Paso 2 — Clic en RELATED
             self._clic_related(driver, log)
+
+            if _check():
+                log("  ⚠ [Sunrun] Cancelado antes de enviar archivo.")
+                return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
 
             # Paso 3 — Enviar archivo directo al input oculto (sin abrir file picker)
             self._enviar_archivo(driver, log, ruta_abs)
 
+            if _check():
+                log("  ⚠ [Sunrun] Cancelado antes de confirmar subida.")
+                return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
+
             # Paso 4 — Confirmar
             ok = self._confirmar_subida(driver, log, ruta_abs)
             if ok:
+                if _check():
+                    log("  ⚠ [Sunrun] Cancelado antes de cerrar modal.")
+                    return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
+
                 # Paso 5 — Clic en DONE para cerrar el modal
-                self._clic_done(driver, log)
+                done_ok = self._clic_done(driver, log)
+                if done_ok:
+                    return ResultadoSubida(
+                        exitoso=True, mensaje="Archivo subido correctamente a Sunrun"
+                    )
                 return ResultadoSubida(
-                    exitoso=True, mensaje="Archivo subido correctamente a Sunrun"
+                    exitoso=False,
+                    mensaje="No se pudo cerrar el modal (DONE no disponible).",
+                    detalle="El archivo puede haberse subido. Verifica manualmente.",
                 )
             return ResultadoSubida(
                 exitoso=False,
@@ -236,9 +348,42 @@ class SunrunPlugin(SitioPlugin):
 
     # ── Pasos internos ────────────────────────────────────────────────
 
+    def _cerrar_modal_residual(self, driver, log: Callable) -> None:
+        """Cierra cualquier modal de subida que haya quedado abierto de intentos previos."""
+        cerrar_selectors = [
+            "//button[contains(@class,'uiButton')][.//span[contains(text(),'Cancel')]]",
+            "//button[not(@disabled)][.//span[normalize-space()='Cancel']]",
+            "//button[contains(@class,'uiButton--default')][.//span[normalize-space()='Close']]",
+            "//button[contains(@title,'Cancel')]",
+            "//button[contains(@title,'Close')]",
+            "//button[contains(@class,'close')]",
+            "//*[@aria-label='Close']",
+        ]
+        for sel in cerrar_selectors:
+            try:
+                btn = driver.find_element(By.XPATH, sel)
+                driver.execute_script("arguments[0].click();", btn)
+                log("  · [Sunrun] Modal residual cerrado.")
+                time.sleep(0.5)
+                return
+            except Exception:
+                continue
+
+        try:
+            from selenium.webdriver.common.keys import Keys
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            time.sleep(0.5)
+        except Exception:
+            pass
+
     def _clic_related(self, driver, log: Callable) -> None:
-        """Hace clic en la pestaña RELATED y espera que el contenido cargue."""
+        """Hace clic en la pestaña RELATED y espera que el contenido cargue.
+        Primero cierra cualquier modal abierto de subidas anteriores."""
         log("  → [Sunrun] Buscando pestaña RELATED…")
+
+        # Limpiar modal residual de subidas previas fallidas
+        self._cerrar_modal_residual(driver, log)
+
         espera = WebDriverWait(driver, self.TIMEOUT)
         try:
             btn_related = espera.until(
@@ -341,9 +486,16 @@ class SunrunPlugin(SitioPlugin):
                 "¿La sección RELATED cargó correctamente y tiene la sección de archivos?"
             )
 
-        # Hacer visible el input temporalmente — evita que Selenium abra
-        # el file picker nativo del OS (que causaría la pérdida de foco)
-        # Hacer visible el input oculto para poder enviar el archivo
+        # Esperar a que el dropzone esté visible = componente de upload completamente inicializado
+        # En primera carga, Salesforce puede mostrar el input pero no tener los handlers listos
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.visibility_of_element_located((By.XPATH, self.SEL_DROP_ZONE))
+            )
+            log("  ✓ [Sunrun] Dropzone visible — componente listo.")
+        except TimeoutException:
+            log("  · [Sunrun] Dropzone no visible, continuando de todos modos…")
+
         self._mostrar_input_oculto(driver, input_file)
         input_file.send_keys(ruta_abs)
         log(f"  ✓ [Sunrun] Archivo enviado: {os.path.basename(ruta_abs)}")
@@ -352,48 +504,99 @@ class SunrunPlugin(SitioPlugin):
     def _clic_done(self, driver, log: Callable) -> bool:
         """
         Espera que la subida termine y hace clic en DONE.
-        Retorna True si se hizo clic en el botón, False si no se encontró.
+        Retorna True si se hizo clic, False si no se pudo cerrar el modal.
         """
-
         log("  → [Sunrun] Esperando que la subida finalice…")
 
-        espera = WebDriverWait(driver, self.TIMEOUT_SUBIDA)
-
+        # 1. Esperar cualquier indicio de subida completada (texto flexible)
         try:
-            # Esperar texto "1 of 1 file uploaded"
-            espera.until(
-                EC.text_to_be_present_in_element(
-                    (By.XPATH, "//*[contains(text(),'file uploaded')]"),
-                    "1 of 1 file uploaded",
+            WebDriverWait(driver, self.TIMEOUT_SUBIDA).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//*[contains(text(),'file uploaded') or contains(text(),'uploaded')]")
                 )
             )
-
-            log("  ✓ [Sunrun] Subida completada.")
-
+            log("  ✓ [Sunrun] Subida completada (texto detectado).")
+            time.sleep(3)
+            self._esperar_fin_carga_upload(driver, log)
         except TimeoutException:
-            log("  ⚠ [Sunrun] No se pudo confirmar el fin de la subida.")
+            log("  ⚠ [Sunrun] No se detectó texto de subida completada.")
+            log("     Intentando cerrar modal de todos modos…")
 
-        log("  → [Sunrun] Buscando botón DONE habilitado…")
+        # 2. Buscar botón DONE con múltiples estrategias
+        log("  → [Sunrun] Buscando botón DONE…")
 
+        todos_selectores = [self.SEL_DONE_PRINCIPAL] + self.SEL_DONE_FALLBACKS
+
+        for i, sel in enumerate(todos_selectores):
+            try:
+                btn = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, sel))
+                )
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+                driver.execute_script("arguments[0].click();", btn)
+                log(f"  ✓ [Sunrun] Clic en DONE ({'principal' if i == 0 else f'fallback #{i}'}).")
+                return True
+            except TimeoutException:
+                continue
+            except Exception:
+                continue
+
+        # 3. Fallback final: intentar cerrar modal con Escape o click en X
+        log("  ⚠ [Sunrun] Botón DONE no encontrado con ningún selector.")
         try:
-            btn_done = espera.until(
-                EC.element_to_be_clickable((By.XPATH, self.SEL_DONE))
-            )
-
-            # Scroll por seguridad
-            driver.execute_script(
-                "arguments[0].scrollIntoView({block:'center'});", btn_done
-            )
-
-            # Click JS evita overlays/intercepts de Salesforce
-            driver.execute_script("arguments[0].click();", btn_done)
-
-            log("  ✓ [Sunrun] Clic en DONE. Modal cerrado.")
+            from selenium.webdriver.common.keys import Keys
+            body = driver.find_element(By.TAG_NAME, "body")
+            body.send_keys(Keys.ESCAPE)
+            log("  · [Sunrun] Intentando cerrar modal con Escape.")
+            time.sleep(1)
             return True
+        except Exception:
+            pass
 
-        except TimeoutException:
-            log("  · [Sunrun] Botón DONE no disponible — el modal puede seguir abierto.")
-            return False
+        # 4. Intentar click en botón Cancel o X genérico
+        cancel_selectors = [
+            "//button[contains(@class,'uiButton')][.//span[contains(text(),'Cancel')]]",
+            "//button[contains(@title,'Cancel')]",
+            "//button[contains(@title,'Close')]",
+            "//button[contains(@class,'close')]",
+            "//*[@aria-label='Close']",
+        ]
+        for sel in cancel_selectors:
+            try:
+                btn = driver.find_element(By.XPATH, sel)
+                driver.execute_script("arguments[0].click();", btn)
+                log(f"  · [Sunrun] Modal cerrado con botón cancel/close.")
+                time.sleep(1)
+                return True
+            except Exception:
+                continue
+
+        log("  · [Sunrun] No se pudo cerrar el modal automáticamente.")
+        return False
+
+    def _esperar_fin_carga_upload(self, driver, log: Callable) -> None:
+        """
+        Espera a que cualquier spinner o barra de progreso de subida desaparezca.
+        Salesforce procesa el archivo en background incluso después de mostrar
+        '1 of 1 file uploaded'; si se cierra el modal antes de que termine,
+        el archivo no queda asociado al registro.
+        """
+        spinners = [
+            "//div[contains(@class,'spinner') and contains(@class,'slds-is-relative')]",
+            "//div[contains(@class,'slds-progress-bar')]",
+            "//div[@role='progressbar']",
+            "//div[contains(@class,'slds-spinner')]",
+        ]
+        for xpath in spinners:
+            try:
+                WebDriverWait(driver, 10).until_not(
+                    EC.presence_of_element_located((By.XPATH, xpath))
+                )
+                log("  ✓ [Sunrun] Carga finalizada (spinner desapareció).")
+                return
+            except TimeoutException:
+                continue
+        log("  · [Sunrun] No se detectó spinner de carga — continuando.")
 
     def _confirmar_subida(self, driver, log: Callable, ruta_abs: str) -> bool:
         """

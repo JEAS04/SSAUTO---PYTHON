@@ -75,6 +75,7 @@ _configurar_ventana_responsive()
 
 
 def mostrar_frame(frame):
+
     frame.tkraise()
 
 

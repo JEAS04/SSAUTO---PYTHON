@@ -55,6 +55,7 @@ class SesionService:
         credenciales_sesion: dict | None = None,
         opciones: dict | None = None,
         fsd: str | None = None,
+        cancel_event: object | None = None,
     ) -> ResultadoSubida:
         """
         Ciclo completo: driver -> sesion -> plugin.subir() -> resultado.
@@ -72,9 +73,17 @@ class SesionService:
                 log, headless, usar_chrome_existente
             )
 
+            if cancel_event and hasattr(cancel_event, 'is_set') and cancel_event.is_set():
+                log(f"  ⚠ [{nombre_plugin}] Cancelado antes de iniciar sesión.")
+                return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
+
             # 2. Asegurar sesion
             session = SessionManager(driver)
             session.asegurar(plugin, log, credenciales_sesion or {})
+
+            if cancel_event and hasattr(cancel_event, 'is_set') and cancel_event.is_set():
+                log(f"  ⚠ [{nombre_plugin}] Cancelado antes de subir.")
+                return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
 
             # 3. Llamar al plugin
             credenciales = SessionManager._obtener_credenciales(
@@ -88,6 +97,7 @@ class SesionService:
                 credenciales=credenciales,
                 opciones=opciones or {},
                 fsd=fsd_normalizado,
+                cancelado=cancel_event,
             )
             log(f"  -> [{plugin.nombre}] Iniciando subida...")
             resultado = plugin.subir(ctx)

@@ -22,17 +22,17 @@ PLANTILLAS_MENSAJES = {
     "fuera_servicio": {
         "titulo": "Fuera de Servicio",
         "es": "LS: {fecha}. Se llamó {al número|a los números} {telefonos}, pero {está|están} fuera de servicio. Se envió un correo electrónico como método de contacto alternativo.",
-        "en": "LS: {fecha}. A call was placed to the registered phone {number|numbers}, but {it is|they are} out of service. An email was sent as an alternative method of contact.",
+        "en": "LS: {fecha}. A call was placed to the registered {number|numbers} {telefonos}, but {it is|they are} out of service. An email was sent as an alternative method of contact.",
     },
     "buzon_voz": {
         "titulo": "Buzón de Voz",
         "es": "LS: {fecha}. Se llamó {al cliente|a los clientes} {al número|a los números} {telefonos}, pero la llamada fue enviada al buzón de voz. Se envió un mensaje de texto y un correo electrónico.",
-        "en": "LS: {fecha}. The customer was called at the registered {number|numbers}, but the call went to voicemail. A text message and an email were sent.",
+        "en": "LS: {fecha}. The customer was called at the registered {number|numbers} {telefonos}, but the call went to voicemail. A text message and an email were sent.",
     },
     "no_contesta": {
         "titulo": "No Contesta",
         "es": "LS: {fecha}. Se llamó {al cliente|a los clientes} {al número|a los números} {telefonos}, pero no respondió. Como alternativa de contacto, se envió un mensaje de texto y un correo electrónico.",
-        "en": "LS: {fecha}. The customer was called at the registered {number|numbers}, but did not answer. A text message and an email were sent as alternative methods of contact.",
+        "en": "LS: {fecha}. The customer was called at the registered {number|numbers} {telefonos}, but did not answer. A text message and an email were sent as alternative methods of contact.",
     },
     "confirma_visita_tecnica": {
         "titulo": "Cliente confirma visita técnica",
@@ -384,12 +384,16 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
 
         return telefonos, errores
 
-    def _formatear_telefonos(self, telefonos: list[str]) -> str:
+    def _formatear_telefonos(self, telefonos: list[str], idioma: str = "es") -> str:
         if len(telefonos) == 1:
             return telefonos[0]
-        elif len(telefonos) == 2:
-            return f"{telefonos[0]} y {telefonos[1]}"
-        return ", ".join(telefonos)
+
+        conector = "and" if idioma == "en" else "y"
+
+        if len(telefonos) == 2:
+            return f"{telefonos[0]} {conector} {telefonos[1]}"
+
+        return ", ".join(telefonos[:-1]) + f" {conector} {telefonos[-1]}"
 
     def _requiere_telefonos(self) -> bool:
         tipo = self._tipo_mensaje_var.get()
@@ -445,7 +449,7 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
 
         texto_plantilla = plantilla[idioma]
         telefonos_str = (
-            self._formatear_telefonos(telefonos) if requiere_telefonos else ""
+            self._formatear_telefonos(telefonos, idioma) if requiere_telefonos else ""
         )
         mensaje = _procesar_texto(
             texto_plantilla, len(telefonos), telefonos_str, idioma

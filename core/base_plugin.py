@@ -10,7 +10,7 @@ Eso es todo. No hay que tocar configuracion.py, automatizacion.py ni la UI.
 """
 
 from __future__ import annotations
-
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable
@@ -60,6 +60,7 @@ class ContextoSubida:
         default_factory=dict
     )  # flags extra por sitio (auto_submit, etc.)
     fsd: str | None = None  # FSD para búsqueda inteligente de pestaña
+    cancelado: object | None = None  # threading.Event para cancelar proceso
 
 
 # ── Contrato base ─────────────────────────────────────────────────────
@@ -185,9 +186,22 @@ class SitioPlugin(ABC):
         )
 
         for handle in handles:
-            driver.switch_to.window(handle)
-            title = driver.title.lower()
-            url = driver.current_url.lower()
+            try:
+                driver.switch_to.window(handle)
+                title = driver.title.lower()
+                url = driver.current_url.lower()
+            except Exception as e:
+                if "no such execution context" in str(e).lower():
+                    log(
+                        f"  · [{self.nombre}] contexto inactivo en handle, intentando despertar..."
+                    )
+                    try:
+                        driver.execute_cdp_cmd("Runtime.enable", {})
+                        time.sleep(0.3)
+                    except Exception:
+                        pass
+                    continue
+                raise
 
             if self.dominio and self.dominio not in url:
                 continue
@@ -206,10 +220,7 @@ class SitioPlugin(ABC):
                 )
                 return True
 
-        log(
-            f"  x [{self.nombre}] No se encontró pestaña para FSD: "
-            f"{fsd_objetivo}"
-        )
+        log(f"  x [{self.nombre}] No se encontró pestaña para FSD: " f"{fsd_objetivo}")
         return False
 
     def _encontrar_pestana_legacy(self, driver, log: Callable) -> bool:

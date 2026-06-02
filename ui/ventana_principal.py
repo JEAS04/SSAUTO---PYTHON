@@ -87,6 +87,8 @@ class App(CustomCTkFrame):
         self._config = cargar_config()
         self._ui_scale = self._calcular_ui_scale()
         self._proceso_en_curso = False  # anti-reentrada
+        self._cancelado = threading.Event()  # cancelación del proceso principal
+        self._fsd_detectado = None
         self._servicio = SesionService()
         ctk.set_appearance_mode(self._config.get("tema", "dark"))
         self._construir_ui()
@@ -259,14 +261,28 @@ class App(CustomCTkFrame):
         self._monitor_widget.grid(row=0, column=1, sticky="nsew", padx=(3, 0))
         self._monitor_var = self._monitor_widget.monitor_var
 
-        # ── Row 1: Coordenadas ───────────────────────────────────
+        # ── Row 1: Coordenadas + Detener ──────────────────────────
+        coord_row = ctk.CTkFrame(padre, fg_color="transparent")
+        coord_row.pack(fill="x", pady=(2, 4))
+
         self._coord_widget = CoordinateInputsWidget(
-            padre,
+            coord_row,
             valores_iniciales=PERFIL_POR_DEFECTO,
             on_change=self._on_coords_change,
         )
-        self._coord_widget.pack(fill="x", pady=(2, 4))
+        self._coord_widget.pack(side="left", fill="x", expand=True)
         self.region_vars = self._coord_widget.region_vars
+
+        self.btn_detener = ctk.CTkButton(
+            coord_row, text="  Detener",
+            command=self._detener,
+            font=ctk.CTkFont(size=self._fs(11), weight="bold"),
+            height=self._r(30, 34, 40),
+            fg_color=("#d73a49", "#f85149"),
+            hover_color=("#b6232e", "#da3633"),
+            state="disabled",
+        )
+        self.btn_detener.pack(side="right", padx=(8, 0))
 
         # ── Row 2: Botones de accion ─────────────────────────────
         b_row = ctk.CTkFrame(padre, fg_color="transparent")
@@ -450,7 +466,7 @@ class App(CustomCTkFrame):
 
         atajo_inicial = self._config.get("keybind", "<Control-Return>")
         try:
-            self.bind(atajo_inicial, lambda e: self._ejecutar())
+            self.winfo_toplevel().bind(atajo_inicial, lambda e: self._ejecutar())
             self._keybind_actual = atajo_inicial
             self.keybind_var.set(atajo_inicial)
             self.keybind_label.configure(
@@ -631,6 +647,8 @@ class App(CustomCTkFrame):
         auto_submit = self.auto_submit_var.get()
         destino = self.destino_var.get()
         fsd = self._obtener_fsd_actual()
+        if not fsd:
+            fsd = self._fsd_detectado
 
         plugins = (
             PluginRegistry.todos()
@@ -645,7 +663,11 @@ class App(CustomCTkFrame):
             ui(f"{prefix}✗ No hay plugins para destino: {destino}")
 
         for plugin in plugins:
+            if self._cancelado.is_set():
+                ui(f"{prefix}⚠ Cancelado antes de subir a {plugin.nombre}.")
+                break
             ui(f"{prefix}→ Subiendo a {plugin.nombre}…")
+            fsd_plugin = fsd
             self._servicio.ejecutar_subida(
                 nombre_plugin=plugin.nombre,
                 ruta_imagen=ruta,
@@ -654,7 +676,8 @@ class App(CustomCTkFrame):
                 usar_chrome_existente=usar_existente,
                 credenciales_sesion=self._credenciales_sesion,
                 opciones={"auto_submit_nota": auto_submit},
-                fsd=fsd,
+                fsd=fsd_plugin,
+                cancel_event=self._cancelado,
             )
             ui("")
 
@@ -721,6 +744,7 @@ class App(CustomCTkFrame):
         for btn in self._btns_apps.values():
             btn.configure(state="normal")
         self.fsd_btn_buscar.configure(state="normal")
+        self.btn_detener.configure(state="disabled")
 
     # ── Modal Calendar — captura de celda Google Sheets ───────────────
 
@@ -895,6 +919,7 @@ class App(CustomCTkFrame):
             self.after(0, lambda m=msg: self._log(m))
 
         self._proceso_en_curso = True
+        self._fsd_detectado = None
         for btn in self._btns_apps.values():
             btn.configure(state="disabled")
         self.btn.configure(state="disabled")
@@ -1116,6 +1141,41 @@ class App(CustomCTkFrame):
             return None
         fsd = self.fsd_var.get().strip()
         return fsd if fsd else None
+
+    @staticmethod
+    def _detectar_fsd_de_chrome() -> str | None:
+        """
+        Lee el título de ventanas visibles de Chrome vía Windows API y extrae
+        el primer FSD que encuentre (patrón FSD-XXXXXX o FSDXXXXXX).
+        Se llama con la app minimizada para que Chrome esté en primer plano.
+        """
+        import re
+        user32 = ctypes.windll.user32
+
+        fsd_encontrado = [None]
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+        def enum_proc(hwnd, _lparam):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length == 0:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            title = buf.value
+            if "Google Chrome" not in title and "Chromium" not in title:
+                return True
+            match = re.search(r'FSD[-\s]*(\d+)', title, re.IGNORECASE)
+            if match:
+                fsd = f"FSD-{match.group(1)}"
+                fsd_encontrado[0] = fsd
+                return False
+            return True
+
+        user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
+        return fsd_encontrado[0]
 
     def _buscar_fsd_sunrun(self):
         """
@@ -1342,11 +1402,11 @@ class App(CustomCTkFrame):
             return
         if self._keybind_actual:
             try:
-                self.unbind(self._keybind_actual)
+                self.winfo_toplevel().unbind(self._keybind_actual)
             except Exception:
                 pass
         try:
-            self.bind(nuevo, lambda e: self._ejecutar())
+            self.winfo_toplevel().bind(nuevo, lambda e: self._ejecutar())
             self._keybind_actual = nuevo
             self.keybind_label.configure(
                 text=f"Combinación activa: {self._keybind_legible(nuevo)}",
@@ -1377,6 +1437,14 @@ class App(CustomCTkFrame):
         self.keybind_var.set("<" + "-".join(partes) + ">")
         return "break"
 
+    # ── Detener proceso ────────────────────────────────────────────────
+
+    def _detener(self):
+        self._cancelado.set()
+        self._log("⚠ Deteniendo proceso...")
+        self.btn_detener.configure(state="disabled")
+        self._set_status("Cancelando...")
+
     # ── Proceso principal ─────────────────────────────────────────────
 
     def _ejecutar(self):
@@ -1384,7 +1452,9 @@ class App(CustomCTkFrame):
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
         self._proceso_en_curso = True
+        self._cancelado.clear()
         self.btn.configure(state="disabled")
+        self.btn_detener.configure(state="normal")
         for btn in self._btns_apps.values():
             btn.configure(state="disabled")
         self.fsd_btn_buscar.configure(state="disabled")
@@ -1403,11 +1473,25 @@ class App(CustomCTkFrame):
             self.after(0, self.iconify_window)
             time.sleep(0.4)
 
+            self._fsd_detectado = self._detectar_fsd_de_chrome()
+            if self._fsd_detectado:
+                ui(f"→ FSD detectado automáticamente: {self._fsd_detectado}")
+
             ruta = CapturaService.capturar(region, monitor=monitor_idx)
             ui(f"✓ Imagen guardada: {ruta}")
             ui("")
 
+            if self._cancelado.is_set():
+                ui("⚠ Proceso cancelado antes de subir.")
+                self.after(0, lambda: self._set_status("Cancelado"))
+                return
+
             self._subir_a_destinos(ruta, ui)
+
+            if self._cancelado.is_set():
+                ui("⚠ Proceso cancelado.")
+                self.after(0, lambda: self._set_status("Cancelado"))
+                return
 
             ui("✓ Proceso completado.")
             self.after(0, lambda: self._set_status("Completado"))
@@ -1428,8 +1512,10 @@ class App(CustomCTkFrame):
             self.after(0, lambda: self._set_status("Error"))
         finally:
             self._proceso_en_curso = False
+            self._cancelado.clear()
             self.after(0, self.deiconify_window)
             self.after(0, lambda: self.btn.configure(state="normal"))
+            self.after(0, lambda: self.btn_detener.configure(state="disabled"))
             self.after(0, self._rehabilitar_btns_apps)
 
 

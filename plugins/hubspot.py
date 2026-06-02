@@ -170,6 +170,14 @@ class HubSpotPlugin(SitioPlugin):
         ruta_abs = os.path.abspath(ctx.ruta_imagen)
         auto_submit = ctx.opciones.get("auto_submit_nota", True)
         fsd_objetivo = ctx.fsd  # Búsqueda inteligente por FSD
+        cancel = ctx.cancelado
+
+        def _check():
+            return cancel and hasattr(cancel, "is_set") and cancel.is_set()
+
+        if _check():
+            log("  ⚠ [HubSpot] Cancelado por el usuario.")
+            return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
 
         # Búsqueda inteligente: si hay FSD, buscar pestaña correcta
         if fsd_objetivo and not self._encontrar_pestana_fsd(driver, log, fsd_objetivo):
@@ -180,24 +188,71 @@ class HubSpotPlugin(SitioPlugin):
                 detalle="Abre el ticket de HubSpot en Chrome antes de ejecutar.",
             )
 
-        contexto_activo = self._capturar_contexto_activo(driver, fsd_objetivo)
+        contexto_activo = self._capturar_contexto_activo(driver, log, fsd_objetivo)
 
         log(f"  → [HubSpot] Iniciando subida: {ruta_abs}")
         esperar_carga(driver)
 
         try:
+            if _check():
+                log("  ⚠ [HubSpot] Cancelado.")
+                return ResultadoSubida(
+                    exitoso=False, mensaje="Cancelado por el usuario."
+                )
+
             self._validar_contexto_activo(driver, contexto_activo)
             self._paso_actividades(driver, log, contexto_activo)
+
+            if _check():
+                log("  ⚠ [HubSpot] Cancelado.")
+                return ResultadoSubida(
+                    exitoso=False, mensaje="Cancelado por el usuario."
+                )
+
             self._paso_notas(driver, log, contexto_activo)
+
+            if _check():
+                log("  ⚠ [HubSpot] Cancelado.")
+                return ResultadoSubida(
+                    exitoso=False, mensaje="Cancelado por el usuario."
+                )
+
             self._paso_crear_nota(driver, log, contexto_activo)
+
+            if _check():
+                log("  ⚠ [HubSpot] Cancelado.")
+                return ResultadoSubida(
+                    exitoso=False, mensaje="Cancelado por el usuario."
+                )
+
             self._paso_editor(driver, log, contexto_activo)
+
+            if _check():
+                log("  ⚠ [HubSpot] Cancelado.")
+                return ResultadoSubida(
+                    exitoso=False, mensaje="Cancelado por el usuario."
+                )
+
             self._paso_adjuntar(driver, log, ruta_abs, contexto_activo)
+
+            if _check():
+                log("  ⚠ [HubSpot] Cancelado.")
+                return ResultadoSubida(
+                    exitoso=False, mensaje="Cancelado por el usuario."
+                )
+
             self._paso_esperar_archivo(driver, log, ruta_abs, contexto_activo)
 
             if not auto_submit:
                 log("  ✓ [HubSpot] Archivo adjunto. Guardado manual pendiente.")
                 return ResultadoSubida(
                     exitoso=True, mensaje="Archivo adjunto (guardado manual)"
+                )
+
+            if _check():
+                log("  ⚠ [HubSpot] Cancelado antes de guardar.")
+                return ResultadoSubida(
+                    exitoso=False, mensaje="Cancelado por el usuario."
                 )
 
             self._paso_guardar(driver, log, contexto_activo)
@@ -213,59 +268,120 @@ class HubSpotPlugin(SitioPlugin):
 
     def _es_pagina_registro(self, url: str) -> bool:
         url = url.lower()
-        return ("/ticket/" in url or "/contact/" in url
-                or "/company/" in url or "/deal/" in url
-                or "/record/" in url or "contacts/" in url)
+        return (
+            "/ticket/" in url
+            or "/contact/" in url
+            or "/company/" in url
+            or "/deal/" in url
+            or "/record/" in url
+            or "contacts/" in url
+        )
 
-    def _capturar_contexto_activo(self, driver, fsd_objetivo: str | None = None) -> dict:
-        url = driver.current_url.lower()
-        if self.dominio not in url:
-            raise RuntimeError("La pestaña activa no es HubSpot. Subida cancelada.")
+    def _despertar_pestana_cdp(self, driver, target_id: str, log: Callable) -> bool:
+        """
+        Fuerza la inicialización del Runtime context de una pestaña via CDP.
+        Retorna True si la pestaña respondió correctamente.
+        """
+        try:
+            # 1. Traer la pestaña al frente
+            driver.execute_cdp_cmd("Target.activateTarget", {"targetId": target_id})
+            time.sleep(0.4)
 
-        if self._es_pagina_registro(url):
-            ctx = {
-                "handle": driver.current_window_handle,
-                "url": url,
-                "title": driver.title,
-            }
-            self._validar_contexto_activo(driver, ctx)
-            return ctx
+            # 2. Adjuntar una sesión CDP con flatten=True — esto es lo que crea el Runtime
+            session = driver.execute_cdp_cmd(
+                "Target.attachToTarget", {"targetId": target_id, "flatten": True}
+            )
+            session_id = session.get("sessionId")
+            if not session_id:
+                log("  · [HubSpot] CDP: no se obtuvo sessionId.")
+                return False
 
-        handle_actual = driver.current_window_handle
-        for handle in driver.window_handles:
-            if handle == handle_actual:
-                continue
-            try:
-                driver.switch_to.window(handle)
-                if self._es_pagina_registro(driver.current_url):
-                    ctx = {
-                        "handle": driver.current_window_handle,
-                        "url": driver.current_url.lower(),
-                        "title": driver.title,
-                    }
-                    self._validar_contexto_activo(driver, ctx)
-                    return ctx
-            except Exception:
-                continue
+            # 3. Activar el Runtime en esa sesión
+            driver.execute_cdp_cmd("Runtime.enable", {})
+            time.sleep(0.3)
 
-        driver.switch_to.window(handle_actual)
+            # 4. Validar que el contexto responde
+            result = driver.execute_cdp_cmd(
+                "Runtime.evaluate", {"expression": "document.readyState"}
+            )
+            estado = result.get("result", {}).get("value", "")
+            log(f"  · [HubSpot] CDP Runtime activo. readyState: {estado}")
+            return True
+
+        except Exception as e:
+            log(f"  · [HubSpot] _despertar_pestana_cdp falló: {str(e)[:100]}")
+            return False
+
+    def _capturar_contexto_activo(
+        self, driver, log: Callable, fsd_objetivo: str | None = None
+    ) -> dict:
+        # Estrategia 1: CDP Target.getTargets — buscar y activar pestaña HubSpot
+        try:
+            targets_resp = driver.execute_cdp_cmd("Target.getTargets", {})
+            for t in targets_resp.get("targetInfos", []):
+                if t.get("type") != "page":
+                    continue
+                url = t.get("url", "").lower()
+                title = t.get("title", "")
+                if url:
+                    log(f"  · [HubSpot] CDP: {title[:60]} ({url[:80]})")
+                if self.dominio in url and self._es_pagina_registro(url):
+                    log(f"  · [HubSpot] ✓ encontrada en CDP: {title[:60]}")
+
+                    self._despertar_pestana_cdp(driver, t["targetId"], log)
+                    time.sleep(0.5)
+
+                    try:
+                        handle_actual = driver.current_window_handle
+                        ctx = {
+                            "handle": handle_actual,
+                            "url": url,
+                            "title": title,
+                        }
+                        log(f"  ✓ [HubSpot] Contexto activo (CDP): {handle_actual}")
+                        return ctx
+                    except Exception as e:
+                        log(f"  · [HubSpot] No se pudo obtener handle actual: {e}")
+
+                    for handle in driver.window_handles:
+                        try:
+                            driver.switch_to.window(handle)
+                            ctx = {"handle": handle, "url": url, "title": title}
+                            log(f"  ✓ [HubSpot] Contexto por fallback handle: {handle}")
+                            return ctx
+                        except Exception:
+                            continue
+
+        except Exception as e:
+            log(f"  · [HubSpot] CDP falló: {str(e)[:80]}")
+
         raise RuntimeError(
             "No se encontró ninguna pestaña de un registro (ticket/contacto). "
             "Abre el ticket de HubSpot en Chrome antes de ejecutar."
         )
 
     def _validar_contexto_activo(self, driver, ctx: dict) -> None:
-        try:
-            misma_tab = driver.current_window_handle == ctx["handle"]
-            url_ok = self.dominio in driver.current_url.lower()
-        except Exception as e:
-            raise RuntimeError(f"No se pudo validar pestaña activa: {e}") from e
+        url_conocida = ctx.get("url", "")
+        if url_conocida and self.dominio in url_conocida:
+            return
 
-        if not misma_tab or not url_ok:
-            raise RuntimeError(
-                "Subida cancelada: cambiaste de pestaña/ventana de HubSpot. "
-                "No se subió información."
-            )
+        for intento in range(3):
+            try:
+                url = driver.current_url.lower()
+                if url and self.dominio not in url:
+                    raise RuntimeError(
+                        "Subida cancelada: cambiaste de pestaña/ventana de HubSpot."
+                    )
+                return
+            except RuntimeError:
+                raise
+            except Exception:
+                if intento < 2:
+                    time.sleep(0.5)
+                    try:
+                        driver.switch_to.window(ctx["handle"])
+                    except Exception:
+                        pass
 
     def _safe_click(self, driver, elemento, ctx: dict) -> None:
         self._validar_contexto_activo(driver, ctx)
@@ -292,7 +408,10 @@ class HubSpotPlugin(SitioPlugin):
         selectores = [
             (By.CSS_SELECTOR, self.SEL_TAB_ACTIVIDADES, "CSS primary"),
             (By.CSS_SELECTOR, self.SEL_TAB_ACTIVIDADES_FB, "CSS fallback"),
-        ] + [(By.XPATH, xp, f"XPath {i+1}") for i, xp in enumerate(self.XPATH_ACTIVIDADES)]
+        ] + [
+            (By.XPATH, xp, f"XPath {i+1}")
+            for i, xp in enumerate(self.XPATH_ACTIVIDADES)
+        ]
 
         for by, sel, label in selectores:
             try:
@@ -466,12 +585,8 @@ class HubSpotPlugin(SitioPlugin):
             WebDriverWait(driver, 15).until(
                 lambda d: (self._validar_contexto_activo(d, ctx) is None)
                 and (
-                    d.find_elements(
-                        By.XPATH, f"//*[contains(text(),'{nombre}')]"
-                    )
-                    or d.find_elements(
-                        By.XPATH, f"//*[contains(@title,'{nombre}')]"
-                    )
+                    d.find_elements(By.XPATH, f"//*[contains(text(),'{nombre}')]")
+                    or d.find_elements(By.XPATH, f"//*[contains(@title,'{nombre}')]")
                 )
             )
             log(f"  ✓ [HubSpot] Archivo '{nombre}' confirmado en página.")

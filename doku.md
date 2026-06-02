@@ -1599,3 +1599,60 @@ Resumen de la sesión: En la sesión de hoy consolidamos la integración del nue
 README actualizado con la estructura del módulo gsheets/, instrucciones para Calendar, y dependencias nuevas.
 Fue un proceso bien interesante la verdad — nadie hubiera adivinado sin los scripts de consola que Sheets usa canvas puro y dibuja la celda con 4 divs de 2px separados. Eso no está documentado en ningún lado, lo tuvimos que descubrir paso a paso.
 Si en algún momento Google actualiza Sheets y vuelve a fallar, ya sabes exactamente qué buscar: abrir consola y revisar los .active-cell-border
+
+
+02/06/2026 - Correccion de errores
+
+Resumen de cambios:
+Sunrun — plugins/sunrun.py:373: agregué time.sleep(2) después de confirmar que el texto "1 of 1 file uploaded" aparece, antes de buscar y hacer clic en Done. Esto da tiempo a Salesforce para terminar el procesamiento del archivo en el servidor.
+Keybind — ui/ventana_principal.py:453,1345,1349: cambié self.bind(...) / self.unbind(...) por self.winfo_toplevel().bind(...) / self.winfo_toplevel().unbind(...). El CTkFrame no recibe foco de teclado, por eso la combinación nunca se disparaba. Ahora se enlaza a la ventana raíz, que sí captura eventos de teclado globalmente. Solo llama a _ejecutar() (el mismo método del botón "Capturar y subir"). Igualmente no se sube si la pagina no estaba cargada antes
+
+Todo listo. 273/273 tests pasan, import OK. Resumen de cambios:
+plugins/sunrun.py
+- _clic_done(): 3s de delay + nuevo método _esperar_fin_carga_upload() que espera a que desaparezcan spinners/progress bars de Salesforce antes de clicar Done
+- _enviar_archivo(): dispara dispatchEvent(new Event('change')) después del send_keys para que Salesforce detecte el archivo
+- _encontrar_pestana_legacy(): el driver ya no itera a ciegas. Primero revisa si la pestaña activa es de Sunrun con FSD. Si hay 2+ pestañas de Sunrun y el usuario no está en ninguna, loguea un warning
+plugins/hubspot.py
+- _capturar_contexto_activo(): misma lógica — ya no falla inmediato si la pestaña activa no es HubSpot. Busca en todas las pestañas registros válidos. Si hay 2+ y el usuario no está en ninguna, warning. Recibe log para poder loguear avisos
+ui/ventana_principal.py
+- Botón Detener rojo (#d73a49) arriba de "Capturar y subir". Se habilita solo durante ejecución, deshabilitado el resto del tiempo
+- self._cancelado = threading.Event(): flag que se limpia al iniciar _ejecutar() y se setea al clickear Detener
+- _proceso(): verifica _cancelado después de capturar (antes de subir) y después de cada destino
+- _subir_a_destinos(): verifica _cancelado entre plugins
+- _detener(): setea el evento, deshabilita el botón, muestra "Cancelando..."
+
+Detección de pestaña (raíz del problema): SessionManager._posicionar_pestana() ya NO cambia de pestaña para plugins con usar_pagina_actual=True. Antes, si el usuario estaba en YouTube con 3 pestañas de Sunrun abiertas, _posicionar_pestana se iba a la primera Sunrun, y cuando mi detección inteligente capturaba driver.current_window_handle, YA era la primera pestaña de Sunrun, no YouTube. Ahora el SessionManager deja la pestaña intacta y cada plugin decide cuál usar con su lógica de detección (activa primero, luego buscar).
+Botón Detener: la señal de cancelación (threading.Event) ahora viaja a través de ContextoSubida → cancelado hasta los plugins. Ambos plugins (SunrunPlugin.subir() y HubSpotPlugin.subir()) verifican el flag entre cada paso (antes de RELATED, antes de enviar archivo, antes de DONE, etc. en Sunrun; entre cada uno de los 7 pasos en HubSpot). Además SesionService.ejecutar_subida() también verifica antes de obtener sesión y antes de llamar al plugin.
+ El cambio clave: driver.current_window_handle no devuelve la pestaña visualmente activa cuando Selenium se conecta por debuggerAddress — Chrome DevTools Protocol ordena los targets arbitrariamente. Ahora uso document.hasFocus() en cada pestaña para encontrar la que realmente tiene el foco del usuario, tanto en Sunrun (_encontrar_pestana_legacy) como en HubSpot (_capturar_contexto_activo). Si esa pestaña activa real coincide con el dominio, se usa directamente. Si no, se aplica la lógica de 1 sola o múltiples con warning
+
+ El cambio clave ahora:
+Cuando presionas "Capturar y subir", la app:
+Se minimiza
+Espera 0.4s (Chrome queda en primer plano)
+Lee el título de la ventana de Chrome con ctypes.windll.user32.EnumWindows → busca todas las ventanas visibles de Chrome/Chromium y extrae el primer FSD que encuentre (patrón FSD-XXXXXX)
+Captura la pantalla
+Pasa ese FSD auto-detectado al flujo de subida
+Como ahora hay un FSD explícito, Sunrun.subir() usa _encontrar_pestana_fsd(driver, log, fsd_objetivo="FSD-1246387") — la búsqueda por FSD que siempre funcionó
+Encuentra la pestaña exacta del FSD y sube ahí
+No tienes que escribir nada. El FSD se detecta solo desde el título de Chrome. Si falla la detección (no hay Chrome visible, no hay FSD en el título), usa el fallback legacy (primera pestaña Sunrun). Si tienes el toggle FSD activado con un valor manual, ese tiene prioridad sobre el detectado.
+Resumen de lo arreglado:
+Subida duplicada / acumulación de archivos: la raíz era que _clic_done fallaba con timeout en ambos selectores (texto "1 of 1 file uploaded" y botón Done). El archivo se subía pero el modal nunca se cerraba, y en la siguiente subida se acumulaba con el anterior.
+Fixes en _clic_done:
+Detección flexible del texto de subida: acepta cualquier elemento con "file uploaded" o "uploaded", no solo "1 of 1 file uploaded"
+6 selectores para el botón Done (principal uiButton--brand + 5 fallbacks: slds-button, sin clase, por texto, por title, por role)
+Si ningún Done funciona: intenta Escape + luego botones Cancel/Close
+3s delay + esperar spinners después de detectar subida completada
+Limpieza proactiva: nuevo método _cerrar_modal_residual() que se ejecuta antes de clickear RELATED para cerrar cualquier modal abierto de subidas previas fallidas (Cancel, Close, Escape). Esto evita la acumulación de archivos
+
+Listo. Antes de clickear RELATED, la página se refresca con driver.refresh() + esperar_carga. Esto limpia cualquier modal abierto o archivo acumulado de subidas previas, empezando desde cero cada vez. 273 tests pasan
+El fix: después de encontrar el input[name='fileInput'], espero a que el dropzone esté visible (EC.visibility_of_element_located), no solo presente en el DOM. En primera carga, Salesforce muestra el input rápidamente pero el dropzone (zona de arrastrar archivos) aparece solo cuando el componente de upload terminó de inicializarse con todos sus event handlers. Si no está visible en 10s, continúa igual (no rompe el flujo en cargas subsiguientes).
+
+---
+
+02/06/2026 (tarde) - Fixes de Playwright y pestañas
+
+PlaywrightSheetsCapture (gsheets/core/playwright_capture.py):
+- _verify_google_auth(): ahora abre una pestaña TEMPORAL (self._context.new_page()) para navegar a myaccount.google.com y verificar la autenticación, y la cierra al terminar. Antes usaba self.page.goto() que reemplazaba el contenido de la pestaña activa, pisando cualquier ticket o spreadsheet que el usuario tuviera abierto.
+- stop(): corregida la lógica CDP — si se conectó via connect_over_cdp (es_cdp=True), NO cierra el contexto completo (eso mataría todas las pestañas del usuario). Solo cierra el contexto cuando se lanzó perfil persistente.
+- capture_cell(): ahora reutiliza una pestaña existente si el spreadsheet ya está abierto (_find_spreadsheet_page), o abre una nueva con _open_new_page(). Esto evita abrir pestañas duplicadas del mismo Google Sheet.
+- Nuevos helpers: _find_spreadsheet_page() busca entre todas las pestañas del browser si el spreadsheet_id ya está en alguna URL. _open_new_page() abre una pestaña nueva en el browser CDP o en el contexto persistente.

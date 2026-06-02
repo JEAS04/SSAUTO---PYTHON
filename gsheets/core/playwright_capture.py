@@ -208,19 +208,23 @@ class PlaywrightSheetsCapture:
         """
         Cierra el navegador Playwright.
 
-        Si se conectó vía CDP, solo cierra la página (el navegador sigue vivo).
+        Si se conectó vía CDP, solo desconecta (no cierra pestañas del usuario).
         Si se lanzó perfil persistente, cierra el contexto.
         """
-        if self._browser:
-            # Conectado vía CDP — solo desconectar, no cerrar el Chrome del usuario
-            await self._browser.close()
-            self._browser = None
-        if self._context:
+        es_cdp = self._browser is not None
+
+        if not es_cdp and self._context:
             await self._context.close()
             self._context = None
+
+        if self._browser:
+            await self._browser.close()
+            self._browser = None
+
         if self._playwright:
             await self._playwright.stop()
             self._playwright = None
+
         self._page = None
         self._log("→ Playwright detenido.")
 
@@ -273,20 +277,26 @@ class PlaywrightSheetsCapture:
         if not self._auth_verified:
             await self._verify_google_auth()
 
-        # ── Navegar con gid exacto + range para la celda ──────────────
+        # ── Buscar si el spreadsheet ya está abierto, si no abrir nueva pestaña ─
         target_url = (
             f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
             f"/edit#gid={sheet_gid}&range={cell_ref}"
         )
+        existing_page = await self._find_spreadsheet_page(spreadsheet_id)
+        if existing_page:
+            self._page = existing_page
+            self._log(f"→ Spreadsheet {spreadsheet_id} ya abierto — reutilizando pestaña.")
+        else:
+            self._page = await self._open_new_page()
+            self._log(f"→ Abriendo nueva pestaña: gid={sheet_gid}, celda {cell_ref}...")
 
-        self._log(f"→ Navegando a gid={sheet_gid}, celda {cell_ref}...")
+        await self._page.bring_to_front()
         try:
             await self.page.goto(
                 target_url, wait_until="domcontentloaded", timeout=_LOAD_TIMEOUT
             )
         except Exception as e:
             self._log(f"⚠ goto timeout/error: {e}")
-            # Intentar con load como fallback
             await self.page.goto(target_url, wait_until="load", timeout=_LOAD_TIMEOUT)
 
         # ── Logs de diagnóstico post-navegación ───────────────────────
@@ -376,7 +386,47 @@ class PlaywrightSheetsCapture:
             results[ref] = path
         return results
 
-    # ── Validación de página ──────────────────────────────────────────────
+    async def _find_spreadsheet_page(self, spreadsheet_id: str) -> Page | None:
+        """
+        Busca si el spreadsheet ya está abierto en alguna pestaña del browser.
+        Retorna la página si la encuentra, None si no.
+        """
+        if self._browser is None and self._context is None:
+            return None
+
+        pages: list[Page] = []
+        try:
+            if self._browser:
+                for ctx in self._browser.contexts:
+                    pages.extend(ctx.pages)
+            elif self._context:
+                pages = self._context.pages
+        except Exception:
+            pass
+
+        for page in pages:
+            try:
+                url = page.url
+                if spreadsheet_id in url:
+                    return page
+            except Exception:
+                continue
+
+        return None
+
+    async def _open_new_page(self) -> Page:
+        """Abre una nueva pestaña en el browser existente o en el contexto."""
+        if self._browser:
+            for ctx in self._browser.contexts:
+                if ctx.pages:
+                    page = await ctx.new_page()
+                    await page.bring_to_front()
+                    return page
+        if self._context:
+            page = await self._context.new_page()
+            await page.bring_to_front()
+            return page
+        raise RuntimeError("No hay browser ni contexto activo para abrir una pestaña.")
 
     async def _validate_page(
         self, spreadsheet_id: str, sheet_gid: str | int, cell_ref: str
@@ -441,15 +491,18 @@ class PlaywrightSheetsCapture:
         """
         Verifica que la sesión de Google esté autenticada.
 
-        Navega a myaccount.google.com. Si la URL se mantiene en myaccount,
-        la sesión está activa. Si redirige a accounts.google.com, la sesión
-        expiró o nunca se autenticó.
+        Abre una pestaña TEMPORAL en myaccount.google.com para no
+        reemplazar pestañas existentes. Si la URL se mantiene en
+        myaccount, la sesión está activa. Si redirige a
+        accounts.google.com, la sesión expiró o nunca se autenticó.
 
         Solo se ejecuta una vez por ciclo de vida del navegador.
         """
         self._log("→ Verificando autenticación de Google...")
+        temp_page = None
         try:
-            await self.page.goto(
+            temp_page = await self._context.new_page()
+            await temp_page.goto(
                 "https://myaccount.google.com",
                 wait_until="domcontentloaded",
                 timeout=15_000,
@@ -457,11 +510,13 @@ class PlaywrightSheetsCapture:
         except Exception:
             pass  # timeout no es crítico aquí
 
-        current_url = self.page.url
+        current_url = temp_page.url if temp_page else ""
         self._log(f"   myaccount → {current_url[:120]}")
 
         if "accounts.google.com" in current_url:
             self._auth_verified = False
+            if temp_page:
+                await temp_page.close()
             raise RuntimeError(
                 "✗ La sesión de Google no está autenticada.\n"
                 "   Playwright fue redirigido a accounts.google.com.\n\n"
@@ -473,6 +528,8 @@ class PlaywrightSheetsCapture:
                 f"   URL: {current_url}"
             )
 
+        if temp_page:
+            await temp_page.close()
         self._auth_verified = True
         self._log("✓ Sesión de Google autenticada.")
 

@@ -32,10 +32,13 @@ ssauto/
 │   ├── plugin_registry.py          # Registro estático de plugins
 │   ├── browser.py                  # Factoría de Chrome/Selenium
 │   ├── captura.py                  # Servicio de captura de pantalla (mss)
-│   └── comparador.py               # Motor de comparación HubSpot vs Sunrun
+│   ├── comparador.py               # Motor de comparación HubSpot vs Sunrun
+│   ├── monitors.py                 # Detección de monitores (mss)
+│   └── medidor_runner.py           # Ejecutor del medidor de región visual
 │
 ├── services/
-│   └── sesion_service.py           # Orquestación de subida (UI ↔ plugins)
+│   ├── sesion_service.py           # Orquestación de subida (UI ↔ plugins)
+│   └── session_manager.py          # Gestión de sesiones y cookies por plugin
 │
 ├── plugins/
 │   ├── hubspot.py                  # Plugin de subida a HubSpot
@@ -49,7 +52,12 @@ ssauto/
 │   ├── ventana_plantillas.py       # Editor de plantillas de mensajes
 │   ├── ventana_generador_mensajes.py # Generador de mensajes de contacto
 │   ├── custom_ctkframe.py          # CTkFrame extendido (conveniencia)
-│   └── posicion_ventanas.py        # Posicionamiento de ventanas hijas
+│   ├── posicion_ventanas.py        # Posicionamiento de ventanas hijas
+│   └── widgets/
+│       ├── coordinate_inputs.py    # Inputs de coordenadas (x, y, w, h)
+│       ├── log_widget.py           # Widget de registro (CTkTextbox)
+│       ├── monitor_selector.py     # Selector de monitor
+│       └── profile_manager.py      # Gestor de perfiles de región
 │
 ├── data/
 │   ├── api.py                      # Cliente de HubSpot REST API
@@ -63,6 +71,9 @@ ssauto/
 ├── gsheets/                        # Captura de celdas de Google Sheets
 │   ├── __init__.py                  # Punto de entrada (TicketCaptureService)
 │   ├── utils/
+│   ├── colors.py                   # Utilidades de color (oscurecer)
+│   ├── fsd.py                      # Normalización y display de FSD
+│   └── paths.py                    # Resolución de rutas (resource_path)
 │   │   ├── cell_parser.py           # Parser de referencias A1 (F6 → A3,F3,A6,F6)
 │   │   └── image_compositor.py      # Compositor de grilla 2×2 (Pillow)
 │   ├── data/
@@ -121,7 +132,10 @@ pip install -r requirements.txt
 
 1. Define la región de pantalla con el botón **Medir** o introduce coordenadas manualmente.
 2. Selecciona el sitio de destino (HubSpot, Sunrun o Ambos).
-3. Presiona la tecla rápida (por defecto `Ctrl+P`) para capturar y subir automáticamente.
+3. Presiona la tecla rápida (por defecto `Ctrl+Enter`) para capturar y subir automáticamente.
+4. El botón **Detener** (rojo) permite cancelar el proceso en curso en cualquier momento.
+
+El sistema detecta automáticamente el FSD desde el título de la ventana de Chrome al ejecutar la captura. También se puede ingresar un FSD manualmente en el campo de búsqueda inteligente.
 
 ### Calendar — Google Sheets
 
@@ -171,12 +185,21 @@ python iniciar_chrome_sesion.py
 
 - `screenshots/` — capturas guardadas por la aplicación.
 - `cookies/` — cookies de sesión serializadas.
+- `doms/` — snapshots de DOM para depuración del scraping.
+
+## Tests
+
+```bash
+pytest tests/ -v                    # Todos los tests (273 tests)
+pytest gsheets/tests/ -v            # Tests del módulo Google Sheets (16 tests)
+```
 
 ## Consideraciones
 
-- Diseñado para Windows. Otros SO pueden necesitar ajustes en `mss` (monitores) y `keyring` (llavero).
-- Las cookies se almacenan localmente sin cifrado adicional.
+- Diseñado para Windows. Otros SO pueden necesitar ajustes en `mss` (monitores), `keyring` (llavero) y `ctypes.windll` (DPI y detección de ventanas).
+- La detección automática de FSD usa `ctypes.windll.user32.EnumWindows` para leer títulos de ventanas visibles de Chrome — específico de Windows.
 - `webdriver-manager` requiere conexión a internet para descargar `chromedriver` la primera vez.
+- El perfil persistente de Chrome se almacena en `C:\chrome_sesion_ssauto` y es compartido entre Selenium y Playwright.
 
 ---
 

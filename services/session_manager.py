@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from core.base_plugin import SitioPlugin
-from core.browser import encontrar_pestana, esperar_carga
+from core.browser import esperar_carga
 from config.credenciales import cargar_cookies, cargar_credenciales
 
 
@@ -74,28 +74,34 @@ class SessionManager:
         """Valida la pestana del plugin y recorre tabs si hace falta."""
         if plugin.usar_pagina_actual and plugin.dominio:
             log(f"  -> Validando pestana activa de {plugin.nombre}...")
-            url = self.driver.current_url.lower()
-            if plugin.dominio.lower() not in url:
-                log(
-                    f"  . Pestana activa no es {plugin.nombre}, "
-                    f"buscando entre las abiertas..."
-                )
-                if not encontrar_pestana(
-                    self.driver, plugin.dominio, log
-                ):
-                    raise RuntimeError(
-                        f"No se encontro una pestana de {plugin.nombre}. "
-                        f"Ubica la pestana de {plugin.nombre} en Chrome "
-                        f"y reintenta."
+            try:
+                url = self.driver.current_url.lower()
+                if plugin.dominio.lower() not in url:
+                    log(
+                        f"  . Pestana activa no es {plugin.nombre}. "
+                        f"El plugin buscara la pestana correcta."
                     )
-                log(f"  v Cambiada a la pestana de {plugin.nombre}.")
-            else:
-                log("  v Pestana activa validada.")
+                else:
+                    log("  v Pestana activa validada.")
+            except Exception:
+                log(
+                    f"  . Pestaña sin contexto — {plugin.nombre} "
+                    f"buscara la correcta por su cuenta."
+                )
         elif not plugin.usar_pagina_actual and plugin.dominio:
             log(
                 f"  . [{plugin.nombre}] No se cambia de pestana "
                 f"automaticamente."
             )
+
+    @staticmethod
+    def _es_tab_valida(driver, handle) -> bool:
+        try:
+            driver.switch_to.window(handle)
+            driver.execute_script("return 1")
+            return True
+        except Exception:
+            return False
 
     @staticmethod
     def _obtener_credenciales(nombre_plugin: str, sesion: dict) -> dict:
