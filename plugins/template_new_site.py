@@ -50,12 +50,12 @@ class NuevoSitioPlugin(SitioPlugin):
     URL_LOGIN = "https://ejemplo.com/login"
     URL_UPLOAD = "https://ejemplo.com/upload"
 
-    SEL_USER = "#username"          # TODO: selector del campo usuario
-    SEL_PASS = "#password"          # TODO: selector del campo contraseña
-    SEL_BTN_LOGIN = "#login-btn"    # TODO: selector del botón de login
-    SEL_INPUT_FILE = "input[type='file']"   # TODO: selector del input file
-    SEL_SUBMIT = "#submit-btn"      # TODO: selector del botón submit (si aplica)
-    SEL_CONFIRMACION = "h1, h2"     # TODO: selector del elemento de confirmación
+    SEL_USER = "#username"  # TODO: selector del campo usuario
+    SEL_PASS = "#password"  # TODO: selector del campo contraseña
+    SEL_BTN_LOGIN = "#login-btn"  # TODO: selector del botón de login
+    SEL_INPUT_FILE = "input[type='file']"  # TODO: selector del input file
+    SEL_SUBMIT = "#submit-btn"  # TODO: selector del botón submit (si aplica)
+    SEL_CONFIRMACION = "h1, h2"  # TODO: selector del elemento de confirmación
     PALABRAS_CONFIRMACION = ["success", "uploaded", "exitoso"]
 
     TIMEOUT = 15
@@ -91,9 +91,13 @@ class NuevoSitioPlugin(SitioPlugin):
             driver.get(self.URL_LOGIN)
             esperar_carga(driver)
             espera = WebDriverWait(driver, self.TIMEOUT)
-            espera.until(EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_USER))).send_keys(usuario)
+            espera.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_USER))
+            ).send_keys(usuario)
             driver.find_element(By.CSS_SELECTOR, self.SEL_PASS).send_keys(clave)
-            espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_BTN_LOGIN))).click()
+            espera.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_BTN_LOGIN))
+            ).click()
             esperar_carga(driver, timeout=20)
             url = driver.current_url.lower()
             if "login" not in url and "signin" not in url:
@@ -127,25 +131,35 @@ class NuevoSitioPlugin(SitioPlugin):
             # 2. Submit (si aplica)
             # Si el formulario se envía automáticamente al elegir el archivo,
             # comentar o eliminar este bloque.
-            btn = espera.until(EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_SUBMIT)))
+            btn = espera.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_SUBMIT))
+            )
             btn.click()
 
             # 3. Confirmar
             texto_antes = ""
             try:
-                texto_antes = driver.find_element(By.CSS_SELECTOR, self.SEL_CONFIRMACION).text.lower()
+                texto_antes = driver.find_element(
+                    By.CSS_SELECTOR, self.SEL_CONFIRMACION
+                ).text.lower()
             except Exception:
                 pass
 
             from selenium.webdriver.support.ui import WebDriverWait as WDW
+
             WDW(driver, 30).until(
-                lambda d: d.find_element(By.CSS_SELECTOR, self.SEL_CONFIRMACION).text.lower() != texto_antes
+                lambda d: d.find_element(
+                    By.CSS_SELECTOR, self.SEL_CONFIRMACION
+                ).text.lower()
+                != texto_antes
             )
             resultado = driver.find_element(By.CSS_SELECTOR, self.SEL_CONFIRMACION).text
             if any(p in resultado.lower() for p in self.PALABRAS_CONFIRMACION):
                 log(f"  ✓ [{self.nombre}] Confirmado: {resultado}")
                 return ResultadoSubida(exitoso=True, mensaje=resultado)
-            return ResultadoSubida(exitoso=False, mensaje=f"Respuesta inesperada: {resultado}")
+            return ResultadoSubida(
+                exitoso=False, mensaje=f"Respuesta inesperada: {resultado}"
+            )
 
         except Exception as e:
             return ResultadoSubida(exitoso=False, mensaje=f"Error: {e}")

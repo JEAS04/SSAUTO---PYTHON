@@ -194,5 +194,5 @@ PLANTILLAS_MENSAJES = {
 ---
 
 **Implementado el**: 2026-05-25  
-**Versión**: 1.0.0  
+**Versión**: 0.1.1  
 **Autor**: SSAuto Development Team

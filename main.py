@@ -13,7 +13,7 @@ Para agregar un sitio nuevo:
 """
 
 import customtkinter as ctk
-
+from version import __version__
 from config.configuracion import (
     TEMA_APARIENCIA,
     TEMA_COLOR,

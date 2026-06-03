@@ -1,6 +1,6 @@
 {
-  "tema": "light",
-  "ultimo_monitor": 1,
+  "tema": "dark",
+  "ultimo_monitor": 0,
   "regiones_apps": {
     "Wolkbox": {
       "top": 280,
@@ -63,7 +63,7 @@
   },
   "headless": false,
   "chrome_existente": true,
-  "destino_subida": "AMBOS",
+  "destino_subida": "HUBSPOT",
   "ultima_celda_calendar": "g20",
   "ultima_pestana_calendar": "Jun"
 }

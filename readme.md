@@ -2,7 +2,7 @@
 
 ## Descripción
 
-SSAuto es una herramienta de escritorio para Windows que automatiza capturas de pantalla de regiones específicas y las sube a portales web (HubSpot y Sunrun). También incluye un comparador de datos entre HubSpot y Sunrun, y un generador de mensajes de contacto estandarizados.
+SSAuto es una herramienta de escritorio para Windows que automatiza capturas de pantalla de regiones específicas y las sube a portales web (HubSpot y Sunrun). Incluye un comparador de datos entre HubSpot y Sunrun con visualización de estado de dispatch, un generador de mensajes de contacto estandarizados, y botones de captura rápida para múltiples aplicaciones.
 
 Combina `customtkinter` (GUI), `mss` (captura de pantalla) y `Selenium` (automatización de navegador). La arquitectura es modular, con un sistema de plugins para agregar nuevos sitios de destino.
 
@@ -12,19 +12,22 @@ Combina `customtkinter` (GUI), `mss` (captura de pantalla) y `Selenium` (automat
 ssauto/
 ├── main.py                         # Punto de entrada (registro de plugins, UI)
 ├── version.py                      # Versión (0.1.1)
-├── medidor.py                      # Selector visual de región de pantalla
-├── scraping_sunrun.py              # Scraper de datos de Sunrun (Salesforce)
-├── template_filler.py              # Generador de mensajes (legacy)
-├── iniciar_chrome_sesion.py        # Lanza Chrome con puerto de depuración 9222
-├── recuperar_puerto.py             # Diagnóstico y recuperación del puerto 9222
 ├── requirements.txt                # Dependencias del proyecto
-├── .env                            # ACCESS_TOKEN de HubSpot
+├── .env                            # Variables de entorno (tokens, credenciales)
+├── AGENTS.md                       # Instrucciones para agentes de IA
+├── doku.md                         # Documentación y bitácora de desarrollo
+├── GENERADOR_MENSAJES.md           # Documentación del generador de mensajes
+├── image.png                       # Favicon de la aplicación
+├── LICENSE                         # Licencia MIT
+├── repomix.config.json             # Configuración de empaquetado Repomix
+├── SELECTORES_SUNRUN.HTML          # Selectores alternativos de Sunrun (referencia)
 │
 ├── config/
-│   ├── configuracion.py            # Configuración global, SITIOS, carga/guardado
+│   ├── configuracion.py            # Configuración global, carga/guardado
 │   ├── credenciales.py             # Keyring + serialización de cookies
 │   ├── apps_captura.py             # Apps de captura rápida (Wolkbox, B2Chat, etc.)
 │   ├── config.json                 # Configuración de runtime
+│   ├── config.json.bak             # Backup automático de configuración
 │   └── plantillas.json             # Plantillas de mensajes
 │
 ├── core/
@@ -33,12 +36,18 @@ ssauto/
 │   ├── browser.py                  # Factoría de Chrome/Selenium
 │   ├── captura.py                  # Servicio de captura de pantalla (mss)
 │   ├── comparador.py               # Motor de comparación HubSpot vs Sunrun
-│   ├── monitors.py                 # Detección de monitores (mss)
-│   └── medidor_runner.py           # Ejecutor del medidor de región visual
+│   ├── medidor_code.py             # Código del medidor visual ejecutado como subproceso
+│   ├── medidor_runner.py           # Ejecutor del medidor de región visual
+│   └── monitors.py                 # Detección de monitores (mss)
 │
 ├── services/
+│   ├── driver_provider.py          # Factoría de drivers Chrome (nuevo/existente/puerto 9222)
 │   ├── sesion_service.py           # Orquestación de subida (UI ↔ plugins)
 │   └── session_manager.py          # Gestión de sesiones y cookies por plugin
+│
+├── scraping/
+│   ├── sunrun.py                   # Scraper de datos de Sunrun (Salesforce)
+│   └── sunrun_selectors.py         # Selectores XPath/CSS centralizados para Sunrun
 │
 ├── plugins/
 │   ├── hubspot.py                  # Plugin de subida a HubSpot
@@ -51,8 +60,11 @@ ssauto/
 │   ├── ventana_credenciales.py     # Formulario de credenciales por sitio
 │   ├── ventana_plantillas.py       # Editor de plantillas de mensajes
 │   ├── ventana_generador_mensajes.py # Generador de mensajes de contacto
+│   ├── template_filler.py          # Utilidades de relleno de plantillas (plural/singular)
 │   ├── custom_ctkframe.py          # CTkFrame extendido (conveniencia)
 │   ├── posicion_ventanas.py        # Posicionamiento de ventanas hijas
+│   ├── comparacion/
+│   │   └── tema.py                 # Colores de estado y dispatch states (trabajable/no)
 │   └── widgets/
 │       ├── coordinate_inputs.py    # Inputs de coordenadas (x, y, w, h)
 │       ├── log_widget.py           # Widget de registro (CTkTextbox)
@@ -62,18 +74,38 @@ ssauto/
 ├── data/
 │   ├── api.py                      # Cliente de HubSpot REST API
 │   ├── buscador.py                 # Estrategias de búsqueda de contactos
-│   └── PROPIEDADES DE *.TXT        # Referencias de propiedades de HubSpot
+│   ├── hubspot_constants.py        # Constantes de propiedades HubSpot (tickets/contactos)
+│   ├── PROPIEDADES DE CONTACTO.TXT # Referencia de propiedades de contacto HubSpot
+│   ├── PROPIEDADES DE TICKET.TXT   # Referencia de propiedades de ticket HubSpot
+│   └── test.ticket.py              # Ticket de prueba para desarrollo
 │
-├── test/
-│   ├── test_buscar_fsd.py          # Tests de búsqueda de FSD
-│   └── test_fix_final.py           # Tests de búsqueda de contactos
+├── utils/
+│   ├── colors.py                   # Utilidades de color (oscurecer)
+│   ├── fsd.py                      # Normalización y display de FSD
+│   ├── paths.py                    # Resolución de rutas (resource_path)
+│   ├── iniciar_chrome_sesion.py    # Lanza Chrome con puerto de depuración 9222
+│   └── recuperar_puerto.py         # Diagnóstico y recuperación del puerto 9222
+│
+├── tests/                          # Suite de tests principal (273 tests)
+│   ├── conftest.py                 # Fixtures compartidos
+│   ├── test_apps_captura.py        # Tests de configuración de apps
+│   ├── test_base_plugin.py         # Tests del contrato ABC
+│   ├── test_colors.py              # Tests de utilidades de color
+│   ├── test_comparador.py          # Tests del motor de comparación
+│   ├── test_configuracion.py       # Tests de carga/guardado de config
+│   ├── test_credenciales.py        # Tests de keyring + cookies
+│   ├── test_fsd.py                 # Tests de normalización FSD
+│   ├── test_integration.py         # Tests de integración
+│   ├── test_paths.py               # Tests de resolución de rutas
+│   ├── test_plantillas.py          # Tests de plantillas de mensajes
+│   └── test_plugin_registry.py     # Tests del registro de plugins
+│
+├── test/                           # Suite de tests legacy (sin tests activos)
 │
 ├── gsheets/                        # Captura de celdas de Google Sheets
 │   ├── __init__.py                  # Punto de entrada (TicketCaptureService)
+│   ├── requirements-gsheets.txt     # Dependencias específicas de gsheets
 │   ├── utils/
-│   ├── colors.py                   # Utilidades de color (oscurecer)
-│   ├── fsd.py                      # Normalización y display de FSD
-│   └── paths.py                    # Resolución de rutas (resource_path)
 │   │   ├── cell_parser.py           # Parser de referencias A1 (F6 → A3,F3,A6,F6)
 │   │   └── image_compositor.py      # Compositor de grilla 2×2 (Pillow)
 │   ├── data/
@@ -82,8 +114,7 @@ ssauto/
 │   │   └── playwright_capture.py    # Captura visual de celdas con Playwright
 │   ├── services/
 │   │   └── ticket_capture_service.py # Orquestador (parser → API → Playwright → imagen)
-│   ├── sessions/                    # Perfil persistente de Chrome para Playwright
-│   └── tests/                       # Tests del módulo gsheets (16 tests)
+│   └── tests/                       # Tests del módulo gsheets (83 tests)
 │
 ├── screenshots/                    # Capturas generadas en runtime
 ├── cookies/                        # Cookies de sesión guardadas
@@ -137,9 +168,23 @@ pip install -r requirements.txt
 
 El sistema detecta automáticamente el FSD desde el título de la ventana de Chrome al ejecutar la captura. También se puede ingresar un FSD manualmente en el campo de búsqueda inteligente.
 
+### Captura por aplicación
+
+El panel **APLICACIONES DE CAPTURA** contiene botones dedicados para capturar y subir desde aplicaciones específicas:
+
+| Botón | Descripción |
+|---|---|
+| Wolkbox | Captura del panel de llamadas |
+| B2Chat | Captura de conversaciones de chat |
+| Correo | Captura de bandeja de correo |
+| Calendar | Captura de celdas de Google Sheets (ver sección abajo) |
+| App 5 | Captura de aplicación personalizada |
+
+Cada botón tiene su propia región y monitor configurable. Usa el botón ⚙ junto a cada app para redefinir la región de captura con el medidor visual. Las regiones se persisten automáticamente en `config/config.json`.
+
 ### Calendar — Google Sheets
 
-El botón **Calendar** en el panel de aplicaciones abre un modal para capturar celdas de Google Sheets. El flujo interno:
+El botón **Calendar** abre un modal para capturar celdas de Google Sheets. El flujo interno:
 
 1. Parsea la referencia de celda (ej. `F6`) en 4 coordenadas A1 (A3, F3, A6, F6).
 2. Lee los valores de las 4 celdas desde Google Sheets API v4.
@@ -157,18 +202,54 @@ La pestaña y la celda usadas en la última captura se persisten automáticament
 
 ### Comparación de datos
 
-La pestaña **Comparison** permite buscar contactos en HubSpot por FSD, nombre, teléfono, correo o dirección, y compararlos campo por campo contra los datos registrados en Sunrun. Las diferencias se resaltan por colores.
+La pestaña **Comparación** permite buscar contactos en HubSpot por FSD, nombre, teléfono, correo o dirección, y compararlos campo por campo contra los datos registrados en Sunrun. Las diferencias se resaltan por colores:
+
+- ✅ **Verde** — datos iguales en ambas plataformas
+- 🟡 **Amarillo** — datos similares (p. ej. diferencias mínimas de formato)
+- ❌ **Rojo** — datos diferentes entre HubSpot y Sunrun
+- 🟠 **Naranja** — dato solo presente en una plataforma
+
+#### Estado de Dispatch
+
+En la parte superior de los resultados de comparación se muestra el estado del dispatch de Sunrun con código de color:
+
+- 🟢 **Trabajable** — Dispatch Accepted o Dispatch Rejected
+- 🔴 **No trabajable** — Dispatch Cancelled, Dispatch Reported o Dispatch Approved
+
+Junto al estado se muestran la **Appointment Date** y el **Case Reason** extraídos de Sunrun.
+
+#### Búsqueda multi-atributo
+
+El comparador soporta múltiples estrategias de búsqueda en HubSpot:
+
+- Por FSD (directo, el más preciso)
+- Por nombre, teléfono, correo o dirección (búsqueda flexible)
+
+Cuando se busca por un atributo distinto al FSD, el sistema encuentra contactos candidatos en HubSpot, extrae su FSD asociado, y con ese FSD ejecuta la comparación completa contra Sunrun. Esto permite encontrar registros incluso cuando no se conoce el FSD de antemano.
 
 ### Generador de mensajes
 
-La pestaña **Templates** ofrece plantillas de mensajes por categoría (HubSpot, Sunrun, General) con editor completo. La pestaña **Messages** genera mensajes de contacto estandarizados (fuera de servicio, buzón de voz, no contesta) en español e inglés con manejo automático de singular/plural y fechas.
+La pestaña **Plantillas** ofrece plantillas de mensajes por categoría (HubSpot, Sunrun, General) con editor completo. La pestaña **Mensajes** genera mensajes de contacto estandarizados:
+
+- Fuera de Servicio
+- Buzón de Voz
+- No Contesta
+- Confirmación de visita técnica
+
+Cada mensaje está disponible en español e inglés, con fecha automática (`datetime`), manejo inteligente de singular/plural para números telefónicos, previsualización en tiempo real y copia al portapapeles con un clic.
 
 ### Chrome
 
 La aplicación puede conectarse a una instancia de Chrome ya abierta (puerto 9222) o lanzar una nueva. Para usar una sesión existente:
 
 ```bash
-python iniciar_chrome_sesion.py
+python utils/iniciar_chrome_sesion.py
+```
+
+Para diagnosticar problemas con el puerto de depuración:
+
+```bash
+python utils/recuperar_puerto.py
 ```
 
 ## Agregar un sitio nuevo
@@ -190,8 +271,8 @@ python iniciar_chrome_sesion.py
 ## Tests
 
 ```bash
-pytest tests/ -v                    # Todos los tests (273 tests)
-pytest gsheets/tests/ -v            # Tests del módulo Google Sheets (16 tests)
+pytest tests/ -v                    # Suite principal (273 tests)
+pytest gsheets/tests/ -v            # Tests del módulo Google Sheets (83 tests)
 ```
 
 ## Consideraciones

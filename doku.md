@@ -1656,3 +1656,31 @@ PlaywrightSheetsCapture (gsheets/core/playwright_capture.py):
 - stop(): corregida la lógica CDP — si se conectó via connect_over_cdp (es_cdp=True), NO cierra el contexto completo (eso mataría todas las pestañas del usuario). Solo cierra el contexto cuando se lanzó perfil persistente.
 - capture_cell(): ahora reutiliza una pestaña existente si el spreadsheet ya está abierto (_find_spreadsheet_page), o abre una nueva con _open_new_page(). Esto evita abrir pestañas duplicadas del mismo Google Sheet.
 - Nuevos helpers: _find_spreadsheet_page() busca entre todas las pestañas del browser si el spreadsheet_id ya está en alguna URL. _open_new_page() abre una pestaña nueva en el browser CDP o en el contexto persistente.
+
+03/06/2026
+
+Cambios en el árbol de estructura (sección principal)
+- Raíz: se agregaron AGENTS.md, doku.md, GENERADOR_MENSAJES.md, image.png, LICENSE, repomix.config.json, SELECTORES_SUNRUN.HTML
+- Movidos: medidor.py → core/medidor_code.py, scraping_sunrun.py → scraping/sunrun.py, template_filler.py → ui/template_filler.py, iniciar_chrome_sesion.py y recuperar_puerto.py → utils/
+- Nuevos directorios: scraping/ (sunrun + selectores), ui/comparacion/ (tema colores), utils/ (colors, fsd, paths, chrome scripts)
+- Nuevos archivos: services/driver_provider.py, data/hubspot_constants.py, scraping/sunrun_selectors.py, ui/comparacion/tema.py
+- Tests: test/ → 0 tests (legacy), tests/ → 273 tests, gsheets/tests/ → 83 tests
+- gsheets: estructura de utils/ corregida (solo cell_parser.py + image_compositor.py)
+Nuevas secciones de uso
+- Estado de Dispatch (trabajable/no trabajable con colores verde/rojo)
+- Captura por aplicación (Wolkbox, B2Chat, Correo, Calendar, App 5)
+- Búsqueda multi-atributo en el comparador
+Comandos de tests actualizados
+- pytest tests/ -v (273 tests), pytest gsheets/tests/ -v (83 tests)
+
+readme.md actualizado (13 KB). 273 tests pasan. Resumen de cambios:
+Sección	Cambios
+Descripción	Agregado dispatch, captura por app, búsqueda multi-atributo
+Estructura	Reescrita completa: scraping/, utils/, ui/comparacion/, services/driver_provider.py, data/hubspot_constants.py, archivos raíz nuevos, estructura gsheets corregida
+Captura por aplicación	Nueva sección documentando los 5 botones (Wolkbox, B2Chat, Correo, Calendar, App 5) + botón ⚙ para redefinir región
+Comparación	Agregado: leyenda de colores, estado de Dispatch (verde/rojo), Appointment Date, Case Reason, búsqueda multi-atributo
+Generador de mensajes	Expandido con los 4 tipos de mensaje y características (bilingüe, datetime, singular/plural)
+Chrome	Rutas actualizadas a utils/iniciar_chrome_sesion.py y utils/recuperar_puerto.py
+Tests	Comandos actualizados: tests/ (273), gsheets/tests/ (83); removido test/ legacy
+
+En esta sesión se consolidó version.py (0.1.1) como fuente única de verdad de la versión del proyecto: se corrigió GENERADOR_MENSAJES.md que declaraba 1.0.0, se conectó __version__ a main.py mediante un import (resolviendo el hallazgo documentado de que ningún código lo importaba), y se reescribió por completo el readme.md para reflejar la estructura real del proyecto con los nuevos módulos (scraping/, utils/, ui/comparacion/, services/driver_provider.py, data/hubspot_constants.py), las funcionalidades agregadas (captura por aplicación con 5 botones, estado de dispatch con colores verde/rojo, búsqueda multi-atributo en el comparador, generador de mensajes bilingüe) y los conteos reales de tests (273 en tests/, 83 en gsheets/tests/).

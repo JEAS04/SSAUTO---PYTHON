@@ -8,7 +8,10 @@
       "node_modules/**",
       "dist/**",
       ".next/**",
-      "doms/**"
+      "doms/**",
+      "doku.md",
+      "data/PROPIEDADES DE CONTACTO.TXT",
+      "data/PROPIEDADES DE TICKET.TXT"
     ]
   }
 }
