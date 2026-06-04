@@ -11,8 +11,9 @@ from pathlib import Path
 import customtkinter as ctk
 from tkinter import messagebox
 from ui.posicion_ventanas import ubicar_junto_a_padre
+from utils.paths import get_writable_path
 
-PLANTILLAS_PATH = Path("config/plantillas.json")
+PLANTILLAS_PATH = Path(get_writable_path("config/plantillas.json"))
 
 PLANTILLAS_DEFAULT = [
     {

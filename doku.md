@@ -1704,3 +1704,28 @@ scraping/sunrun.py: documentación para la clase principal y los métodos intern
 utils/, services/, gsheets/ y config/: documentación completada en todos los archivos restantes.
 
 273/273 tests pasan. Los tests se desincronizaron porque se agregó App 6 con colores _YELLOW a APPS_CAPTURA. Quedó corregido actualizando test_nombres_razonables y test_colores_siguen_paleta en tests/test_apps_captura.py.
+
+356/356 pruebas aprobadas. Aquí tienes un resumen de lo que se eliminó de gsheets/core/playwright_capture.py:
+
+Las capturas de pantalla de depuración para resaltado (highlight_*.png), que se generaban para cada captura de celda.
+El método _dump_debug_info, que creaba capturas de pantalla de página completa cuando ocurrían errores (grid_not_found_*.png, cell_not_found_*.png, etc.).
+La constante _DEBUG_DIR, el parámetro debug_dir, el atributo self._debug_dir y toda la lógica relacionada con la creación de directorios.
+La importación de datetime (ya no es necesaria).
+
+Como resultado, el directorio de capturas de pantalla de depuración (gsheets/screenshots/debug) ya no se llenará con archivos nuevos.
+
+
+Se genero el archivo ejecutable .exe de SSAuto esta en dist/SSAuto/SSAuto.exe
+Todo listo. Esto es lo que se hizo:
+Cambios realizados
+Archivo	Cambio
+utils/paths.py:39-59	Nueva funcion get_writable_path() — en PyInstaller usa %APPDATA%/SSAuto/, en dev usa CWD
+config/configuracion.py:14,32	ARCHIVO_CONFIG ahora usa get_writable_path() para ser escribible en el .exe
+ui/ventana_plantillas.py:15-16	PLANTILLAS_PATH ahora usa get_writable_path() en vez de Path() relativo
+SSAuto.spec	Archivo nuevo — configuracion completa de PyInstaller con hidden imports, datos, exclusiones
+guide_pyinstaller.md	Guia completa de uso de PyInstaller para este proyecto
+Resultado
+- 273 tests pasan sin errores
+- Build generado en dist/SSAuto/SSAuto.exe (~106 MB, modo onedir)
+- El .env debe colocarse manualmente en dist/SSAuto/ junto al .exe
+- chrome (chrome.exe) y Playwright (playwright install chromium) deben estar en la maquina destino

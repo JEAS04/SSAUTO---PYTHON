@@ -143,8 +143,8 @@ class TestPlaywrightSheetsCapture:
 
         mock_pw["page"].goto.assert_called_once()
         assert "domcontentloaded" in str(mock_pw["page"].goto.call_args)
-        # screenshot: 1 debug full-page + 1 captura final de celda
-        assert mock_pw["page"].screenshot.call_count >= 2
+        # screenshot: 1 captura final de celda
+        assert mock_pw["page"].screenshot.call_count >= 1
         assert "a3" in path.lower()
 
     @pytest.mark.asyncio
@@ -307,7 +307,7 @@ class TestPlaywrightSheetsCapture:
         assert "gid=42" in call_url
 
     @pytest.mark.asyncio
-    async def test_grid_not_found_generates_debug(self, mock_pw):
+    async def test_grid_not_found_raises_error(self, mock_pw):
         cap = PlaywrightSheetsCapture(headless=True)
         cap._playwright = mock_pw["pw_instance"]
         cap._context = mock_pw["context"]
@@ -318,15 +318,12 @@ class TestPlaywrightSheetsCapture:
             side_effect=Exception("timeout")
         )
         mock_pw["page"].evaluate = AsyncMock(return_value=None)
-        mock_pw["page"].screenshot = AsyncMock()
 
         with pytest.raises(RuntimeError, match="grid"):
             await cap.capture_cell(
                 sheet_url="https://docs.google.com/spreadsheets/d/ABC123/edit",
                 cell_ref="A3",
             )
-
-        assert mock_pw["page"].screenshot.call_count >= 1
 
     def test_clear_session(self, tmp_path):
         profile_dir = tmp_path / "chrome_profile"

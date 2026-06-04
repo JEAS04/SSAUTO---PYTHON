@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
-from utils.paths import resource_path
+from utils.paths import resource_path, get_writable_path
 from core.monitors import (            # re-exportado para compatibilidad
     obtener_monitores,
     obtener_nombres_monitores,
@@ -29,7 +29,7 @@ TEMA_APARIENCIA = "dark"
 TEMA_COLOR = "blue"
 
 # ── Archivos del proyecto ─────────────────────────────────────────────
-ARCHIVO_CONFIG = resource_path(os.path.join("config", "config.json"))
+ARCHIVO_CONFIG = get_writable_path(os.path.join("config", "config.json"))
 KEYRING_APP = "AutoCapturaApp"
 
 

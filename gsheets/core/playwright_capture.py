@@ -5,7 +5,6 @@ Navega a una hoja de Google Sheets, localiza celdas visualmente por su
 referencia A1 y captura únicamente el área de cada celda.
 
 Usa sesión persistente (storage_state) para evitar reautenticación.
-Genera screenshots de depuración ante fallos de localización.
 """
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -29,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 _SESSION_DIR = Path(__file__).resolve().parent.parent / "sessions"
 _SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / "screenshots"
-_DEBUG_DIR = Path(__file__).resolve().parent.parent / "screenshots" / "debug"
 
 # Selectores de Google Sheets (con fallbacks)
 _GRID_SELECTORS = [
@@ -76,7 +73,6 @@ class PlaywrightSheetsCapture:
         - Localización de celdas por columnas/filas del DOM (no hardcodeado)
         - Múltiples estrategias de fallback para selectores
         - Validación de que la pestaña correcta está cargada
-        - Screenshots de depuración automáticos ante fallos
         - Soporte para headless y visible
     """
 
@@ -90,7 +86,6 @@ class PlaywrightSheetsCapture:
         viewport_height: int = 1080,
         session_dir: str | Path | None = None,
         screenshots_dir: str | Path | None = None,
-        debug_dir: str | Path | None = None,
         profile_dir: str | Path | None = None,
         log_callback: Callable[[str], None] | None = None,
     ) -> None:
@@ -100,7 +95,6 @@ class PlaywrightSheetsCapture:
         self._screenshots_dir = (
             Path(screenshots_dir) if screenshots_dir else _SCREENSHOTS_DIR
         )
-        self._debug_dir = Path(debug_dir) if debug_dir else _DEBUG_DIR
         self._session_path = self._session_dir / "google_sheets_state.json"
         self._profile_dir = (
             Path(profile_dir) if profile_dir else self._session_dir / "chrome_profile"
@@ -119,7 +113,6 @@ class PlaywrightSheetsCapture:
         # Aseguramos que existan los directorios
         self._session_dir.mkdir(parents=True, exist_ok=True)
         self._screenshots_dir.mkdir(parents=True, exist_ok=True)
-        self._debug_dir.mkdir(parents=True, exist_ok=True)
         if self._use_persistent:
             self._profile_dir.mkdir(parents=True, exist_ok=True)
 
@@ -311,10 +304,9 @@ class PlaywrightSheetsCapture:
         # ── Esperar y verificar el grid con sondeo ────────────────────
         grid_ok = await self._wait_for_grid()
         if not grid_ok:
-            await self._dump_debug_info("grid_not_found", cell_ref)
             raise RuntimeError(
                 f"No se detectó el grid de Google Sheets para la celda {cell_ref}. "
-                f"gid={sheet_gid}. Se generó screenshot de depuración."
+                f"gid={sheet_gid}."
             )
 
         # ── Localizar celda ───────────────────────────────────────────
@@ -328,7 +320,6 @@ class PlaywrightSheetsCapture:
             await self._validate_page(spreadsheet_id, sheet_gid, cell_ref)
             grid_ok = await self._wait_for_grid()
             if not grid_ok:
-                await self._dump_debug_info("grid_not_found_retry", cell_ref)
                 raise RuntimeError(
                     f"No se detectó el grid tras recarga para {cell_ref}. "
                     f"gid={sheet_gid}."
@@ -336,11 +327,9 @@ class PlaywrightSheetsCapture:
             rect = await self._locate_cell(cell_ref)
 
         if rect is None:
-            await self._dump_debug_info("cell_not_found", cell_ref)
             raise RuntimeError(
                 f"No se pudo localizar la celda {cell_ref} en gid={sheet_gid}. "
-                f"Verifique que la celda exista en la pestaña seleccionada. "
-                f"Se generó screenshot de depuración."
+                f"Verifique que la celda exista en la pestaña seleccionada."
             )
 
         # ── Validar y refinar rect antes de capturar ──────────────────
@@ -452,7 +441,6 @@ class PlaywrightSheetsCapture:
         )
 
         if is_login_url or is_login_title or is_google_com:
-            await self._dump_debug_info("login_redirect", cell_ref)
             raise RuntimeError(
                 "✗ Playwright fue redirigido a la pantalla de login de Google.\n"
                 "   La sesión no está autenticada o expiró.\n\n"
@@ -710,10 +698,8 @@ class PlaywrightSheetsCapture:
           2. Para 'active-cell-border-union': descuenta 2px del borde para obtener
              el interior limpio de la celda, o los mantiene para ver el borde completo.
           3. Si el rect es dudoso, reintenta los overlays.
-          4. Genera debug highlight.
-          5. Retorna el clip final.
-        """
-        ts = datetime.now().strftime("%H%M%S")
+        4. Retorna el clip final.
+         """
         source = rect.get("source", "unknown")
         w = rect.get("width", 0)
         h = rect.get("height", 0)
@@ -763,25 +749,6 @@ class PlaywrightSheetsCapture:
             w = min(w, self._CELL_MAX_DIM)
             h = min(h, self._CELL_MAX_DIM)
 
-        # ── Debug highlight ───────────────────────────────────────────
-        debug_path = str(self._debug_dir / f"highlight_{cell_ref}_{ts}.png")
-        try:
-            await self.page.screenshot(path=debug_path, full_page=False)
-            from PIL import Image, ImageDraw
-
-            img = Image.open(debug_path)
-            draw = ImageDraw.Draw(img)
-            ex, ey = rect.get("x", 0), rect.get("y", 0)
-            for offset in range(3):
-                draw.rectangle(
-                    [ex - offset, ey - offset, ex + w + offset, ey + h + offset],
-                    outline="red",
-                )
-            img.save(debug_path)
-            self._log(f"· Debug highlight: {debug_path}")
-        except Exception as e:
-            logger.warning("No se pudo generar highlight: %s", e)
-
         # ── Clip final ────────────────────────────────────────────────
         # Los bordes active-cell-border tienen 2px de grosor y ya están incluidos
         # en el rect de la unión. Los conservamos para que la captura muestre el
@@ -796,40 +763,6 @@ class PlaywrightSheetsCapture:
             f"    ✓ Clip final: ({clip['x']},{clip['y']} {clip['width']}x{clip['height']})"
         )
         return clip
-
-    # ── Depuración ─────────────────────────────────────────────────────────
-
-    async def _dump_debug_info(self, reason: str, cell_ref: str) -> None:
-        """Genera screenshot de depuración y registra contexto de la página."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        prefix = f"{reason}_{cell_ref}_{timestamp}"
-
-        # Screenshot completo de la página
-        try:
-            ss_path = str(self._debug_dir / f"{prefix}_full.png")
-            await self.page.screenshot(path=ss_path, full_page=False)
-            self._log(f"· Debug screenshot: {ss_path}")
-        except Exception as e:
-            logger.warning("No se pudo generar screenshot de depuración: %s", e)
-
-        # Contexto de la página
-        try:
-            title = await self.page.title()
-            url = self.page.url
-            self._log(f"· Debug — title: '{title[:100]}'")
-            self._log(f"· Debug — url: {url[:200]}")
-
-            # Extraer HTML relevante (contenedor del grid si existe)
-            html_sample = await self.page.evaluate("""
-                () => {
-                    const grid = document.querySelector('#waffle-grid-container, #grid-container, [class*=\"waffle\"]');
-                    if (grid) return grid.outerHTML.substring(0, 500);
-                    return document.body ? document.body.innerHTML.substring(0, 500) : '(no body)';
-                }
-            """)
-            logger.debug("Debug HTML sample: %s", html_sample)
-        except Exception as e:
-            logger.warning("No se pudo extraer contexto de depuración: %s", e)
 
     # ── Utilidades ────────────────────────────────────────────────────────
 
