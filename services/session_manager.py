@@ -17,9 +17,19 @@ from config.credenciales import cargar_cookies, cargar_credenciales
 
 
 class SessionManager:
-    """Asegura la sesion del plugin en el navegador."""
+    """Asegura la sesion del plugin en el navegador.
+
+    Responsabilidad unica: posicionar la pestana correcta y garantizar que
+    la sesion este activa (intentando cookies primero, luego login automatico).
+    No crea drivers ni sube archivos.
+    """
 
     def __init__(self, driver):
+        """Inicializa el gestor de sesion con un driver ya conectado.
+
+        Args:
+            driver: instancia activa de Selenium WebDriver.
+        """
         self.driver = driver
 
     def asegurar(
@@ -96,6 +106,18 @@ class SessionManager:
 
     @staticmethod
     def _es_tab_valida(driver, handle) -> bool:
+        """Verifica si un handle de pestana tiene un contexto JavaScript vivo.
+
+        Cambia temporalmente a la pestana, ejecuta un script minimo y
+        retorna True si el contexto responde.
+
+        Args:
+            driver: instancia de WebDriver.
+            handle: identificador de la pestana (window handle).
+
+        Returns:
+            True si la pestana responde a ejecucion de JavaScript.
+        """
         try:
             driver.switch_to.window(handle)
             driver.execute_script("return 1")

@@ -159,6 +159,21 @@ class App(CustomCTkFrame):
         self._crear_barra_estado(padre, col=1)
 
     def _seccion(self, padre, titulo, fila, col=0, pady=(0, 10)):
+        """Crea una seccion con encabezado y borde para organizar la UI.
+
+        Cada seccion es un CTkFrame con un encabezado gris y un cuerpo
+        transparente donde se empaquetan los widgets hijos.
+
+        Args:
+            padre: widget padre (el CTkScrollableFrame).
+            titulo: texto del encabezado.
+            fila: fila en el grid del padre.
+            col: columna en el grid del padre.
+            pady: padding vertical de la seccion.
+
+        Returns:
+            CTkFrame interior (cuerpo) donde empaquetar los widgets.
+        """
         frame = ctk.CTkFrame(padre, fg_color=("gray95", "gray20"), border_width=1)
         frame.grid(row=fila, column=col, sticky="ew", pady=pady)
 
@@ -181,15 +196,39 @@ class App(CustomCTkFrame):
         return cuerpo
 
     def _calcular_ui_scale(self) -> float:
+        """Calcula un factor de escala entre 1.0 y 1.45 basado en la resolucion.
+
+        Compara la pantalla actual con Full HD (1920x1080) para determinar
+        cuanto escalar textos, paddings y tamaños de widgets. El factor se
+        usa en _r() y _fs() para adaptar la UI a distintas resoluciones.
+        """
         top = self.winfo_toplevel()
         sw, sh = top.winfo_screenwidth(), top.winfo_screenheight()
         return min(1.45, max(1.0, min(sw / 1920, sh / 1080)))
 
     def _r(self, base: int, mid: int | None = None, maximo: int | None = None) -> int:
+        """Escala un valor de padding/tamaño segun la resolucion de pantalla.
+
+        Args:
+            base: valor minimo (se usa si mid es None).
+            mid: valor a escalar (default: base).
+            maximo: limite superior opcional.
+
+        Returns:
+            Entero escalado, nunca menor que base.
+        """
         valor = int(round((mid if mid is not None else base) * self._ui_scale))
         return min(maximo or valor, max(base, valor))
 
     def _fs(self, base: int) -> int:
+        """Escala un tamaño de fuente con tope de 1.28x para legibilidad.
+
+        Args:
+            base: tamaño de fuente base en puntos.
+
+        Returns:
+            Tamaño escalado, nunca menor que base.
+        """
         return max(base, int(round(base * min(self._ui_scale, 1.28))))
 
     def _obtener_monitor_app(self, app: dict) -> int:
@@ -479,6 +518,15 @@ class App(CustomCTkFrame):
             )
 
     def _seleccionar_destino(self, opcion: str):
+        """Actualiza el destino de subida y refleja el cambio en los botones.
+
+        Args:
+            opcion: nombre del plugin destino ("HUBSPOT", "SUNRUN", "AMBOS").
+
+        Efectos secundarios:
+            - Persiste la eleccion en config.json via guardar_destino_subida().
+            - Cambia el color de los botones para resaltar el seleccionado.
+        """
         self.destino_var.set(opcion)
         guardar_destino_subida(opcion)
         for nombre, btn in self._btns_destino.items():
@@ -616,6 +664,16 @@ class App(CustomCTkFrame):
     # ── Lanzador de app ───────────────────────────────────────────────
 
     def _ejecutar_app(self, app: dict):
+        """Lanza la captura y subida para una aplicacion especifica en un hilo.
+
+        Args:
+            app: dict de APPS_CAPTURA con nombre, region, monitor, icono, color.
+
+        Efectos secundarios:
+            - Minimiza la ventana principal.
+            - Deshabilita todos los botones durante la ejecucion.
+            - Inicia un thread daemon que ejecuta _proceso_app.
+        """
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -682,6 +740,17 @@ class App(CustomCTkFrame):
             ui("")
 
     def _proceso_app(self, app: dict, region: dict, monitor_idx: int):
+        """Ejecuta el ciclo completo de captura y subida para una app (en hilo).
+
+        Args:
+            app: dict de APPS_CAPTURA.
+            region: dict con top/left/width/height de la region a capturar.
+            monitor_idx: indice del monitor donde capturar.
+
+        Efectos secundarios:
+            - Minimiza y restaura la ventana principal.
+            - Actualiza el log, la barra de estado y los indicadores de sitios.
+        """
         nombre = app["nombre"]
         prefix = f"[{nombre}] "
 
@@ -741,6 +810,7 @@ class App(CustomCTkFrame):
             self.after(0, self._rehabilitar_btns_apps)
 
     def _rehabilitar_btns_apps(self):
+        """Rehabilita todos los botones de apps y el de busqueda FSD."""
         for btn in self._btns_apps.values():
             btn.configure(state="normal")
         self.fsd_btn_buscar.configure(state="normal")
@@ -990,6 +1060,17 @@ class App(CustomCTkFrame):
     # ── Medidor de región por app ─────────────────────────────────────
 
     def _medir_region_app(self, app: dict):
+        """Lanza el medidor de region para redefinir el area de captura de una app.
+
+        Args:
+            app: dict de APPS_CAPTURA con nombre y monitor.
+
+        Efectos secundarios:
+            - Minimiza la ventana principal.
+            - Abre el overlay de medicion en el monitor de la app.
+            - Persiste la nueva region en config.json bajo 'regiones_apps'.
+            - Actualiza el texto del boton de la app con las nuevas dimensiones.
+        """
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -1057,6 +1138,12 @@ class App(CustomCTkFrame):
         threading.Thread(target=_esperar, daemon=True).start()
 
     def _crear_barra_estado(self, padre, col=0):
+        """Construye la barra de estado inferior con punto indicador y labels.
+
+        Args:
+            padre: widget padre (CTkScrollableFrame).
+            col: columna del grid donde ubicar la barra.
+        """
         frame_estado = ctk.CTkFrame(padre, fg_color="transparent")
         frame_estado.grid(row=6, column=col, sticky="ew", pady=(4, 0))
         self._punto_estado = ctk.CTkLabel(
@@ -1091,6 +1178,16 @@ class App(CustomCTkFrame):
     # ── Helpers UI ────────────────────────────────────────────────────
 
     def _tarjeta(self, padre, titulo):
+        """Crea una tarjeta (card) con borde y titulo pequeno.
+
+        Args:
+            padre: widget padre.
+            titulo: texto del encabezado de la tarjeta.
+
+        Returns:
+            Tupla (frame_exterior, frame_interior). Empaquetar widgets dentro
+            de frame_interior.
+        """
         frame = ctk.CTkFrame(
             padre, fg_color=("gray92", "gray22"), border_width=1, corner_radius=6
         )
@@ -1105,9 +1202,28 @@ class App(CustomCTkFrame):
         return frame, interior
 
     def _fuente_existe(self, nombre):
+        """Verifica si una familia tipografica esta instalada en el sistema.
+
+        Args:
+            nombre: nombre de la fuente (ej. "Cascadia Code").
+
+        Returns:
+            True si la fuente esta disponible.
+        """
         return nombre in tkinter.font.families()
 
     def _keybind_legible(self, kb):
+        """Convierte un keybind de Tkinter a formato legible.
+
+        "<Control-Return>" -> "Ctrl+Enter"
+        "<Shift-Alt-x>"    -> "Shift+Alt+x"
+
+        Args:
+            kb: string de keybind en formato Tkinter.
+
+        Returns:
+            Version legible para mostrar en la UI.
+        """
         return (
             kb.replace("<", "")
             .replace(">", "")
@@ -1260,9 +1376,19 @@ class App(CustomCTkFrame):
     # ── Log ───────────────────────────────────────────────────────────
 
     def _log(self, msg: str):
+        """Registra un mensaje en el widget de log de la ventana principal.
+
+        Args:
+            msg: texto a registrar. Se le agrega marca de tiempo automaticamente.
+        """
         self.log_texto.log(msg)
 
     def _set_status(self, texto: str):
+        """Actualiza el texto e indicador de color de la barra de estado.
+
+        Args:
+            texto: nuevo estado ("Listo", "Ejecutando...", "Completado", "Error").
+        """
         self.status_var.set(texto)
         colores = {
             "Listo": ("#2ea043", "#3fb950"),
@@ -1277,9 +1403,20 @@ class App(CustomCTkFrame):
     # ── Medidor ───────────────────────────────────────────────────────
 
     def _monitor_var_indice(self) -> int:
+        """Obtiene el indice numerico del monitor seleccionado en el dropdown."""
         return self._monitor_widget.obtener_indice()
 
     def _lanzar_medidor(self):
+        """Minimiza la ventana y lanza el overlay de medicion de region.
+
+        Abre el medidor en el monitor seleccionado. Cuando el usuario
+        termina de dibujar el rectangulo, se actualizan los campos de
+        coordenadas con la region seleccionada.
+
+        Efectos secundarios:
+            - Minimiza la ventana principal durante la medicion.
+            - Bloquea el boton principal para evitar doble ejecucion.
+        """
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -1300,12 +1437,26 @@ class App(CustomCTkFrame):
         threading.Thread(target=_esperar, daemon=True).start()
 
     def _aplicar_region(self, region: dict):
+        """Actualiza los campos de coordenadas con los valores de un dict.
+
+        Args:
+            region: dict con claves top, left, width, height (enteros).
+        """
         self._coord_widget.aplicar_region(region)
         self._profile_widget.sincronizar_paste()
         self._log(f"v Region actualizada: {region}")
         self.btn.configure(state="normal")
 
     def _obtener_region_validada(self) -> dict:
+        """Lee y valida los campos de coordenadas del formulario.
+
+        Returns:
+            Dict con claves top, left, width, height como enteros.
+
+        Raises:
+            ValueError: si algun campo esta vacio, no es numerico, o tiene
+                        width/height <= 0.
+        """
         region = {}
         for clave, var in self.region_vars.items():
             texto = var.get().strip()
@@ -1322,6 +1473,18 @@ class App(CustomCTkFrame):
         return region
 
     def _parsear_region(self, texto: str):
+        """Parsea una region desde texto pegado (dict o formato 'REGION = {...}').
+
+        Acepta tanto el formato del medidor ("REGION = {'top': ...}") como
+        un dict de Python directamente.
+
+        Args:
+            texto: string con la representacion de un dict de region.
+
+        Efectos secundarios:
+            - Actualiza los campos de coordenadas si el parseo es exitoso.
+            - Muestra un mensaje de error si el formato no es valido.
+        """
         texto = (texto or "").strip()
         if "=" in texto:
             texto = texto.split("=", 1)[1].strip()
@@ -1338,11 +1501,17 @@ class App(CustomCTkFrame):
             )
 
     def _sincronizar_paste(self, *_):
+        """Sincroniza el campo 'Pegar region' con las coordenadas actuales."""
         self._profile_widget.sincronizar_paste()
 
     # ── Sesión ────────────────────────────────────────────────────────
 
     def _abrir_login_inicial(self):
+        """Abre la ventana de credenciales si faltan al iniciar la app.
+
+        Se llama en __init__ despues de construir la UI si algun plugin
+        con login no tiene credenciales guardadas.
+        """
         sitios_compat = [
             {"nombre": p.nombre, "necesita_login": p.necesita_login}
             for p in PluginRegistry.con_login()
@@ -1354,6 +1523,12 @@ class App(CustomCTkFrame):
             self._log("✓ Credenciales actualizadas en sesión.")
 
     def _abrir_credenciales(self):
+        """Abre la ventana de credenciales para editar usuarios y contrasenas.
+
+        Efectos secundarios:
+            - Si el usuario confirma, actualiza self._credenciales_sesion.
+            - Refresca los indicadores de estado de sesion.
+        """
         sitios_compat = [
             {"nombre": p.nombre, "necesita_login": p.necesita_login}
             for p in PluginRegistry.con_login()
@@ -1366,12 +1541,25 @@ class App(CustomCTkFrame):
         self._actualizar_sitios_status()
 
     def _renovar_sesion(self):
+        """Elimina las cookies guardadas para forzar un nuevo login.
+
+        Borra el directorio cookies/ y actualiza los indicadores de estado.
+        La proxima ejecucion requerira autenticacion fresca.
+        """
         if COOKIES_DIR.exists():
             shutil.rmtree(COOKIES_DIR)
         self._log("→ Cookies eliminadas. Se hará login en la próxima ejecución.")
         self._actualizar_sitios_status()
 
     def _abrir_chrome_debug(self):
+        """Abre Chrome con depuracion remota en puerto 9222.
+
+        Si Chrome ya esta activo en el puerto, solo notifica. Si no,
+        busca el ejecutable y lo lanza con los flags necesarios.
+
+        Efectos secundarios:
+            - Lanza un subproceso de Chrome (subprocess.Popen, no bloqueante).
+        """
         from core.browser import puerto_activo, CHROME_USER_DATA, CHROME_PATHS, obtener_chrome_exe
 
         if puerto_activo():
@@ -1397,6 +1585,15 @@ class App(CustomCTkFrame):
     # ── Keybind ───────────────────────────────────────────────────────
 
     def _aplicar_keybind(self):
+        """Registra el atajo de teclado ingresado para ejecutar captura y subida.
+
+        Desvincula el atajo anterior (si existe), vincula el nuevo a
+        self._ejecutar(), y persiste la configuracion en config.json.
+
+        Efectos secundarios:
+            - Modifica el binding de teclas de la ventana raiz.
+            - Guarda en config.json bajo la clave 'keybind'.
+        """
         nuevo = self.keybind_var.get().strip()
         if not nuevo:
             return
@@ -1423,6 +1620,17 @@ class App(CustomCTkFrame):
             self._keybind_actual = None
 
     def _capturar_tecla(self, event):
+        """Captura una combinacion de teclas y la muestra en el campo de atajo.
+
+        Detecta modificadores (Control, Shift, Alt) via event.state y los
+        combina con la tecla presionada en formato Tkinter (<Control-x>).
+
+        Args:
+            event: evento KeyPress de Tkinter.
+
+        Returns:
+            "break" para evitar que la tecla se propague al Entry.
+        """
         partes = []
         if event.state & 0x4:
             partes.append("Control")
@@ -1440,6 +1648,7 @@ class App(CustomCTkFrame):
     # ── Detener proceso ────────────────────────────────────────────────
 
     def _detener(self):
+        """Solicita la cancelacion del proceso en curso via threading.Event."""
         self._cancelado.set()
         self._log("⚠ Deteniendo proceso...")
         self.btn_detener.configure(state="disabled")
@@ -1448,6 +1657,13 @@ class App(CustomCTkFrame):
     # ── Proceso principal ─────────────────────────────────────────────
 
     def _ejecutar(self):
+        """Inicia el ciclo de captura y subida principal en un hilo separado.
+
+        Valida la region, minimiza la ventana, captura la pantalla, detecta
+        el FSD automaticamente del titulo de Chrome, y sube a los destinos
+        configurados. Bloquea la UI durante la ejecucion para evitar
+        multiples procesos simultaneos.
+        """
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -1463,6 +1679,19 @@ class App(CustomCTkFrame):
         threading.Thread(target=self._proceso, daemon=True).start()
 
     def _proceso(self):
+        """Ejecuta el flujo principal de captura y subida (corre en hilo secundario).
+
+        Flujo:
+          1. Valida y lee la region de captura.
+          2. Minimiza la ventana para no interferir.
+          3. Detecta el FSD automaticamente de la ventana de Chrome activa.
+          4. Captura la region con mss.
+          5. Sube la imagen a los destinos configurados.
+          6. Restaura la ventana y actualiza el estado.
+
+        Efectos secundarios:
+            - Usa self.after() para toda interaccion con la UI desde el hilo.
+        """
         def ui(msg):
             self.after(0, lambda m=msg: self._log(m))
 

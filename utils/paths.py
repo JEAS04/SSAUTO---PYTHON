@@ -8,7 +8,18 @@ from pathlib import Path
 
 
 def resource_path(relative_path):
-    """Devuelve la ruta absoluta a un recurso, compatible con PyInstaller."""
+    """Devuelve la ruta absoluta a un recurso, compatible con PyInstaller.
+
+    Cuando la app se ejecuta como ejecutable empaquetado por PyInstaller,
+    los recursos residen en sys._MEIPASS. En modo desarrollo, se usa el
+    directorio de trabajo actual.
+
+    Args:
+        relative_path: ruta relativa al recurso (ej. "config/config.json").
+
+    Returns:
+        Ruta absoluta al recurso como string.
+    """
     try:
         base_path = sys._MEIPASS
     except Exception:

@@ -80,7 +80,13 @@ from .sunrun_selectors import (
 
 
 def _log_estado_pagina(driver, log_func, prefix: str = ""):
-    """Registra URL actual y título de la página."""
+    """Registra URL actual y titulo de la pagina para diagnostico.
+
+    Args:
+        driver: instancia de Selenium WebDriver.
+        log_func: callback de logging (ej. print o self._log).
+        prefix: texto opcional a anteponer en el mensaje de log.
+    """
     try:
         url = driver.current_url
         titulo = driver.title
@@ -140,12 +146,22 @@ class ScraperSunrun:
     Siempre usa el Chrome ya abierto por el usuario (puerto 9222).
     Nunca abre un Chrome nuevo ni cierra el existente.
 
+    Attributes:
+        _driver: instancia de Selenium WebDriver conectada al Chrome del usuario.
+        _log: callback de logging.
+
     Uso:
         scraper = ScraperSunrun(log_callback=mi_funcion_log)
         datos   = scraper.obtener_datos_por_fsd("1172172")
     """
 
     def __init__(self, log_callback=None):
+        """Inicializa el scraper con un callback de logging opcional.
+
+        Args:
+            log_callback: funcion que recibe un string para registrar
+                          mensajes. Por defecto usa print.
+        """
         self._log = log_callback or print
         self._driver = None
 
@@ -248,7 +264,15 @@ class ScraperSunrun:
         return False
 
     def _buscar_desde_sunrun(self, fsd_numero: str) -> bool:
-        self._log(f"  → Búsqueda rápida via barra global: {fsd_display(fsd_numero)}")
+        """Busca el FSD desde cualquier pagina de Sunrun usando la barra global.
+
+        Args:
+            fsd_numero: solo digitos del FSD (ej. "1172172").
+
+        Returns:
+            True si se navego exitosamente al detalle del ticket.
+        """
+        self._log(f"  -> Busqueda rapida via barra global: {fsd_display(fsd_numero)}")
         return self._buscar_con_barra_global(fsd_numero)
 
     def _buscar_con_barra_global(self, fsd_numero: str) -> bool:
@@ -871,6 +895,15 @@ class ScraperSunrun:
             }
 
     def _resultado_navegacion(self, fsd_display_val: str, ok: bool) -> dict:
+        """Construye el dict de resultado para el metodo navegar_a_fsd.
+
+        Args:
+            fsd_display_val: FSD en formato display ("FSD-980124").
+            ok: True si se llego al detalle del ticket.
+
+        Returns:
+            Dict con ok, fsd, mensaje y url (esta ultima vacia si no hay driver).
+        """
         url = self._driver.current_url if self._driver else ""
         if ok:
             self._log(f"  ✓ Ticket {fsd_display_val} abierto en el navegador.")

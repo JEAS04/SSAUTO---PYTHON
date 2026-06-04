@@ -7,7 +7,19 @@ from tkinter import StringVar
 
 
 class MonitorSelectorWidget(ctk.CTkFrame):
-    """Dropdown de monitores + etiqueta con dimensiones (ej: 1920x1080 px)."""
+    """Dropdown de monitores con etiqueta de dimensiones.
+
+    Muestra una lista de monitores detectados (ej. "Monitor 1 (principal)")
+    y al lado la resolucion en pixeles (ej. "1920x1080 px"). Al cambiar la
+    seleccion, dispara un callback opcional.
+
+    Args:
+        parent: widget padre.
+        nombres_monitores: lista de nombres legibles (de obtener_nombres_monitores).
+        monitores_raw: lista de dicts de monitores (de obtener_monitores).
+        indice_inicial: indice del monitor seleccionado por defecto.
+        on_change: callback sin argumentos al cambiar la seleccion.
+    """
 
     def __init__(
         self,

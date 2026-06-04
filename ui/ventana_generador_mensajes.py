@@ -363,6 +363,13 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
     # ── Lógica ────────────────────────────────────────────────────────────────
 
     def _obtener_telefonos(self) -> tuple[list[str], list[str]]:
+        """Lee y valida los campos de telefonos del formulario.
+
+        Returns:
+            Tupla (telefonos_formateados, errores) donde telefonos_formateados
+            es una lista de strings con formato NANP y errores es una lista de
+            mensajes de error (vacia si todos son validos).
+        """
         telefonos = []
         errores = []
 
@@ -385,6 +392,20 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         return telefonos, errores
 
     def _formatear_telefonos(self, telefonos: list[str], idioma: str = "es") -> str:
+        """Une multiples numeros de telefono en un solo string con formato natural.
+
+        Args:
+            telefonos: lista de numeros formateados.
+            idioma: "es" usa "y" como conector, "en" usa "and".
+
+        Returns:
+            String con los numeros unidos. Ej: "555-1234 y 555-5678" o
+            "555-1234, 555-5678 and 555-9012".
+
+        Examples:
+            ["555-1234"], "es"  -> "555-1234"
+            ["555-1234", "555-5678"], "en" -> "555-1234 and 555-5678"
+        """
         if len(telefonos) == 1:
             return telefonos[0]
 
@@ -396,20 +417,37 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         return ", ".join(telefonos[:-1]) + f" {conector} {telefonos[-1]}"
 
     def _requiere_telefonos(self) -> bool:
+        """Determina si el tipo de mensaje actual requiere numeros telefonicos.
+
+        Algunas plantillas como 'confirma_visita_tecnica' no requieren telefonos.
+        """
         tipo = self._tipo_mensaje_var.get()
         return PLANTILLAS_MENSAJES[tipo].get("requiere_telefonos", True)
 
     def _al_cambiar_tipo_mensaje(self, *_):
+        """Callback al cambiar el tipo de mensaje en el dropdown.
+
+        Habilita/deshabilita los campos de telefonos segun si la plantilla
+        los requiere y regenera la previsualizacion.
+        """
         self._actualizar_estado_telefonos()
         self._actualizar_preview()
 
     def _actualizar_estado_telefonos(self):
+        """Habilita o deshabilita los campos de telefonos segun la plantilla actual."""
         requiere_telefonos = self._requiere_telefonos()
         estado = "normal" if requiere_telefonos else "disabled"
         self._entry_tel1.configure(state=estado)
         self._entry_tel2.configure(state=estado)
 
     def _actualizar_preview(self, *_):
+        """Regenera la previsualizacion del mensaje con los datos actuales.
+
+        Valida telefonos, aplica la plantilla seleccionada en el idioma
+        elegido, sustituye placeholders y muestra el resultado en el
+        textbox de previsualizacion. Si hay errores de validacion, los
+        muestra en lugar del mensaje.
+        """
         tipo = self._tipo_mensaje_var.get()
         idioma = self._idioma_var.get()
         telefonos, errores = self._obtener_telefonos()
@@ -462,6 +500,11 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         self._preview_valido = True
 
     def _copiar_mensaje(self):
+        """Copia el mensaje generado al portapapeles del sistema.
+
+        Solo copia si el mensaje es valido (preview_valido=True). Muestra
+        una advertencia si no hay mensaje o no es valido.
+        """
         mensaje = self._textbox_preview.get("0.0", "end").strip()
 
         if not mensaje or not getattr(self, "_preview_valido", False):

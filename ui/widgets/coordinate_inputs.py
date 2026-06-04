@@ -7,7 +7,18 @@ from tkinter import StringVar
 
 
 class CoordinateInputsWidget(ctk.CTkFrame):
-    """Fila de 4 campos numericos etiquetados: TOP, LEFT, WIDTH, HEIGHT."""
+    """Fila de 4 campos numericos etiquetados: TOP, LEFT, WIDTH, HEIGHT.
+
+    Cada campo es un CTkEntry con validacion numerica. Los valores se
+    almacenan en StringVar accesibles via region_vars.
+
+    Args:
+        parent: widget padre.
+        valores_iniciales: dict opcional con valores iniciales
+                           {top: int, left: int, width: int, height: int}.
+        on_change: callback sin argumentos al modificar cualquier campo.
+        font_size: tamano de fuente para las etiquetas (default 9).
+    """
 
     def __init__(self, parent, valores_iniciales=None, on_change=None, font_size=9):
         super().__init__(parent, fg_color="transparent")

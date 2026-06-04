@@ -57,7 +57,18 @@ _client = None
 
 
 def _get_client() -> HubSpot:
-    """Lazy singleton: crea el cliente HubSpot bajo demanda."""
+    """Crea y cachea el cliente HubSpot autenticado con ACCESS_TOKEN.
+
+    Implementa un singleton lazy: la primera llamada lee ACCESS_TOKEN de las
+    variables de entorno (.env) y construye el cliente; las llamadas
+    subsiguientes devuelven la misma instancia cacheada.
+
+    Returns:
+        Instancia autenticada de HubSpot.
+
+    Raises:
+        RuntimeError: si ACCESS_TOKEN no esta configurado en el .env.
+    """
     global _client
     if _client is not None:
         return _client
@@ -76,11 +87,33 @@ def _get_client() -> HubSpot:
 
 
 def _val(props: dict, key: str) -> str:
+    """Extrae un valor de un dict de propiedades HubSpot de forma segura.
+
+    Args:
+        props: diccionario de propiedades (puede ser None).
+        key: clave a buscar.
+
+    Returns:
+        Valor como string sin espacios al inicio/final. Vacio ("") si la
+        clave no existe o el valor es None.
+    """
     v = props.get(key) or ""
     return v.strip()
 
 
 def _limpiar_nombre(nombre: str) -> str:
+    """Limpia un nombre eliminando sufijos separados por barras.
+
+    En HubSpot algunos nombres vienen con formato "Nombre / Apellido" o
+    "Nombre/Apellido". Esta funcion toma solo la primera parte. Si el
+    nombre esta vacio retorna cadena vacia.
+
+    Args:
+        nombre: string con el nombre completo potencialmente con barras.
+
+    Returns:
+        Nombre limpio sin sufijos separados por /.
+    """
     if not nombre:
         return ""
 
@@ -94,7 +127,19 @@ def _limpiar_nombre(nombre: str) -> str:
 
 
 def _parsear_asunto(asunto: str) -> dict:
+    """Extrae FSD, ID de cliente y nombre desde el asunto de un ticket.
 
+    El asunto de los tickets de HubSpot sigue convenciones como
+    "FSD-12345 Nombre Cliente ID:67890". Esta funcion aplica regex
+    y heuristicas para extraer cada componente.
+
+    Args:
+        asunto: texto del campo subject del ticket.
+
+    Returns:
+        Dict con claves: fsd_parsed, id_cliente, nombre. Cada valor es
+        un string (vacio si no se pudo extraer).
+    """
     texto = asunto or ""
 
     # =====================================================
@@ -195,18 +240,38 @@ def _parsear_asunto(asunto: str) -> dict:
 
 
 class HubSpotAPI:
-    """Cliente HubSpot con todas las operaciones de búsqueda y extracción."""
+    """Cliente HubSpot con todas las operaciones de busqueda y extraccion.
+
+    Encapsula busquedas de tickets por FSD e ID de GoFormz, busquedas de
+    contactos, extraccion de datos completos y enriquecimiento con FSD.
+
+    Attributes:
+        client: instancia autenticada del SDK de HubSpot.
+    """
 
     def __init__(self, client=None):
         """
         Args:
-            client: instancia de HubSpot. Si es None, se usa el singleton lazy.
+            client: instancia de HubSpot. Si es None, se usa el singleton lazy
+                    via _get_client() que lee ACCESS_TOKEN del .env.
         """
         self.client = client if client is not None else _get_client()
 
     # ── search primitives ──────────────────────────────────────
 
     def _buscar_ticket_por_fsd(self, fsd: str):
+        """Busca un ticket de HubSpot por su numero FSD con multiples variantes.
+
+        Prueba el FSD tal cual, en mayusculas, sin espacios, sin guiones,
+        y solo los digitos. Itera las variantes hasta encontrar el ticket
+        o agotar las opciones.
+
+        Args:
+            fsd: numero FSD en cualquier formato.
+
+        Returns:
+            Dict con ticket_id y props si se encuentra, None si no.
+        """
         fsd_clean = fsd.strip()
         candidatos = [
             fsd_clean,
@@ -251,6 +316,14 @@ class HubSpotAPI:
         return None
 
     def _buscar_contacto_por_id_goformz(self, id_goformz: str):
+        """Busca un contacto en HubSpot por su ID de GoFormz.
+
+        Args:
+            id_goformz: ID de GoFormz del contacto.
+
+        Returns:
+            Dict con contact_id y props si se encuentra, None si no.
+        """
         if not id_goformz:
             return None
         search_request = ContactSearchRequest(
@@ -277,6 +350,14 @@ class HubSpotAPI:
             return None
 
     def _buscar_ticket_por_id_goformz(self, id_goformz: str):
+        """Busca tickets asociados a un ID de GoFormz, priorizando los que tienen FSD.
+
+        Args:
+            id_goformz: ID de GoFormz del ticket.
+
+        Returns:
+            Dict con ticket_id y props del mejor candidato, o None.
+        """
         if not id_goformz:
             return None
         candidatos_id = [id_goformz]
@@ -323,7 +404,14 @@ class HubSpotAPI:
         return None
 
     def buscar_fsd_por_id_cliente(self, id_cliente: str) -> str:
-        """Busca el FSD asociado a un id_cliente via tickets."""
+        """Busca el FSD asociado a un ID de cliente via sus tickets en HubSpot.
+
+        Args:
+            id_cliente: ID de GoFormz del cliente.
+
+        Returns:
+            FSD como string (vacio si no se encuentra).
+        """
         if not id_cliente:
             return ""
         id_cliente_limpio = str(id_cliente).strip()
@@ -337,7 +425,17 @@ class HubSpotAPI:
         return str(fsd).strip() if fsd else ""
 
     def _buscar_fsd_por_contact_id(self, contact_id: str) -> str:
-        """Busca el FSD de un ticket asociado a un contact_id."""
+        """Busca el FSD del primer ticket asociado a un contacto en HubSpot.
+
+        Usa la API de asociaciones v4 para encontrar tickets vinculados al
+        contacto y extrae el FSD del primer resultado.
+
+        Args:
+            contact_id: ID interno de HubSpot del contacto.
+
+        Returns:
+            FSD como string (vacio si no se encuentra o falla la API).
+        """
         if not contact_id:
             return ""
         contact_id_limpio = str(contact_id).strip()
@@ -364,7 +462,22 @@ class HubSpotAPI:
             return ""
 
     def extraer_datos_hubspot(self, fsd: str):
-        """Extrae todos los datos de un ticket HubSpot por FSD."""
+        """Extrae todos los datos relevantes de un ticket de HubSpot por FSD.
+
+        Busca el ticket, parsea el asunto, busca el contacto asociado por
+        ID de GoFormz, y combina la informacion de ambas fuentes (ticket y
+        contacto) en un solo dict.
+
+        Args:
+            fsd: numero FSD en cualquier formato.
+
+        Returns:
+            Dict con claves: fsd, ticket_id, contact_id, nombre, id_cliente,
+            direccion, telefono, telefono_alterno, email, estado, municipio,
+            zip, nota, fuente_nombre, fuente_id, error.
+            La clave error es None si todo fue bien, o contiene el mensaje
+            si algo fallo.
+        """
         ticket_raw = self._buscar_ticket_por_fsd(fsd)
         if not ticket_raw:
             return {"error": f"No existe ticket para FSD={fsd}"}
@@ -411,6 +524,22 @@ class HubSpotAPI:
 
 
     def buscar_contactos_por_criterio(self, criterio, tipo_busqueda):
+        """Busca contactos en HubSpot segun un criterio y tipo de busqueda.
+
+        Para busquedas por FSD, delega en extraer_datos_hubspot(). Para otros
+        tipos (nombre, apellido, telefono, correo, direccion, id_cliente),
+        usa la API de busqueda de contactos con el operador adecuado (EQ para
+        campos exactos, CONTAINS_TOKEN para texto) y enriquece cada resultado
+        con su FSD asociado.
+
+        Args:
+            criterio: valor a buscar.
+            tipo_busqueda: uno de "fsd", "nombre", "apellido", "telefono",
+                           "correo", "direccion", "id_cliente".
+
+        Returns:
+            Lista de dicts con los contactos encontrados y sus FSD asociados.
+        """
         if tipo_busqueda == "fsd":
             datos = self.extraer_datos_hubspot(criterio)
             if datos.get("error"):
@@ -505,12 +634,26 @@ class HubSpotAPI:
 # =========================================================
 
 def buscar_fsd_por_id_cliente(id_cliente: str) -> str:
-    """Backward-compatible wrapper. Prefer HubSpotAPI().buscar_fsd_por_id_cliente()."""
+    """Wrapper retrocompatible. Preferir HubSpotAPI().buscar_fsd_por_id_cliente().
+
+    Args:
+        id_cliente: ID de GoFormz del cliente.
+
+    Returns:
+        FSD como string, o vacio si no se encuentra.
+    """
     return HubSpotAPI().buscar_fsd_por_id_cliente(id_cliente)
 
 
 def extraer_datos_hubspot(fsd: str):
-    """Backward-compatible wrapper. Prefer HubSpotAPI().extraer_datos_hubspot()."""
+    """Wrapper retrocompatible. Preferir HubSpotAPI().extraer_datos_hubspot().
+
+    Args:
+        fsd: numero FSD en cualquier formato.
+
+    Returns:
+        Dict con todos los datos del ticket y contacto asociado.
+    """
     return HubSpotAPI().extraer_datos_hubspot(fsd)
 
 

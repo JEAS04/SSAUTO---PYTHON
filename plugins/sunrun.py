@@ -32,8 +32,17 @@ class SunrunPlugin(SitioPlugin):
     """
     Plugin para subir archivos al portal de Sunrun (Salesforce Experience Cloud).
 
-    El usuario debe tener abierta en Chrome la página del FSD correcto.
-    El plugin detecta la pestaña buscando 'sunrun.my.site.com' + 'FSD-' en la URL.
+    Flujo de subida:
+      1. Localizar la pestana del FSD (con busqueda inteligente si se da FSD).
+      2. Refrescar la pagina para limpiar modales previos.
+      3. Clic en la pestana RELATED y esperar carga de componentes.
+      4. Enviar archivo directamente al input file oculto (sin abrir file picker
+         del OS, porque Salesforce cancela la subida al perder foco).
+      5. Confirmar que el archivo aparece listado en el modal.
+      6. Clic en DONE para cerrar el modal y finalizar.
+
+    El usuario debe tener abierta en Chrome la pagina del FSD correcto.
+    El plugin detecta la pestana buscando 'sunrun.my.site.com' + 'FSD-' en la URL.
     """
 
     # ── Metadatos ─────────────────────────────────────────────────────

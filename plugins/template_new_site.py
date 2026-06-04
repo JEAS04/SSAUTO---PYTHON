@@ -7,7 +7,11 @@ INSTRUCCIONES:
   3. En main.py agregar:
        from plugins.mi_sitio import MiSitioPlugin
        PluginRegistry.registrar(MiSitioPlugin())
-  4. Listo. Sin tocar ningún otro archivo.
+  4. Listo. Sin tocar ningun otro archivo.
+
+Esta plantilla implementa el contrato SitioPlugin (ver core/base_plugin.py)
+con valores de ejemplo. Cada metodo tiene un docstring que describe el
+comportamiento esperado y las condiciones de override.
 """
 
 from __future__ import annotations
@@ -24,7 +28,17 @@ from core.browser import esperar_carga
 
 
 class NuevoSitioPlugin(SitioPlugin):
-    """Plugin para [NOMBRE DEL SITIO]."""
+    """
+    Plugin para [NOMBRE DEL SITIO].
+
+    Esta clase es una plantilla. Para crear un plugin real:
+      1. Cambiar el nombre de la clase.
+      2. Implementar los metodos abstractos.
+      3. Rellenar las URLs y selectores del sitio objetivo.
+      4. Registrar el plugin en main.py.
+    """
+
+    # ── Metadatos ─────────────────────────────────────────────────────
 
     # ── Metadatos ─────────────────────────────────────────────────────
 

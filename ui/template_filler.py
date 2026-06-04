@@ -1,3 +1,14 @@
+"""
+ui/template_filler.py — Generador de mensajes con plantillas (standalone).
+
+Script independiente que levanta una ventana de CustomTkinter para generar
+mensajes personalizados usando plantillas predefinidas. Permite seleccionar
+una plantilla, ingresar datos personales y de clientes, y generar un mensaje
+con manejo automatico de singular/plural.
+
+Ejecutar directamente: python ui/template_filler.py
+"""
+
 import re
 import customtkinter as ctk
 from .ventana_plantillas import PLANTILLAS_DEFAULT
@@ -14,7 +25,21 @@ app.title("Generador de Mensajes")
 # FUNCIONES AUXILIARES: plural / singular
 # ------------------------------------------------------------
 def plural(cantidad: int, singular: str, plural_form: str = "") -> str:
-    """Retorna la forma singular o plural según la cantidad."""
+    """Retorna la forma singular o plural de una palabra segun la cantidad.
+
+    Args:
+        cantidad: numero de elementos.
+        singular: forma singular de la palabra.
+        plural_form: forma plural. Si no se da, se usa singular + "s".
+
+    Returns:
+        La palabra en singular si cantidad == 1, en plural en caso contrario.
+
+    Examples:
+        plural(1, "cliente")   -> "cliente"
+        plural(3, "cliente")   -> "clientes"
+        plural(1, "pez", "peces") -> "pez"
+    """
     if not plural_form:
         plural_form = singular + "s"
     return singular if cantidad == 1 else plural_form
@@ -25,7 +50,7 @@ def s(
     singular: str,
     plural_form: str = "",
 ) -> str:
-    """Alias corto de plural()."""
+    """Alias corto de plural() para usarlo inline en f-strings."""
     return plural(cantidad, singular, plural_form)
 
 
@@ -52,6 +77,17 @@ def _reemplazar_plurales(texto: str) -> str:
 # FUNCIÓN GENERADORA
 # ------------------------------------------------------------
 def generar_mensaje():
+    """Genera el mensaje combinando plantilla y datos del formulario.
+
+    Sustituye placeholders [Nombre], [Cargo], [Empresa], [Cliente], etc.
+    en la plantilla seleccionada con los valores ingresados por el usuario.
+    Tambien maneja tokens de plural {singular|plural} y limpia placeholders
+    no reemplazados dejandolos como «placeholder».
+
+    Efectos secundarios:
+        - Lee las entradas del formulario (entry_nombre, entry_cargo, etc.).
+        - Escribe el resultado en el widget textbox.
+    """
 
     nombre = entry_nombre.get()
     cargo = entry_cargo.get()

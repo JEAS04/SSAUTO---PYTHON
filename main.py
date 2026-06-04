@@ -51,10 +51,21 @@ launcher.title("SSAuto")
 
 
 def _clamp(valor: int, minimo: int, maximo: int) -> int:
+    """Restringe un valor entero entre minimo y maximo, ambos inclusive."""
     return max(minimo, min(valor, maximo))
 
 
 def _configurar_ventana_responsive():
+    """Ajusta escala, tamano y posicion de la ventana segun la resolucion.
+
+    Calcula una escala proporcional entre 1.0 y 1.65 basada en la relacion
+    de aspecto de la pantalla respecto a Full HD (1920x1080). La ventana
+    ocupa ~68 % del ancho y ~78 % del alto de la pantalla, centrada.
+
+    Efectos secundarios:
+        - Modifica las escalas globales de widgets y ventana de CustomTkinter.
+        - Establece la geometria y el tamano minimo de la ventana raiz.
+    """
     sw, sh = launcher.winfo_screenwidth(), launcher.winfo_screenheight()
     escala = _clamp(int(min(sw / 1920, sh / 1080) * 100), 100, 165) / 100
     ctk.set_widget_scaling(escala)
@@ -75,19 +86,45 @@ _configurar_ventana_responsive()
 
 
 def mostrar_frame(frame):
+    """Eleva el frame indicado al frente del contenedor apilado.
 
+    Usa tkraise() para traer un frame al frente en un layout de tipo
+    stacked (todos los frames ocupan la misma celda del grid).
+
+    Args:
+        frame: instancia de ctk.CTkFrame a mostrar.
+    """
     frame.tkraise()
 
 
 def abrir_plantillas():
+    """Abre la ventana modal de plantillas de mensajes rapidos.
+
+    Efectos secundarios:
+        - Crea una instancia de VentanaPlantillas como toplevel modal.
+    """
     VentanaPlantillas(launcher)
 
 
 def abrir_generador():
+    """Abre la ventana modal del generador de mensajes de contacto.
+
+    Efectos secundarios:
+        - Crea una instancia de VentanaGeneradorMensajes como toplevel modal.
+    """
     VentanaGeneradorMensajes(launcher)
 
 
 def abrir_credenciales():
+    """Abre la ventana modal de credenciales para los sitios que requieren login.
+
+    Si el usuario confirma, actualiza las credenciales en memoria de la vista
+    principal para usarlas en la sesion actual sin reiniciar la app.
+
+    Efectos secundarios:
+        - Si win.confirmado es True, modifica
+          vista_principal._credenciales_sesion.
+    """
     sitios_compat = [
         {"nombre": p.nombre, "necesita_login": p.necesita_login}
         for p in PluginRegistry.con_login()
@@ -98,6 +135,18 @@ def abrir_credenciales():
 
 
 def cambiar_tema(opcion: str):
+    """Cambia el tema visual entre claro y oscuro.
+
+    Actualiza la apariencia de CustomTkinter y persiste la eleccion en
+    config.json para que sobreviva a reinicios de la aplicacion.
+
+    Args:
+        opcion: "Oscuro" o "Claro" (valor del CTkOptionMenu de la barra).
+
+    Efectos secundarios:
+        - Cambia la apariencia global de todos los widgets CustomTkinter.
+        - Escribe el tema en config.json.
+    """
     tema = "dark" if opcion == "Oscuro" else "light"
     ctk.set_appearance_mode(tema)
     cfg = cargar_config()
@@ -117,6 +166,17 @@ barra.pack_propagate(False)
 
 
 def _btn_barra(texto: str, comando, lado="left", acento=False) -> ctk.CTkButton:
+    """Crea un boton estilizado para la barra de navegacion superior.
+
+    Args:
+        texto: etiqueta del boton.
+        comando: callback a invocar al hacer clic.
+        lado: lado de empaquetado en la barra ("left" o "right").
+        acento: si True, usa color de acento azul; si False, es transparente.
+
+    Returns:
+        Instancia de ctk.CTkButton ya empaquetada en la barra.
+    """
     btn = ctk.CTkButton(
         barra,
         text=texto,
@@ -134,6 +194,7 @@ def _btn_barra(texto: str, comando, lado="left", acento=False) -> ctk.CTkButton:
 
 
 def _sep_barra():
+    """Inserta un separador visual vertical de 1 px en la barra de navegacion."""
     ctk.CTkFrame(barra, width=1, fg_color=("gray70", "gray40")).pack(
         side="left", fill="y", padx=4, pady=4
     )
@@ -192,6 +253,14 @@ ctk.CTkLabel(
 
 
 def _al_minimizar(event):
+    """Oculta o restaura la barra superior cuando la ventana se minimiza/restaura.
+
+    Evita que la barra de navegacion flote como ventana independiente cuando
+    la ventana principal esta minimizada.
+
+    Args:
+        event: evento de mapeo/desmapeo de Tkinter (<Unmap> o <Map>).
+    """
     if launcher.state() == "iconic":
         barra.pack_forget()
     else:

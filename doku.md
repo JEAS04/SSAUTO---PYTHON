@@ -1684,3 +1684,23 @@ Chrome	Rutas actualizadas a utils/iniciar_chrome_sesion.py y utils/recuperar_pue
 Tests	Comandos actualizados: tests/ (273), gsheets/tests/ (83); removido test/ legacy
 
 En esta sesión se consolidó version.py (0.1.1) como fuente única de verdad de la versión del proyecto: se corrigió GENERADOR_MENSAJES.md que declaraba 1.0.0, se conectó __version__ a main.py mediante un import (resolviendo el hallazgo documentado de que ningún código lo importaba), y se reescribió por completo el readme.md para reflejar la estructura real del proyecto con los nuevos módulos (scraping/, utils/, ui/comparacion/, services/driver_provider.py, data/hubspot_constants.py), las funcionalidades agregadas (captura por aplicación con 5 botones, estado de dispatch con colores verde/rojo, búsqueda multi-atributo en el comparador, generador de mensajes bilingüe) y los conteos reales de tests (273 en tests/, 83 en gsheets/tests/).
+
+
+04/06/2026
+Se mejoro la documentacion docstring con ayuda de la inteligencia artificial
+
+Docstrings añadidos/mejorados en los ~55 archivos Python. Resumen:
+Verificación: Todos los archivos compilan correctamente. Se aprobaron 271 de 273 pruebas (las 2 fallas restantes ya existían previamente y no están relacionadas con los docstrings).
+Formato: Se utilizó Google Style y PEP 257, incluyendo secciones de Args, Returns, Raises y Efectos secundarios cuando corresponde.
+Cobertura: Todas las funciones, métodos y clases cuentan ahora con docstrings. Los archivos __init__.py vacíos recibieron docstrings de módulo. Los ayudantes internos (_val, _norm, _clamp, etc.) ahora tienen descripciones útiles en lugar de docstrings triviales.
+
+Principales mejoras por capa:
+
+main.py: documentación añadida para todas las funciones de la barra de herramientas y funciones auxiliares.
+data/api.py: documentación completa para todos los métodos de HubSpotAPI y los helpers a nivel de módulo.
+plugins/hubspot.py y plugins/sunrun.py: documentación para las clases y sus métodos internos de procesamiento.
+ui/ventana_principal.py: documentación para más de 30 métodos internos, incluyendo _proceso, _ejecutar_app, _lanzar_medidor, _crear_panel_*, _seccion y los helpers de escalado.
+scraping/sunrun.py: documentación para la clase principal y los métodos internos de navegación y extracción de datos.
+utils/, services/, gsheets/ y config/: documentación completada en todos los archivos restantes.
+
+273/273 tests pasan. Los tests se desincronizaron porque se agregó App 6 con colores _YELLOW a APPS_CAPTURA. Quedó corregido actualizando test_nombres_razonables y test_colores_siguen_paleta en tests/test_apps_captura.py.

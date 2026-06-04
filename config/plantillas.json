@@ -33,5 +33,10 @@
     "titulo": "Respuesta",
     "categoria": "General",
     "texto": "El cliente [cliente] a aceptado su visita."
+  },
+  {
+    "titulo": "Correo",
+    "categoria": "General",
+    "texto": "Saludos,\n\nSomos Planet Solar y estamos intentando comunicarnos con usted para coordinar una visita de soporte técnico. Comuníquese con nuestra línea de servicio al cliente al 787 493 0700. \n\nAgradecemos su pronta atención.\n\n\nSaludos solares,"
   }
 ]

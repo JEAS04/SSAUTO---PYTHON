@@ -1,4 +1,14 @@
-# utils/iniciar_chrome_sesion.py
+"""
+utils/iniciar_chrome_sesion.py — Inicia Chrome con sesion persistente y depuracion remota.
+
+Lanza una instancia de Chrome con el perfil guardado en C:\\chrome_sesion_ssauto
+y el puerto de depuracion 9222 habilitado. La sesion (cookies, sesiones de Google,
+etc.) se conserva entre reinicios del script, por lo que solo hay que autenticarse
+una vez.
+
+Ejecutar directamente: python utils/iniciar_chrome_sesion.py
+"""
+
 import subprocess
 import time
 import sys
@@ -9,11 +19,18 @@ PORT = 9222
 
 
 def iniciar_chrome_con_sesion():
-    """
-    Inicia Chrome con:
-    - La carpeta de sesión guardada
-    - Remote debugging en puerto 9222
-    - Sin cerrarse automáticamente
+    """Inicia Chrome con sesion persistente y depuracion remota en puerto 9222.
+
+    Busca el ejecutable de Chrome en las rutas estandar de Windows, lo lanza
+    con --remote-debugging-port y --user-data-dir apuntando a la carpeta de
+    sesion del proyecto, y espera hasta 10 segundos a que el puerto este activo.
+
+    Returns:
+        True si Chrome inicio y el puerto 9222 esta activo, False en caso
+        de error.
+
+    Raises:
+        SystemExit(1): si no se encuentra el ejecutable de Chrome.
     """
 
     # Rutas posibles de Chrome

@@ -1,0 +1,1 @@
+"""utils — Funciones auxiliares de formato, rutas y colores."""

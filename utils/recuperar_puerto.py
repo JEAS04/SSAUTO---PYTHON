@@ -1,9 +1,19 @@
+"""
+utils/recuperar_puerto.py — Script de diagnostico para recuperar el puerto 9222.
+
+Mata procesos Chrome y Chromedriver existentes, verifica la carpeta de sesion,
+comprueba la disponibilidad del puerto 9222, e intenta iniciar Chrome con
+depuracion remota. Util para diagnosticar problemas de conexion al puerto.
+
+Ejecutar directamente: python utils/recuperar_puerto.py
+"""
+
 import subprocess
 import time
 import os
 from pathlib import Path
 
-# Configuración
+# ── Configuracion ─────────────────────────────────────────────────────────
 CHROME_USER_DATA = r"C:\chrome_sesion_ssauto"
 CHROME_BACKUP = r"C:\chrome_sesion_ssauto_backup"
 PORT = 9222

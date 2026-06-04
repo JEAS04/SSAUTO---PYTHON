@@ -1,8 +1,13 @@
 """
 scraping/sunrun_selectors.py — Selectores CSS/XPath del portal Sunrun.
 
-Extraído de scraping_sunrun.py. Si el DOM de Sunrun cambia,
-solo actualiza este archivo.
+Extraido de scraping/sunrun.py. Si el DOM de Sunrun cambia, solo actualiza
+este archivo.
+
+PATRON_CAMPO es una plantilla de XPath que se formatea con el nombre visible
+de cada campo (ej. "Customer Name") para generar selectores reutilizables.
+El patron busca un span con el texto del label, sube al ancestro
+slds-form-element, y baja al lightning-formatted-text que contiene el valor.
 """
 
 # ── URLs ───────────────────────────────────────────────────────────────

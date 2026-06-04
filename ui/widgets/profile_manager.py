@@ -10,7 +10,28 @@ from tkinter import StringVar, messagebox
 
 
 class ProfileManagerWidget(ctk.CTkFrame):
-    """Widget autonomo para gestion de perfiles de region de captura."""
+    """Widget autonomo para gestion de perfiles de region de captura.
+
+    Proporciona:
+      - Dropdown para seleccionar un perfil guardado y cargarlo.
+      - Campo de texto para nombre del perfil + botones Guardar/Eliminar.
+      - Campo para pegar una region en formato dict y aplicarla a los
+        campos de coordenadas.
+
+    Se comunica con el exterior exclusivamente via callbacks; no accede
+    directamente a config.json ni a los widgets de la ventana principal.
+
+    Args:
+        parent: widget padre.
+        region_vars: dict {top, left, width, height} de tk.StringVar que
+                     este widget sincronizara al cargar/aplicar regiones.
+        perfiles_iniciales: dict de perfiles cargados de config.json.
+        on_cargar_perfil: callback(nombre, region_dict) al cargar perfil.
+        on_guardar_perfil: callback(nombre, region_dict) al guardar.
+        on_eliminar_perfil: callback(nombre) al eliminar.
+        on_aplicar_region: callback(texto_pegado) al aplicar region pegada.
+        on_log: callback(mensaje) para mostrar mensajes al usuario.
+    """
 
     def __init__(
         self,
@@ -110,11 +131,17 @@ class ProfileManagerWidget(ctk.CTkFrame):
         return nombres if nombres else ["- sin perfiles -"]
 
     def actualizar_menu(self):
+        """Reconstruye la lista de opciones del dropdown de perfiles."""
         nombres = self._nombres_perfiles()
         self._perfil_menu.configure(values=nombres)
         self._perfil_var.set(nombres[0])
 
     def actualizar_perfiles(self, perfiles: dict):
+        """Reemplaza los perfiles en memoria y actualiza el dropdown.
+
+        Args:
+            perfiles: nuevo dict de perfiles {nombre: region_dict}.
+        """
         self._perfiles = perfiles
         self.actualizar_menu()
 
@@ -154,4 +181,5 @@ class ProfileManagerWidget(ctk.CTkFrame):
             self._on_aplicar_region(self.region_paste_var.get().strip())
 
     def sincronizar_paste(self):
+        """Actualiza el campo 'Pegar region' con los valores actuales de las coordenadas."""
         self.region_paste_var.set(self._region_a_texto())

@@ -1,4 +1,14 @@
-# test_ticket.py
+"""
+data/test.ticket.py — Script de prueba para inspeccionar propiedades de HubSpot.
+
+Este archivo es un script exploratorio (no un test automatizado) que consulta
+directamente la API de HubSpot para inspeccionar las propiedades de tickets
+y contactos durante el desarrollo. No se ejecuta en la suite de tests.
+
+Uso:
+    python data/test.ticket.py
+"""
+
 from api import _client, _T_FSD
 
 # CONTACTO SOLO FSD Y SUBJECT

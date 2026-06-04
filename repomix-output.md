@@ -57,7 +57,6 @@ data/api.py
 data/buscador.py
 data/hubspot_constants.py
 data/test.ticket.py
-GENERADOR_MENSAJES.md
 gsheets/__init__.py
 gsheets/core/__init__.py
 gsheets/core/playwright_capture.py
@@ -76,7 +75,6 @@ gsheets/tests/test_ticket_capture_service.py
 gsheets/utils/__init__.py
 gsheets/utils/cell_parser.py
 gsheets/utils/image_compositor.py
-image.png
 LICENSE
 main.py
 plugins/hubspot.py
@@ -86,9 +84,9 @@ readme.md
 repomix.config.json
 requirements.txt
 scraping/__init__.py
+scraping/selectores_sunrun.html
 scraping/sunrun_selectors.py
 scraping/sunrun.py
-SELECTORES_SUNRUN.HTML
 services/driver_provider.py
 services/sesion_service.py
 services/session_manager.py
@@ -110,6 +108,7 @@ tests/test_plantillas.py
 tests/test_plugin_registry.py
 ui/comparacion/tema.py
 ui/custom_ctkframe.py
+ui/generador_mensajes.md
 ui/posicion_ventanas.py
 ui/template_filler.py
 ui/ventana_comparacion.py
@@ -131,6 +130,261 @@ version.py
 ```
 
 # Files
+
+## File: scraping/selectores_sunrun.html
+````html
+# Dispatch State
+SELECTOR_DISPATCH_STATE = (
+    "//*[@data-target-selection-name="
+    "'sfdc:RecordField.FS_Dispatch__c.FS_Dispatch_State__c']"
+    "//lightning-formatted-text"
+)
+
+# Appointment Date
+SELECTOR_APPOINTMENT_DATE = (
+    "//*[contains(@data-target-selection-name,'Appointment_Date')]"
+    "//lightning-formatted-text"
+)
+
+# Case Reason
+SELECTOR_CASE_REASON = (
+    "//*[@data-target-selection-name="
+    "'sfdc:RecordField.FS_Dispatch__c.Case_Reason__c']"
+    "//lightning-formatted-text"
+)
+
+# Related tab/button
+SELECTOR_RELATED = (
+    "//a[@role='tab' and @data-tab-name='related']"
+)
+
+# Upload Files (REAL input principal)
+SELECTOR_UPLOAD_FILES_MAIN = (
+    "//input[@type='file' and @name='fileInput']"
+)
+
+# Upload Files (botón visual secundario)
+SELECTOR_UPLOAD_FILES_SECONDARY = (
+    "//span[contains(text(),'Upload Files')]"
+)
+
+# Drop Files zone
+SELECTOR_DROP_FILES = (
+    "//*[contains(@class,'slds-file-selector__dropzone')]"
+)
+
+SELECTOR_DONE = (
+    "//button[contains(@class,'slds-button')]"
+    "//span[contains(@class,'label') and normalize-space()='Done']"
+)
+
+SELECTOR_DONE = (
+    "//button[contains(@class,'uiButton--brand')]"
+    "//span[@class=' label bBody' and normalize-space()='Done']"
+)
+````
+
+## File: ui/generador_mensajes.md
+````markdown
+# Generador de Mensajes de Contacto - Documentación
+
+## 📋 Descripción General
+
+Se ha implementado un **generador de mensajes de contacto** moderno y funcional utilizando `customtkinter`, que permite crear mensajes estandarizados para tres situaciones comunes de contacto con clientes.
+
+## 🎯 Características Principales
+
+### 1. **Tipos de Mensaje Disponibles**
+- **Fuera de Servicio**: Para cuando el número registrado está fuera de servicio
+- **Buzón de Voz**: Para cuando la llamada es dirigida al buzón de voz
+- **No Contesta**: Para cuando el cliente no responde la llamada
+
+### 2. **Soporte Bilingüe**
+- Español (por defecto)
+- Inglés
+- Cada tipo de mensaje tiene su propia traducción profesional
+
+### 3. **Manejo Inteligente de Números Telefónicos**
+- Permite ingresar **1 o 2 números telefónicos**
+- **Detección automática de singular/plural**:
+  - 1 número: "al número", "el número", "fue enviado"
+  - 2 números: "a los números", "los números", "fueron enviados"
+- Los números se muestran automáticamente en el mensaje generado
+
+### 4. **Fecha Automática**
+- Formato: `MM/DD/YYYY` (ej: 05/25/2026)
+- Se genera automáticamente al crear el mensaje
+- Solo se incluye en las plantillas en inglés (como requiere el formato "LS:")
+
+### 5. **Interfaz Moderna y Responsive**
+- Diseño limpio y profesional con `customtkinter`
+- Previsualización en tiempo real del mensaje
+- Botones claramente identificados con emojis
+- Confirmación visual al copiar el mensaje
+
+## 🏗️ Arquitectura de la Solución
+
+### **Decisión de Diseño: Mantener Separación**
+
+Después de analizar `ventana_plantillas.py` y `template_filler.py`, se decidió:
+
+1. **NO combinar** los archivos existentes
+2. **Crear un nuevo módulo** (`ui/ventana_generador_mensajes.py`) específico para estos mensajes
+3. **Mantener compatibilidad** con la funcionalidad existente
+
+### **Razones de esta decisión:**
+
+- `ventana_plantillas.py`: Gestiona plantillas genéricas editables con CRUD completo
+- `template_filler.py`: Es un script standalone para plantillas con placeholders variables
+- **Nuevo generador**: Casos específicos de contacto con lógica especializada (singular/plural, fecha automática)
+
+### **Reutilización de Patrones:**
+- Se mantuvo el patrón de `CTkToplevel` de `ventana_plantillas.py`
+- Se reutilizó la función de copiar al portapapeles
+- Se mantuvo el estilo visual consistente con la aplicación principal
+
+## 📁 Estructura de Archivos
+
+```
+ssauto/
+├── ui/
+│   ├── ventana_generador_mensajes.py  ← NUEVO ARCHIVO
+│   ├── ventana_plantillas.py          ← SIN CAMBIOS
+│   └── ...
+├── template_filler.py                 ← SIN CAMBIOS
+├── main.py                            ← MODIFICADO (se agregó botón)
+└── ...
+```
+
+## 🚀 Cómo Usar
+
+### **1. Abrir el Generador**
+- Ejecutar `main.py`
+- Hacer clic en el botón **"Mensajes"** en la barra superior
+
+### **2. Configurar el Mensaje**
+1. **Seleccionar tipo de mensaje** (Fuera de Servicio, Buzón de Voz, No Contesta)
+2. **Elegir idioma** (Español o English)
+3. **Ingresar números telefónicos**:
+   - Número 1 (obligatorio)
+   - Número 2 (opcional, máximo 2 números)
+
+### **3. Previsualizar y Copiar**
+- El mensaje se genera **automáticamente** mientras escribes
+- Revisar la previsualización
+- Hacer clic en **"📋 Copiar Mensaje"**
+
+## 💡 Ejemplos de Uso
+
+### **Ejemplo 1: Un número - Fuera de Servicio (Español)**
+```
+Número 1: 555-1234
+Resultado:
+"Se llamó al número 555-1234, pero está fuera de servicio. Se envió un correo electrónico como método de contacto alternativo."
+```
+
+### **Ejemplo 2: Dos números - No Contesta (Español)**
+```
+Número 1: 555-1234
+Número 2: 555-5678
+Resultado:
+"Se llamó a los clientes a los números 555-1234 y 555-5678, pero no respondió. Como alternativa de contacto, se envió un mensaje de texto y un correo electrónico."
+```
+
+### **Ejemplo 3: Un número - Buzón de Voz (Inglés)**
+```
+Número 1: 555-1234
+Resultado:
+"LS: 05/25/2026 The customer was called at the registered number, but the call went to voicemail. A text message and an email were sent."
+```
+
+## 🔧 Detalles Técnicos
+
+### **Manejo de Singular/Plural**
+
+El sistema usa una expresión regular para detectar patrones `{singular|plural}`:
+
+```python
+def _procesar_texto(plantilla, cantidad_numeros, telefonos_str, idioma):
+    # Reemplaza {al número|a los números} según cantidad
+    # Si cantidad == 1 → usa "al número"
+    # Si cantidad == 2 → usa "a los números"
+```
+
+### **Validaciones**
+- ✅ Mínimo 1 número telefónico
+- ✅ Máximo 2 números telefónicos
+- ✅ Mensaje de error si no hay números
+- ✅ Mensaje de error si excede el límite
+
+### **Plantillas**
+
+Las plantillas están definidas en el diccionario `PLANTILLAS_MENSAJES`:
+
+```python
+PLANTILLAS_MENSAJES = {
+    "fuera_servicio": {
+        "titulo": "Fuera de Servicio",
+        "es": "Se llamó {al número|a los números} {telefonos}, ...",
+        "en": "LS: {fecha} A call was placed to the registered phone {number|numbers}, ..."
+    },
+    # ... más plantillas
+}
+```
+
+## ✅ Compatibilidad y Mantenimiento
+
+### **Lo que NO se rompió:**
+- ✅ `ventana_plantillas.py` sigue funcionando igual
+- ✅ `template_filler.py` sigue funcionando igual
+- ✅ Todos los imports existentes se mantienen
+- ✅ El estilo visual es consistente
+- ✅ La aplicación principal (`main.py`) funciona correctamente
+
+### **Buenas Prácticas Aplicadas:**
+- ✅ Código modular y fácil de mantener
+- ✅ Comentarios claros en español
+- ✅ Nombres de variables descriptivos
+- ✅ Separación de responsabilidades
+- ✅ Manejo de errores básico
+- ✅ Sin código redundante
+
+## 🔄 Flujo de Trabajo Recomendado
+
+1. **Para mensajes de contacto estandarizados** → Usar **Generador de Mensajes**
+2. **Para plantillas personalizables** → Usar **Plantillas** (ventana_plantillas.py)
+3. **Para mensajes con placeholders variables** → Usar **Template Filler** (template_filler.py)
+
+## 📝 Notas Importantes
+
+- El generador está diseñado específicamente para los 3 tipos de mensajes de contacto
+- Los mensajes se copian al portapapeles listos para pegar
+- La fecha se genera automáticamente en el momento de crear el mensaje
+- El formato de fecha (MM/DD/YYYY) es el estándar americano
+
+## 🎨 Características de UI/UX
+
+- **Diseño moderno** con customtkinter
+- **Responsive** dentro de las limitaciones de customtkinter
+- **Iconos emoji** para mejor identificación visual
+- **Feedback visual** al copiar (mensaje de confirmación)
+- **Previsualización en tiempo real** mientras se escriben los números
+- **Organización clara** por secciones (configuración, teléfonos, preview)
+
+## 🔮 Posibles Mejoras Futuras
+
+- Agregar más tipos de mensajes si se requieren
+- Permitir personalizar las plantillas (guardar en JSON)
+- Agregar historial de mensajes generados
+- Exportar a diferentes formatos
+- Integrar con APIs de envío de mensajes
+
+---
+
+**Implementado el**: 2026-05-25  
+**Versión**: 0.1.1  
+**Autor**: SSAuto Development Team
+````
 
 ## File: .clinerules
 ````
@@ -310,6 +564,7 @@ _VERDE = ("#2d7a3a", "#256630")
 _NARANJA = ("#a05a00", "#8a4e00")
 _VIOLETA = ("#6b3fa0", "#5a3488")
 _TEAL = ("#1a7a6e", "#146058")
+_YELLOW = ("#f4c542", "#d9a81e")
 
 APPS_CAPTURA = [
     {
@@ -324,7 +579,7 @@ APPS_CAPTURA = [
         "icono": "💬",
         "region": {"top": 200, "left": 100, "width": 900, "height": 500},
         "monitor": 1,
-        "color": _VERDE,
+        "color": _VIOLETA,
     },
     {
         "nombre": "Correo",
@@ -338,7 +593,7 @@ APPS_CAPTURA = [
         "icono": "📅",
         "region": {"top": 300, "left": 200, "width": 850, "height": 550},
         "monitor": 1,
-        "color": _VIOLETA,
+        "color": _VERDE,
     },
     {
         "nombre": "App 5",
@@ -346,6 +601,13 @@ APPS_CAPTURA = [
         "region": {"top": 80, "left": 0, "width": 1920, "height": 980},
         "monitor": 1,
         "color": _TEAL,
+    },
+    {
+        "nombre": "App 6",
+        "icono": "📊",
+        "region": {"top": 80, "left": 0, "width": 1920, "height": 980},
+        "monitor": 1,
+        "color": _YELLOW,
     },
 ]
 ````
@@ -387,6 +649,11 @@ APPS_CAPTURA = [
     "titulo": "Respuesta",
     "categoria": "General",
     "texto": "El cliente [cliente] a aceptado su visita."
+  },
+  {
+    "titulo": "Correo",
+    "categoria": "General",
+    "texto": "Saludos,\n\nSomos Planet Solar y estamos intentando comunicarnos con usted para coordinar una visita de soporte técnico. Comuníquese con nuestra línea de servicio al cliente al 787 493 0700. \n\nAgradecemos su pronta atención.\n\n\nSaludos solares,"
   }
 ]
 ````
@@ -907,208 +1174,6 @@ contact = _client.crm.contacts.basic_api.get_by_id(
     properties=["fsd__", "firstname", "email", "id_de_goformz__contacto_"],
 )
 print(contact.properties)
-````
-
-## File: GENERADOR_MENSAJES.md
-````markdown
-# Generador de Mensajes de Contacto - Documentación
-
-## 📋 Descripción General
-
-Se ha implementado un **generador de mensajes de contacto** moderno y funcional utilizando `customtkinter`, que permite crear mensajes estandarizados para tres situaciones comunes de contacto con clientes.
-
-## 🎯 Características Principales
-
-### 1. **Tipos de Mensaje Disponibles**
-- **Fuera de Servicio**: Para cuando el número registrado está fuera de servicio
-- **Buzón de Voz**: Para cuando la llamada es dirigida al buzón de voz
-- **No Contesta**: Para cuando el cliente no responde la llamada
-
-### 2. **Soporte Bilingüe**
-- Español (por defecto)
-- Inglés
-- Cada tipo de mensaje tiene su propia traducción profesional
-
-### 3. **Manejo Inteligente de Números Telefónicos**
-- Permite ingresar **1 o 2 números telefónicos**
-- **Detección automática de singular/plural**:
-  - 1 número: "al número", "el número", "fue enviado"
-  - 2 números: "a los números", "los números", "fueron enviados"
-- Los números se muestran automáticamente en el mensaje generado
-
-### 4. **Fecha Automática**
-- Formato: `MM/DD/YYYY` (ej: 05/25/2026)
-- Se genera automáticamente al crear el mensaje
-- Solo se incluye en las plantillas en inglés (como requiere el formato "LS:")
-
-### 5. **Interfaz Moderna y Responsive**
-- Diseño limpio y profesional con `customtkinter`
-- Previsualización en tiempo real del mensaje
-- Botones claramente identificados con emojis
-- Confirmación visual al copiar el mensaje
-
-## 🏗️ Arquitectura de la Solución
-
-### **Decisión de Diseño: Mantener Separación**
-
-Después de analizar `ventana_plantillas.py` y `template_filler.py`, se decidió:
-
-1. **NO combinar** los archivos existentes
-2. **Crear un nuevo módulo** (`ui/ventana_generador_mensajes.py`) específico para estos mensajes
-3. **Mantener compatibilidad** con la funcionalidad existente
-
-### **Razones de esta decisión:**
-
-- `ventana_plantillas.py`: Gestiona plantillas genéricas editables con CRUD completo
-- `template_filler.py`: Es un script standalone para plantillas con placeholders variables
-- **Nuevo generador**: Casos específicos de contacto con lógica especializada (singular/plural, fecha automática)
-
-### **Reutilización de Patrones:**
-- Se mantuvo el patrón de `CTkToplevel` de `ventana_plantillas.py`
-- Se reutilizó la función de copiar al portapapeles
-- Se mantuvo el estilo visual consistente con la aplicación principal
-
-## 📁 Estructura de Archivos
-
-```
-ssauto/
-├── ui/
-│   ├── ventana_generador_mensajes.py  ← NUEVO ARCHIVO
-│   ├── ventana_plantillas.py          ← SIN CAMBIOS
-│   └── ...
-├── template_filler.py                 ← SIN CAMBIOS
-├── main.py                            ← MODIFICADO (se agregó botón)
-└── ...
-```
-
-## 🚀 Cómo Usar
-
-### **1. Abrir el Generador**
-- Ejecutar `main.py`
-- Hacer clic en el botón **"Mensajes"** en la barra superior
-
-### **2. Configurar el Mensaje**
-1. **Seleccionar tipo de mensaje** (Fuera de Servicio, Buzón de Voz, No Contesta)
-2. **Elegir idioma** (Español o English)
-3. **Ingresar números telefónicos**:
-   - Número 1 (obligatorio)
-   - Número 2 (opcional, máximo 2 números)
-
-### **3. Previsualizar y Copiar**
-- El mensaje se genera **automáticamente** mientras escribes
-- Revisar la previsualización
-- Hacer clic en **"📋 Copiar Mensaje"**
-
-## 💡 Ejemplos de Uso
-
-### **Ejemplo 1: Un número - Fuera de Servicio (Español)**
-```
-Número 1: 555-1234
-Resultado:
-"Se llamó al número 555-1234, pero está fuera de servicio. Se envió un correo electrónico como método de contacto alternativo."
-```
-
-### **Ejemplo 2: Dos números - No Contesta (Español)**
-```
-Número 1: 555-1234
-Número 2: 555-5678
-Resultado:
-"Se llamó a los clientes a los números 555-1234 y 555-5678, pero no respondió. Como alternativa de contacto, se envió un mensaje de texto y un correo electrónico."
-```
-
-### **Ejemplo 3: Un número - Buzón de Voz (Inglés)**
-```
-Número 1: 555-1234
-Resultado:
-"LS: 05/25/2026 The customer was called at the registered number, but the call went to voicemail. A text message and an email were sent."
-```
-
-## 🔧 Detalles Técnicos
-
-### **Manejo de Singular/Plural**
-
-El sistema usa una expresión regular para detectar patrones `{singular|plural}`:
-
-```python
-def _procesar_texto(plantilla, cantidad_numeros, telefonos_str, idioma):
-    # Reemplaza {al número|a los números} según cantidad
-    # Si cantidad == 1 → usa "al número"
-    # Si cantidad == 2 → usa "a los números"
-```
-
-### **Validaciones**
-- ✅ Mínimo 1 número telefónico
-- ✅ Máximo 2 números telefónicos
-- ✅ Mensaje de error si no hay números
-- ✅ Mensaje de error si excede el límite
-
-### **Plantillas**
-
-Las plantillas están definidas en el diccionario `PLANTILLAS_MENSAJES`:
-
-```python
-PLANTILLAS_MENSAJES = {
-    "fuera_servicio": {
-        "titulo": "Fuera de Servicio",
-        "es": "Se llamó {al número|a los números} {telefonos}, ...",
-        "en": "LS: {fecha} A call was placed to the registered phone {number|numbers}, ..."
-    },
-    # ... más plantillas
-}
-```
-
-## ✅ Compatibilidad y Mantenimiento
-
-### **Lo que NO se rompió:**
-- ✅ `ventana_plantillas.py` sigue funcionando igual
-- ✅ `template_filler.py` sigue funcionando igual
-- ✅ Todos los imports existentes se mantienen
-- ✅ El estilo visual es consistente
-- ✅ La aplicación principal (`main.py`) funciona correctamente
-
-### **Buenas Prácticas Aplicadas:**
-- ✅ Código modular y fácil de mantener
-- ✅ Comentarios claros en español
-- ✅ Nombres de variables descriptivos
-- ✅ Separación de responsabilidades
-- ✅ Manejo de errores básico
-- ✅ Sin código redundante
-
-## 🔄 Flujo de Trabajo Recomendado
-
-1. **Para mensajes de contacto estandarizados** → Usar **Generador de Mensajes**
-2. **Para plantillas personalizables** → Usar **Plantillas** (ventana_plantillas.py)
-3. **Para mensajes con placeholders variables** → Usar **Template Filler** (template_filler.py)
-
-## 📝 Notas Importantes
-
-- El generador está diseñado específicamente para los 3 tipos de mensajes de contacto
-- Los mensajes se copian al portapapeles listos para pegar
-- La fecha se genera automáticamente en el momento de crear el mensaje
-- El formato de fecha (MM/DD/YYYY) es el estándar americano
-
-## 🎨 Características de UI/UX
-
-- **Diseño moderno** con customtkinter
-- **Responsive** dentro de las limitaciones de customtkinter
-- **Iconos emoji** para mejor identificación visual
-- **Feedback visual** al copiar (mensaje de confirmación)
-- **Previsualización en tiempo real** mientras se escriben los números
-- **Organización clara** por secciones (configuración, teléfonos, preview)
-
-## 🔮 Posibles Mejoras Futuras
-
-- Agregar más tipos de mensajes si se requieren
-- Permitir personalizar las plantillas (guardar en JSON)
-- Agregar historial de mensajes generados
-- Exportar a diferentes formatos
-- Integrar con APIs de envío de mensajes
-
----
-
-**Implementado el**: 2026-05-25  
-**Versión**: 0.1.1  
-**Autor**: SSAuto Development Team
 ````
 
 ## File: gsheets/__init__.py
@@ -3348,184 +3413,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ````
 
-## File: plugins/template_new_site.py
-````python
-from __future__ import annotations
-
-import os
-from typing import Callable
-
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-
-from core.base_plugin import ContextoSubida, ResultadoSubida, SitioPlugin
-from core.browser import esperar_carga
-
-
-class NuevoSitioPlugin(SitioPlugin):
-
-
-
-
-    @property
-    def nombre(self) -> str:
-        return "NUEVO_SITIO"
-
-    @property
-    def necesita_login(self) -> bool:
-        return True
-
-    @property
-    def usar_pagina_actual(self) -> bool:
-        return False
-
-    @property
-    def dominio(self) -> str:
-        return "ejemplo.com"
-
-
-
-
-    URL_LOGIN = "https://ejemplo.com/login"
-    URL_UPLOAD = "https://ejemplo.com/upload"
-
-    SEL_USER = "#username"
-    SEL_PASS = "#password"
-    SEL_BTN_LOGIN = "#login-btn"
-    SEL_INPUT_FILE = "input[type='file']"
-    SEL_SUBMIT = "#submit-btn"
-    SEL_CONFIRMACION = "h1, h2"
-    PALABRAS_CONFIRMACION = ["success", "uploaded", "exitoso"]
-
-    TIMEOUT = 15
-
-
-
-    def verificar_sesion(self, driver, log: Callable) -> bool:
-
-
-
-
-        try:
-            driver.get(self.URL_UPLOAD)
-            esperar_carga(driver, timeout=8)
-            url = driver.current_url.lower()
-            if "login" in url or "signin" in url:
-                log(f"  ✗ [{self.nombre}] Sin sesión activa.")
-                return False
-            log(f"  ✓ [{self.nombre}] Sesión activa.")
-            return True
-        except Exception as e:
-            log(f"  ⚠ [{self.nombre}] No se pudo verificar sesión: {e}")
-            return False
-
-    def hacer_login(self, driver, credenciales: dict, log: Callable) -> bool:
-        """Login automático. Adaptar si el flujo de login tiene más pasos."""
-        usuario = credenciales.get("usuario", "")
-        clave = credenciales.get("clave", "")
-        if not usuario or not clave:
-            log(f"  ✗ [{self.nombre}] Sin credenciales.")
-            return False
-        try:
-            driver.get(self.URL_LOGIN)
-            esperar_carga(driver)
-            espera = WebDriverWait(driver, self.TIMEOUT)
-            espera.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_USER))
-            ).send_keys(usuario)
-            driver.find_element(By.CSS_SELECTOR, self.SEL_PASS).send_keys(clave)
-            espera.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_BTN_LOGIN))
-            ).click()
-            esperar_carga(driver, timeout=20)
-            url = driver.current_url.lower()
-            if "login" not in url and "signin" not in url:
-                log(f"  ✓ [{self.nombre}] Login exitoso.")
-                return True
-            log(f"  ✗ [{self.nombre}] Login falló.")
-            return False
-        except Exception as e:
-            log(f"  ✗ [{self.nombre}] Error en login: {e}")
-            return False
-
-    def subir(self, ctx: ContextoSubida) -> ResultadoSubida:
-        """Lógica principal de subida. Adaptar según el formulario del sitio."""
-        log = ctx.log
-        driver = ctx.driver
-        ruta_abs = os.path.abspath(ctx.ruta_imagen)
-
-        log(f"  → [{self.nombre}] Subiendo: {ruta_abs}")
-        esperar_carga(driver)
-
-        try:
-            espera = WebDriverWait(driver, self.TIMEOUT)
-
-            # 1. Enviar el archivo al input
-            input_file = espera.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_INPUT_FILE))
-            )
-            input_file.send_keys(ruta_abs)
-            log(f"  ✓ [{self.nombre}] Archivo enviado.")
-
-            # 2. Submit (si aplica)
-            # Si el formulario se envía automáticamente al elegir el archivo,
-            # comentar o eliminar este bloque.
-            btn = espera.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_SUBMIT))
-            )
-            btn.click()
-
-            # 3. Confirmar
-            texto_antes = ""
-            try:
-                texto_antes = driver.find_element(
-                    By.CSS_SELECTOR, self.SEL_CONFIRMACION
-                ).text.lower()
-            except Exception:
-                pass
-
-            from selenium.webdriver.support.ui import WebDriverWait as WDW
-
-            WDW(driver, 30).until(
-                lambda d: d.find_element(
-                    By.CSS_SELECTOR, self.SEL_CONFIRMACION
-                ).text.lower()
-                != texto_antes
-            )
-            resultado = driver.find_element(By.CSS_SELECTOR, self.SEL_CONFIRMACION).text
-            if any(p in resultado.lower() for p in self.PALABRAS_CONFIRMACION):
-                log(f"  ✓ [{self.nombre}] Confirmado: {resultado}")
-                return ResultadoSubida(exitoso=True, mensaje=resultado)
-            return ResultadoSubida(
-                exitoso=False, mensaje=f"Respuesta inesperada: {resultado}"
-            )
-
-        except Exception as e:
-            return ResultadoSubida(exitoso=False, mensaje=f"Error: {e}")
-````
-
-## File: repomix.config.json
-````json
-{
-  "output": {
-    "style": "markdown",
-    "removeComments": true
-  },
-  "ignore": {
-    "customPatterns": [
-      "node_modules/**",
-      "dist/**",
-      ".next/**",
-      "doms/**",
-      "doku.md",
-      "data/PROPIEDADES DE CONTACTO.TXT",
-      "data/PROPIEDADES DE TICKET.TXT"
-    ]
-  }
-}
-````
-
 ## File: scraping/__init__.py
 ````python
 
@@ -3645,7 +3532,13 @@ from .sunrun_selectors import (
 
 
 def _log_estado_pagina(driver, log_func, prefix: str = ""):
-    """Registra URL actual y título de la página."""
+    """Registra URL actual y titulo de la pagina para diagnostico.
+
+    Args:
+        driver: instancia de Selenium WebDriver.
+        log_func: callback de logging (ej. print o self._log).
+        prefix: texto opcional a anteponer en el mensaje de log.
+    """
     try:
         url = driver.current_url
         titulo = driver.title
@@ -3705,11 +3598,21 @@ def _clic_con_nueva_pestana(driver, elemento, log_func, timeout: float = 15.0) -
     Siempre usa el Chrome ya abierto por el usuario (puerto 9222).
     Nunca abre un Chrome nuevo ni cierra el existente.
 
+    Attributes:
+        _driver: instancia de Selenium WebDriver conectada al Chrome del usuario.
+        _log: callback de logging.
+
     Uso:
         scraper = ScraperSunrun(log_callback=mi_funcion_log)
         datos   = scraper.obtener_datos_por_fsd("1172172")
 
 
+
+Inicializa el scraper con un callback de logging opcional.
+
+        Args:
+            log_callback: funcion que recibe un string para registrar
+                          mensajes. Por defecto usa print.
 
 
 
@@ -3812,6 +3715,14 @@ def _clic_con_nueva_pestana(driver, elemento, log_func, timeout: float = 15.0) -
 
 
 
+
+Busca el FSD desde cualquier pagina de Sunrun usando la barra global.
+
+        Args:
+            fsd_numero: solo digitos del FSD (ej. "1172172").
+
+        Returns:
+            True si se navego exitosamente al detalle del ticket.
 
 
 
@@ -4436,6 +4347,15 @@ Escenario A: pagina de resultados de busqueda global (/global-search/)."""
 
 
 
+Construye el dict de resultado para el metodo navegar_a_fsd.
+
+        Args:
+            fsd_display_val: FSD en formato display ("FSD-980124").
+            ok: True si se llego al detalle del ticket.
+
+        Returns:
+            Dict con ok, fsd, mensaje y url (esta ultima vacia si no hay driver).
+
 
 
 
@@ -4475,59 +4395,6 @@ Dict con todos los campos vacíos y el error registrado."""
         }
 ````
 
-## File: SELECTORES_SUNRUN.HTML
-````html
-# Dispatch State
-SELECTOR_DISPATCH_STATE = (
-    "//*[@data-target-selection-name="
-    "'sfdc:RecordField.FS_Dispatch__c.FS_Dispatch_State__c']"
-    "//lightning-formatted-text"
-)
-
-# Appointment Date
-SELECTOR_APPOINTMENT_DATE = (
-    "//*[contains(@data-target-selection-name,'Appointment_Date')]"
-    "//lightning-formatted-text"
-)
-
-# Case Reason
-SELECTOR_CASE_REASON = (
-    "//*[@data-target-selection-name="
-    "'sfdc:RecordField.FS_Dispatch__c.Case_Reason__c']"
-    "//lightning-formatted-text"
-)
-
-# Related tab/button
-SELECTOR_RELATED = (
-    "//a[@role='tab' and @data-tab-name='related']"
-)
-
-# Upload Files (REAL input principal)
-SELECTOR_UPLOAD_FILES_MAIN = (
-    "//input[@type='file' and @name='fileInput']"
-)
-
-# Upload Files (botón visual secundario)
-SELECTOR_UPLOAD_FILES_SECONDARY = (
-    "//span[contains(text(),'Upload Files')]"
-)
-
-# Drop Files zone
-SELECTOR_DROP_FILES = (
-    "//*[contains(@class,'slds-file-selector__dropzone')]"
-)
-
-SELECTOR_DONE = (
-    "//button[contains(@class,'slds-button')]"
-    "//span[contains(@class,'label') and normalize-space()='Done']"
-)
-
-SELECTOR_DONE = (
-    "//button[contains(@class,'uiButton--brand')]"
-    "//span[@class=' label bBody' and normalize-space()='Done']"
-)
-````
-
 ## File: services/driver_provider.py
 ````python
 from __future__ import annotations
@@ -4540,12 +4407,31 @@ from core.browser import BrowserFactory, ErrorBrowser, puerto_activo
 class DriverProvider:
 
 
+
+
+
+
+
     def obtener(
         self,
         log: Callable[[str], None],
         headless: bool = False,
         usar_chrome_existente: bool = True,
     ) -> tuple:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -4860,7 +4746,7 @@ class TestAppsCaptura:
         assert len(nombres) == len(set(nombres))
 
     def test_nombres_razonables(self):
-        nombres_validos = {"Wolkbox", "B2Chat", "Correo", "Calendar", "App 5"}
+        nombres_validos = {"Wolkbox", "B2Chat", "Correo", "Calendar", "App 5", "App 6"}
         for app in APPS_CAPTURA:
             assert app["nombre"] in nombres_validos
 
@@ -4876,6 +4762,8 @@ class TestAppsCaptura:
             "#5a3488",
             "#1a7a6e",
             "#146058",
+            "#f4c542",
+            "#d9a81e",
         }
         for app in APPS_CAPTURA:
             for c in app["color"]:
@@ -7079,18 +6967,32 @@ app.title("Generador de Mensajes")
 
 
 def plural(cantidad: int, singular: str, plural_form: str = "") -> str:
-    """Retorna la forma singular o plural según la cantidad."""
-    if not plural_form:
-        plural_form = singular + "s"
-    return singular if cantidad == 1 else plural_form
+    """Retorna la forma singular o plural de una palabra segun la cantidad.
+
+    Args:
+        cantidad: numero de elementos.
+        singular: forma singular de la palabra.
+        plural_form: forma plural. Si no se da, se usa singular + "s".
+
+    Returns:
+        La palabra en singular si cantidad == 1, en plural en caso contrario.
+
+    Examples:
+        plural(1, "cliente")   -> "cliente"
+        plural(3, "cliente")   -> "clientes"
+        plural(1, "pez", "peces") -> "pez"
 
 
-def s(
-    cantidad: int,
-    singular: str,
-    plural_form: str = "",
-) -> str:
-    """Alias corto de plural()."""
+
+
+
+
+
+
+
+
+
+Alias corto de plural() para usarlo inline en f-strings."""
     return plural(cantidad, singular, plural_form)
 
 
@@ -7116,6 +7018,17 @@ def _reemplazar_plurales(texto: str) -> str:
 
 
 
+
+Genera el mensaje combinando plantilla y datos del formulario.
+
+    Sustituye placeholders [Nombre], [Cargo], [Empresa], [Cliente], etc.
+    en la plantilla seleccionada con los valores ingresados por el usuario.
+    Tambien maneja tokens de plural {singular|plural} y limpia placeholders
+    no reemplazados dejandolos como «placeholder».
+
+    Efectos secundarios:
+        - Lee las entradas del formulario (entry_nombre, entry_cargo, etc.).
+        - Escribe el resultado en el widget textbox.
 
 
 
@@ -7183,6 +7096,17 @@ from tkinter import StringVar
 
 
 class CoordinateInputsWidget(ctk.CTkFrame):
+
+
+
+
+
+
+
+
+
+
+
 
 
     def __init__(self, parent, valores_iniciales=None, on_change=None, font_size=9):
@@ -7260,6 +7184,12 @@ class LogWidget(ctk.CTkTextbox):
 
 
 
+
+
+
+
+
+
     def __init__(self, parent, height: int = 160, font_size: int = 10, **kwargs):
         kwargs.setdefault("wrap", "word")
         kwargs.setdefault("height", height)
@@ -7307,6 +7237,18 @@ from tkinter import StringVar
 
 
 class MonitorSelectorWidget(ctk.CTkFrame):
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     def __init__(
@@ -7381,6 +7323,27 @@ from tkinter import StringVar, messagebox
 
 
 class ProfileManagerWidget(ctk.CTkFrame):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     def __init__(
@@ -7481,11 +7444,17 @@ class ProfileManagerWidget(ctk.CTkFrame):
         return nombres if nombres else ["- sin perfiles -"]
 
     def actualizar_menu(self):
+
         nombres = self._nombres_perfiles()
         self._perfil_menu.configure(values=nombres)
         self._perfil_var.set(nombres[0])
 
     def actualizar_perfiles(self, perfiles: dict):
+
+
+
+
+
         self._perfiles = perfiles
         self.actualizar_menu()
 
@@ -7525,6 +7494,7 @@ class ProfileManagerWidget(ctk.CTkFrame):
             self._on_aplicar_region(self.region_paste_var.get().strip())
 
     def sincronizar_paste(self):
+        """Actualiza el campo 'Pegar region' con los valores actuales de las coordenadas."""
         self.region_paste_var.set(self._region_a_texto())
 ````
 
@@ -7604,6 +7574,13 @@ PORT = 9222
 
 
 def iniciar_chrome_con_sesion():
+
+
+
+
+
+
+
 
 
 
@@ -7698,6 +7675,17 @@ from pathlib import Path
 
 
 def resource_path(relative_path):
+
+
+
+
+
+
+
+
+
+
+
 
     try:
         base_path = sys._MEIPASS
@@ -8922,6 +8910,194 @@ Start → capture → stop en un solo ciclo de vida."""
         La próxima ejecución requerirá autenticación manual.
 ````
 
+## File: plugins/template_new_site.py
+````python
+from __future__ import annotations
+
+import os
+from typing import Callable
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+from core.base_plugin import ContextoSubida, ResultadoSubida, SitioPlugin
+from core.browser import esperar_carga
+
+
+class NuevoSitioPlugin(SitioPlugin):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    @property
+    def nombre(self) -> str:
+        return "NUEVO_SITIO"
+
+    @property
+    def necesita_login(self) -> bool:
+        return True
+
+    @property
+    def usar_pagina_actual(self) -> bool:
+        return False
+
+    @property
+    def dominio(self) -> str:
+        return "ejemplo.com"
+
+
+
+
+    URL_LOGIN = "https://ejemplo.com/login"
+    URL_UPLOAD = "https://ejemplo.com/upload"
+
+    SEL_USER = "#username"
+    SEL_PASS = "#password"
+    SEL_BTN_LOGIN = "#login-btn"
+    SEL_INPUT_FILE = "input[type='file']"
+    SEL_SUBMIT = "#submit-btn"
+    SEL_CONFIRMACION = "h1, h2"
+    PALABRAS_CONFIRMACION = ["success", "uploaded", "exitoso"]
+
+    TIMEOUT = 15
+
+
+
+    def verificar_sesion(self, driver, log: Callable) -> bool:
+
+
+
+
+        try:
+            driver.get(self.URL_UPLOAD)
+            esperar_carga(driver, timeout=8)
+            url = driver.current_url.lower()
+            if "login" in url or "signin" in url:
+                log(f"  ✗ [{self.nombre}] Sin sesión activa.")
+                return False
+            log(f"  ✓ [{self.nombre}] Sesión activa.")
+            return True
+        except Exception as e:
+            log(f"  ⚠ [{self.nombre}] No se pudo verificar sesión: {e}")
+            return False
+
+    def hacer_login(self, driver, credenciales: dict, log: Callable) -> bool:
+        """Login automático. Adaptar si el flujo de login tiene más pasos."""
+        usuario = credenciales.get("usuario", "")
+        clave = credenciales.get("clave", "")
+        if not usuario or not clave:
+            log(f"  ✗ [{self.nombre}] Sin credenciales.")
+            return False
+        try:
+            driver.get(self.URL_LOGIN)
+            esperar_carga(driver)
+            espera = WebDriverWait(driver, self.TIMEOUT)
+            espera.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_USER))
+            ).send_keys(usuario)
+            driver.find_element(By.CSS_SELECTOR, self.SEL_PASS).send_keys(clave)
+            espera.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_BTN_LOGIN))
+            ).click()
+            esperar_carga(driver, timeout=20)
+            url = driver.current_url.lower()
+            if "login" not in url and "signin" not in url:
+                log(f"  ✓ [{self.nombre}] Login exitoso.")
+                return True
+            log(f"  ✗ [{self.nombre}] Login falló.")
+            return False
+        except Exception as e:
+            log(f"  ✗ [{self.nombre}] Error en login: {e}")
+            return False
+
+    def subir(self, ctx: ContextoSubida) -> ResultadoSubida:
+        """Lógica principal de subida. Adaptar según el formulario del sitio."""
+        log = ctx.log
+        driver = ctx.driver
+        ruta_abs = os.path.abspath(ctx.ruta_imagen)
+
+        log(f"  → [{self.nombre}] Subiendo: {ruta_abs}")
+        esperar_carga(driver)
+
+        try:
+            espera = WebDriverWait(driver, self.TIMEOUT)
+
+            # 1. Enviar el archivo al input
+            input_file = espera.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_INPUT_FILE))
+            )
+            input_file.send_keys(ruta_abs)
+            log(f"  ✓ [{self.nombre}] Archivo enviado.")
+
+            # 2. Submit (si aplica)
+            # Si el formulario se envía automáticamente al elegir el archivo,
+            # comentar o eliminar este bloque.
+            btn = espera.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_SUBMIT))
+            )
+            btn.click()
+
+            # 3. Confirmar
+            texto_antes = ""
+            try:
+                texto_antes = driver.find_element(
+                    By.CSS_SELECTOR, self.SEL_CONFIRMACION
+                ).text.lower()
+            except Exception:
+                pass
+
+            from selenium.webdriver.support.ui import WebDriverWait as WDW
+
+            WDW(driver, 30).until(
+                lambda d: d.find_element(
+                    By.CSS_SELECTOR, self.SEL_CONFIRMACION
+                ).text.lower()
+                != texto_antes
+            )
+            resultado = driver.find_element(By.CSS_SELECTOR, self.SEL_CONFIRMACION).text
+            if any(p in resultado.lower() for p in self.PALABRAS_CONFIRMACION):
+                log(f"  ✓ [{self.nombre}] Confirmado: {resultado}")
+                return ResultadoSubida(exitoso=True, mensaje=resultado)
+            return ResultadoSubida(
+                exitoso=False, mensaje=f"Respuesta inesperada: {resultado}"
+            )
+
+        except Exception as e:
+            return ResultadoSubida(exitoso=False, mensaje=f"Error: {e}")
+````
+
+## File: repomix.config.json
+````json
+{
+  "output": {
+    "style": "markdown",
+    "removeComments": true
+  },
+  "ignore": {
+    "customPatterns": [
+      "node_modules/**",
+      "dist/**",
+      ".next/**",
+      "doms/**",
+      "doku.md",
+      "data/PROPIEDADES DE CONTACTO.TXT",
+      "data/PROPIEDADES DE TICKET.TXT"
+    ]
+  }
+}
+````
+
 ## File: services/session_manager.py
 ````python
 from __future__ import annotations
@@ -8937,7 +9113,17 @@ from config.credenciales import cargar_cookies, cargar_credenciales
 class SessionManager:
 
 
+
+
+
+
+
     def __init__(self, driver):
+
+
+
+
+
         self.driver = driver
 
     def asegurar(
@@ -9014,6 +9200,18 @@ class SessionManager:
 
     @staticmethod
     def _es_tab_valida(driver, handle) -> bool:
+        """Verifica si un handle de pestana tiene un contexto JavaScript vivo.
+
+        Cambia temporalmente a la pestana, ejecuta un script minimo y
+        retorna True si el contexto responde.
+
+        Args:
+            driver: instancia de WebDriver.
+            handle: identificador de la pestana (window handle).
+
+        Returns:
+            True si la pestana responde a ejecucion de JavaScript.
+        """
         try:
             driver.switch_to.window(handle)
             driver.execute_script("return 1")
@@ -9115,6 +9313,13 @@ from core.monitors import obtener_monitores
 
 def _parse_geometry(widget) -> tuple[int, int, int, int]:
 
+
+
+
+
+
+
+
     widget.update_idletasks()
     return (
         int(widget.winfo_rootx()),
@@ -9125,6 +9330,14 @@ def _parse_geometry(widget) -> tuple[int, int, int, int]:
 
 
 def _monitor_for_rect(x: int, y: int, width: int, height: int) -> dict | None:
+
+
+
+
+
+
+
+
 
     monitors = obtener_monitores()
     if not monitors:
@@ -9146,12 +9359,20 @@ def _monitor_for_rect(x: int, y: int, width: int, height: int) -> dict | None:
 
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:
+
     if maximum < minimum:
         return minimum
     return max(minimum, min(value, maximum))
 
 
 def _tk_offset(value: int) -> str:
+
+
+
+
+
+
+
 
     return f"{value:+d}"
 
@@ -9541,11 +9762,6 @@ class VentanaPlantillas(ctk.CTkToplevel):
         self._titulo_var.set("")
         self._texto_box.delete("0.0", "end")
         self._poblar_lista()
-````
-
-## File: version.py
-````python
-__version__ = "0.1.1"
 ````
 
 ## File: config/configuracion.py
@@ -10455,6 +10671,13 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
 
 
     def _obtener_telefonos(self) -> tuple[list[str], list[str]]:
+
+
+
+
+
+
+
         telefonos = []
         errores = []
 
@@ -10477,6 +10700,20 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         return telefonos, errores
 
     def _formatear_telefonos(self, telefonos: list[str], idioma: str = "es") -> str:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         if len(telefonos) == 1:
             return telefonos[0]
 
@@ -10488,20 +10725,37 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         return ", ".join(telefonos[:-1]) + f" {conector} {telefonos[-1]}"
 
     def _requiere_telefonos(self) -> bool:
+        """Determina si el tipo de mensaje actual requiere numeros telefonicos.
+
+        Algunas plantillas como 'confirma_visita_tecnica' no requieren telefonos.
+        """
         tipo = self._tipo_mensaje_var.get()
         return PLANTILLAS_MENSAJES[tipo].get("requiere_telefonos", True)
 
     def _al_cambiar_tipo_mensaje(self, *_):
+
+
+
+
+
         self._actualizar_estado_telefonos()
         self._actualizar_preview()
 
     def _actualizar_estado_telefonos(self):
+
         requiere_telefonos = self._requiere_telefonos()
         estado = "normal" if requiere_telefonos else "disabled"
         self._entry_tel1.configure(state=estado)
         self._entry_tel2.configure(state=estado)
 
     def _actualizar_preview(self, *_):
+
+
+
+
+
+
+
         tipo = self._tipo_mensaje_var.get()
         idioma = self._idioma_var.get()
         telefonos, errores = self._obtener_telefonos()
@@ -10554,6 +10808,11 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         self._preview_valido = True
 
     def _copiar_mensaje(self):
+
+
+
+
+
         mensaje = self._textbox_preview.get("0.0", "end").strip()
 
         if not mensaje or not getattr(self, "_preview_valido", False):
@@ -10567,6 +10826,11 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
 
         self._label_estado.configure(text="✓ Mensaje copiado al portapapeles")
         self.after(2500, lambda: self._label_estado.configure(text=""))
+````
+
+## File: version.py
+````python
+__version__ = "0.1.2"
 ````
 
 ## File: core/base_plugin.py
@@ -11572,6 +11836,17 @@ _client = None
 
 def _get_client() -> HubSpot:
 
+
+
+
+
+
+
+
+
+
+
+
     global _client
     if _client is not None:
         return _client
@@ -11590,462 +11865,572 @@ def _get_client() -> HubSpot:
 
 
 def _val(props: dict, key: str) -> str:
+    """Extrae un valor de un dict de propiedades HubSpot de forma segura.
+
+    Args:
+        props: diccionario de propiedades (puede ser None).
+        key: clave a buscar.
+
+    Returns:
+        Valor como string sin espacios al inicio/final. Vacio ("") si la
+        clave no existe o el valor es None.
+    """
     v = props.get(key) or ""
     return v.strip()
 
 
 def _limpiar_nombre(nombre: str) -> str:
-    if not nombre:
-        return ""
+    """Limpia un nombre eliminando sufijos separados por barras.
 
-    if " / " in nombre:
-        nombre = nombre.split(" / ")[0]
+    En HubSpot algunos nombres vienen con formato "Nombre / Apellido" o
+    "Nombre/Apellido". Esta funcion toma solo la primera parte. Si el
+    nombre esta vacio retorna cadena vacia.
 
-    elif "/" in nombre:
-        nombre = nombre.split("/")[0]
+    Args:
+        nombre: string con el nombre completo potencialmente con barras.
 
-    return nombre.strip()
+    Returns:
+        Nombre limpio sin sufijos separados por /.
 
 
-def _parsear_asunto(asunto: str) -> dict:
 
-    texto = asunto or ""
 
-    # =====================================================
-    # FSD
-    # =====================================================
 
-    fsd = ""
 
-    m_fsd = re.search(
-        r"\bFSD[-_\s]*(\d{4,})\b",
-        texto,
-        re.IGNORECASE,
-    )
 
-    if m_fsd:
-        fsd = m_fsd.group(1)
 
 
 
 
 
-    id_cliente = ""
 
-    patrones = [
-        r"\bID\s*[:
-        r"\bCLIENTE\s*[:
-        r"\bGOFORMZ\s*[:
-    ]
 
-    m_id = None
-    for patron in patrones:
-        m = re.search(patron, texto, re.IGNORECASE)
+Extrae FSD, ID de cliente y nombre desde el asunto de un ticket.
 
-        if m:
-            id_cliente = m.group(1)
-            m_id = m
-            break
+    El asunto de los tickets de HubSpot sigue convenciones como
+    "FSD-12345 Nombre Cliente ID:67890". Esta funcion aplica regex
+    y heuristicas para extraer cada componente.
 
+    Args:
+        asunto: texto del campo subject del ticket.
 
+    Returns:
+        Dict con claves: fsd_parsed, id_cliente, nombre. Cada valor es
+        un string (vacio si no se pudo extraer).
 
 
 
 
 
-    nombre = ""
 
-    try:
-        if m_fsd and m_id:
-            # extraer la sección entre el match de FSD y el match de ID
-            start = m_fsd.end()
-            end = m_id.start()
-            mid = texto[start:end].strip(" -–—:\t\n\r")
-            if mid:
-                nombre = mid.strip()
 
-        if not nombre:
 
-            parts = re.split(r"[-–—|/]", texto)
-            for p in parts:
-                s = p.strip()
-                if not s:
-                    continue
-                if re.search(r"\bFSD\b", s, re.IGNORECASE):
-                    continue
-                if re.search(r"\b(ID|CLIENTE|GOFORMZ)\b", s, re.IGNORECASE):
-                    continue
 
-                digits = re.sub(r"\D", "", s)
-                if digits and len(digits) >= 3 and len(digits) / max(1, len(s)) > 0.4:
-                    continue
-                # heurística: debe contener letras y al menos una separación (nombre apellido)
-                if re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", s) and len(s.split()) >= 1:
-                    # preferir partes con 2 palabras
-                    if len(s.split()) >= 2:
-                        nombre = s
-                        break
-                    # si no hay partes con 2 palabras, tomar la primera válida
-                    if not nombre:
-                        nombre = s
 
-        # limpiar nombre resultante (recortar separadores residuales)
-        if nombre:
-            nombre = nombre.strip()
-            nombre = re.sub(r"^[\s\-–—_/:|]+|[\s\-–—_/:|]+$", "", nombre)
-    except Exception:
-        nombre = ""
 
-    return {
-        "fsd_parsed": fsd,
-        "id_cliente": id_cliente,
-        "nombre": nombre,
-    }
-
-
-
-
-
-
-
-class HubSpotAPI:
-
-
-    def __init__(self, client=None):
-
-
-
-
-        self.client = client if client is not None else _get_client()
-
-
-
-    def _buscar_ticket_por_fsd(self, fsd: str):
-        fsd_clean = fsd.strip()
-        candidatos = [
-            fsd_clean,
-            fsd_clean.upper(),
-            fsd_clean.replace(" ", ""),
-            fsd_clean.upper().replace("-", ""),
-        ]
-        numeric_only = re.sub(r"\D", "", fsd_clean)
-        if numeric_only:
-            candidatos.append(numeric_only)
-            candidatos.append(f"FSD-{numeric_only}")
-
-        vistos = set()
-        candidatos_finales = []
-        for c in candidatos:
-            if c not in vistos:
-                vistos.add(c)
-                candidatos_finales.append(c)
-
-        for candidate in candidatos_finales:
-            logger.info("Buscando ticket por FSD=%s", candidate)
-            search_request = TicketSearchRequest(
-                filter_groups=[{
-                    "filters": [{
-                        "propertyName": _T_FSD,
-                        "operator": "EQ",
-                        "value": candidate,
-                    }]
-                }],
-                properties=TICKET_PROPS,
-                limit=1,
-            )
-            try:
-                response = self.client.crm.tickets.search_api.do_search(
-                    public_object_search_request=search_request
-                )
-                if response.results:
-                    ticket = response.results[0]
-                    return {"ticket_id": ticket.id, "props": ticket.properties}
-            except TicketApiException as e:
-                logger.warning("Error buscando ticket FSD=%s: %s", candidate, e)
-        return None
-
-    def _buscar_contacto_por_id_goformz(self, id_goformz: str):
-        if not id_goformz:
-            return None
-        search_request = ContactSearchRequest(
-            filter_groups=[{
-                "filters": [{
-                    "propertyName": _C_ID_GOFORMZ,
-                    "operator": "EQ",
-                    "value": id_goformz,
-                }]
-            }],
-            properties=CONTACT_PROPS,
-            limit=1,
-        )
-        try:
-            response = self.client.crm.contacts.search_api.do_search(
-                public_object_search_request=search_request
-            )
-            if not response.results:
-                return None
-            contact = response.results[0]
-            return {"contact_id": contact.id, "props": contact.properties}
-        except ContactApiException as e:
-            logger.warning("Error buscando contacto: %s", e)
-            return None
-
-    def _buscar_ticket_por_id_goformz(self, id_goformz: str):
-        if not id_goformz:
-            return None
-        candidatos_id = [id_goformz]
-        try:
-            numero = int(id_goformz.replace(",", "").strip())
-            con_coma = f"{numero:,}"
-            if con_coma != id_goformz:
-                candidatos_id.append(con_coma)
-        except ValueError:
-            pass
-
-        for id_val in candidatos_id:
-            search_request = TicketSearchRequest(
-                filter_groups=[{
-                    "filters": [{
-                        "propertyName": _T_ID_GOFORMZ,
-                        "operator": "EQ",
-                        "value": id_val,
-                    }]
-                }],
-                properties=TICKET_PROPS,
-                limit=10,
-            )
-            try:
-                response = self.client.crm.tickets.search_api.do_search(
-                    public_object_search_request=search_request
-                )
-                if not response.results:
-                    continue
-                ticket_con_fsd = None
-                ticket_fallback = None
-                for ticket in response.results:
-                    fsd_val = (ticket.properties or {}).get(_T_FSD, "")
-                    if fsd_val and str(fsd_val).strip():
-                        ticket_con_fsd = ticket
-                        break
-                    if ticket_fallback is None:
-                        ticket_fallback = ticket
-                ticket = ticket_con_fsd or ticket_fallback
-                if ticket:
-                    return {"ticket_id": ticket.id, "props": ticket.properties}
-            except TicketApiException as e:
-                logger.warning("Error buscando ticket por ID GoFormz=%s: %s", id_val, e)
-        return None
-
-    def buscar_fsd_por_id_cliente(self, id_cliente: str) -> str:
-
-        if not id_cliente:
-            return ""
-        id_cliente_limpio = str(id_cliente).strip()
-        if not id_cliente_limpio:
-            return ""
-        ticket = self._buscar_ticket_por_id_goformz(id_cliente_limpio)
-        if not ticket:
-            return ""
-        props = ticket.get("props", {})
-        fsd = props.get(_T_FSD, "")
-        return str(fsd).strip() if fsd else ""
-
-    def _buscar_fsd_por_contact_id(self, contact_id: str) -> str:
-        """Busca el FSD de un ticket asociado a un contact_id."""
-        if not contact_id:
-            return ""
-        contact_id_limpio = str(contact_id).strip()
-        if not contact_id_limpio:
-            return ""
-        try:
-            assoc_response = self.client.crm.associations.v4.basic_api.get_page(
-                object_type="contacts",
-                object_id=contact_id_limpio,
-                to_object_type="tickets",
-                limit=3,
-            )
-            if not assoc_response.results:
-                return ""
-            ticket_id = str(assoc_response.results[0].to_object_id)
-            ticket = self.client.crm.tickets.basic_api.get_by_id(
-                ticket_id=ticket_id,
-                properties=[_T_FSD, _T_ID_GOFORMZ],
-            )
-            fsd = ticket.properties.get(_T_FSD, "")
-            return str(fsd).strip() if fsd else ""
-        except Exception as e:
-            logger.warning("_buscar_fsd_por_contact_id(contact_id=%s): %s", contact_id, e)
-            return ""
-
-    def extraer_datos_hubspot(self, fsd: str):
-        """Extrae todos los datos de un ticket HubSpot por FSD."""
-        ticket_raw = self._buscar_ticket_por_fsd(fsd)
-        if not ticket_raw:
-            return {"error": f"No existe ticket para FSD={fsd}"}
-
-        tp = ticket_raw["props"]
-        ticket_id = ticket_raw["ticket_id"]
-        asunto = _val(tp, _T_SUBJECT)
-        parsed = _parsear_asunto(asunto)
-        id_goformz = _val(tp, _T_ID_GOFORMZ) or parsed["id_cliente"]
-        contacto_raw = self._buscar_contacto_por_id_goformz(id_goformz)
-        cp = contacto_raw["props"] if contacto_raw else {}
-        contact_id = contacto_raw["contact_id"] if contacto_raw else None
-
-        nombre_contacto = (f"{_val(cp, _C_FIRSTNAME)} {_val(cp, _C_LASTNAME)}").strip()
-        nombre_ticket = (f"{_val(tp, _T_FIRSTNAME)} {_val(tp, _T_LASTNAME)}").strip()
-        nombre = nombre_contacto or nombre_ticket
-        nombre = _limpiar_nombre(nombre)
-
-        try:
-            parsed_nombre = parsed.get("nombre") if isinstance(parsed, dict) else None
-            if not nombre and parsed_nombre:
-                nombre = parsed_nombre
-        except Exception:
-            pass
-
-        return {
-            "fsd": (_val(tp, _T_FSD) or parsed["fsd_parsed"] or fsd),
-            "ticket_id": ticket_id,
-            "contact_id": contact_id,
-            "nombre": nombre,
-            "id_cliente": (_val(cp, _C_ID_GOFORMZ) or id_goformz),
-            "direccion": (_val(cp, _C_ADDRESS) or _val(tp, _T_ADDRESS)),
-            "telefono": (_val(cp, _C_PHONE) or _val(tp, _T_PHONE)),
-            "telefono_alterno": (_val(cp, _C_PHONE_ALT) or _val(tp, _T_PHONE_ALT)),
-            "email": (_val(cp, _C_EMAIL) or _val(tp, _T_EMAIL)),
-            "estado": (_val(cp, _C_STATE) or _val(cp, _C_STATE2) or _val(tp, _T_STATE)),
-            "municipio": (
-                _val(tp, _T_COUNTY) or _val(cp, _C_MUNICIPIO) or _val(cp, _C_MUNICIPIO_CO)
-            ),
-            "zip": (_val(cp, _C_ZIP) or _val(tp, _T_ZIP)),
-            "nota": _val(tp, _T_NOTA),
-            "error": None,
-        }
-
-
-    def buscar_contactos_por_criterio(self, criterio, tipo_busqueda):
-        if tipo_busqueda == "fsd":
-            datos = self.extraer_datos_hubspot(criterio)
-            if datos.get("error"):
-                return []
-            return [datos]
-
-        field = SEARCH_CONTACT_FIELDS.get(tipo_busqueda)
-        if not field:
-            return []
-
-        query = str(criterio).strip()
-        if not query:
-            return []
-
-        operator = "EQ" if tipo_busqueda in SEARCH_EXACT_FIELDS else "CONTAINS_TOKEN"
-
-        search_request = ContactSearchRequest(
-            filter_groups=[
-                {
-                    "filters": [
-                        {
-                            "propertyName": field,
-                            "operator": operator,
-                            "value": query,
-                        }
-                    ]
-                }
-            ],
-            properties=[
-                "firstname",
-                "lastname",
-                "email",
-                "phone",
-                "telefono_alterno_del_cliente",
-                "direccion__fisica_",
-                "id_de_goformz__contacto_",
-                "municipio_de_residencia",
-                "municipios_co__contacto_",
-                "country",
-                "state",
-                "zip",
-            ],
-            limit=10,
-        )
-
-        try:
-            response = self.client.crm.contacts.search_api.do_search(
-                public_object_search_request=search_request
-            )
-
-            candidatos = []
-            for contacto in response.results:
-                props = contacto.properties or {}
-                id_cliente = props.get("id_de_goformz__contacto_", "")
-
-                candidato = {
-                    "contact_id": contacto.id,
-                    "nombre": (
-                        f"{props.get('firstname', '')} {props.get('lastname', '')}"
-                    ).strip(),
-                    "email": props.get("email", ""),
-                    "telefono": props.get("phone", ""),
-                    "telefono_alterno": props.get("telefono_alterno_del_cliente", ""),
-                    "direccion": props.get("direccion__fisica_", ""),
-                    "municipio": (
-                        props.get("municipio_de_residencia", "")
-                        or props.get("municipios_co__contacto_", "")
-                    ),
-                    "estado": (props.get("country", "") or props.get("state", "")),
-                    "zip": props.get("zip", ""),
-                    "id_cliente": id_cliente,
-                    "fsd": "",
-                }
-
-                if id_cliente and str(id_cliente).strip():
-                    fsd = self.buscar_fsd_por_id_cliente(str(id_cliente).strip())
-                    candidato["fsd"] = fsd
-                else:
-                    fsd = self._buscar_fsd_por_contact_id(contacto.id)
-                    candidato["fsd"] = fsd
-
-                candidatos.append(candidato)
-            return candidatos
-
-        except ContactApiException as e:
-            logger.warning("Error buscando contactos: %s", e)
-            return []
-
-
-
-
-
-
-def buscar_fsd_por_id_cliente(id_cliente: str) -> str:
-
-    return HubSpotAPI().buscar_fsd_por_id_cliente(id_cliente)
-
-
-def extraer_datos_hubspot(fsd: str):
-
-    return HubSpotAPI().extraer_datos_hubspot(fsd)
-
-
-
-
-
-
-if __name__ == "__main__":
-
-    import sys
-
-    fsd_test = sys.argv[1] if len(sys.argv) > 1 else "983316"
-
-    datos = extraer_datos_hubspot(fsd_test)
-
-    print()
-
-    for k, v in datos.items():
-        print(f"{k:<25}: {v}")
-
-    print()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Cliente HubSpot con todas las operaciones de busqueda y extraccion.
+
+    Encapsula busquedas de tickets por FSD e ID de GoFormz, busquedas de
+    contactos, extraccion de datos completos y enriquecimiento con FSD.
+
+    Attributes:
+        client: instancia autenticada del SDK de HubSpot.
+
+
+
+
+        Args:
+            client: instancia de HubSpot. Si es None, se usa el singleton lazy
+                    via _get_client() que lee ACCESS_TOKEN del .env.
+
+
+
+
+
+
+Busca un ticket de HubSpot por su numero FSD con multiples variantes.
+
+        Prueba el FSD tal cual, en mayusculas, sin espacios, sin guiones,
+        y solo los digitos. Itera las variantes hasta encontrar el ticket
+        o agotar las opciones.
+
+        Args:
+            fsd: numero FSD en cualquier formato.
+
+        Returns:
+            Dict con ticket_id y props si se encuentra, None si no.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Busca un contacto en HubSpot por su ID de GoFormz.
+
+        Args:
+            id_goformz: ID de GoFormz del contacto.
+
+        Returns:
+            Dict con contact_id y props si se encuentra, None si no.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Busca tickets asociados a un ID de GoFormz, priorizando los que tienen FSD.
+
+        Args:
+            id_goformz: ID de GoFormz del ticket.
+
+        Returns:
+            Dict con ticket_id y props del mejor candidato, o None.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Busca el FSD asociado a un ID de cliente via sus tickets en HubSpot.
+
+        Args:
+            id_cliente: ID de GoFormz del cliente.
+
+        Returns:
+            FSD como string (vacio si no se encuentra).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Busca el FSD del primer ticket asociado a un contacto en HubSpot.
+
+        Usa la API de asociaciones v4 para encontrar tickets vinculados al
+        contacto y extrae el FSD del primer resultado.
+
+        Args:
+            contact_id: ID interno de HubSpot del contacto.
+
+        Returns:
+            FSD como string (vacio si no se encuentra o falla la API).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Extrae todos los datos relevantes de un ticket de HubSpot por FSD.
+
+        Busca el ticket, parsea el asunto, busca el contacto asociado por
+        ID de GoFormz, y combina la informacion de ambas fuentes (ticket y
+        contacto) en un solo dict.
+
+        Args:
+            fsd: numero FSD en cualquier formato.
+
+        Returns:
+            Dict con claves: fsd, ticket_id, contact_id, nombre, id_cliente,
+            direccion, telefono, telefono_alterno, email, estado, municipio,
+            zip, nota, fuente_nombre, fuente_id, error.
+            La clave error es None si todo fue bien, o contiene el mensaje
+            si algo fallo.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Busca contactos en HubSpot segun un criterio y tipo de busqueda.
+
+        Para busquedas por FSD, delega en extraer_datos_hubspot(). Para otros
+        tipos (nombre, apellido, telefono, correo, direccion, id_cliente),
+        usa la API de busqueda de contactos con el operador adecuado (EQ para
+        campos exactos, CONTAINS_TOKEN para texto) y enriquece cada resultado
+        con su FSD asociado.
+
+        Args:
+            criterio: valor a buscar.
+            tipo_busqueda: uno de "fsd", "nombre", "apellido", "telefono",
+                           "correo", "direccion", "id_cliente".
+
+        Returns:
+            Lista de dicts con los contactos encontrados y sus FSD asociados.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Wrapper retrocompatible. Preferir HubSpotAPI().buscar_fsd_por_id_cliente().
+
+    Args:
+        id_cliente: ID de GoFormz del cliente.
+
+    Returns:
+        FSD como string, o vacio si no se encuentra.
+
+
+
+
+
+Wrapper retrocompatible. Preferir HubSpotAPI().extraer_datos_hubspot().
+
+    Args:
+        fsd: numero FSD en cualquier formato.
+
+    Returns:
+        Dict con todos los datos del ticket y contacto asociado.
 ````
 
 ## File: plugins/sunrun.py
@@ -12067,6 +12452,15 @@ from core.browser import esperar_carga
 
 
 class SunrunPlugin(SitioPlugin):
+
+
+
+
+
+
+
+
+
 
 
 
@@ -12698,6 +13092,15 @@ class HubSpotPlugin(SitioPlugin):
 
 
 
+
+
+
+
+
+
+
+
+
     @property
     def nombre(self) -> str:
         return "HUBSPOT"
@@ -12903,6 +13306,14 @@ class HubSpotPlugin(SitioPlugin):
         return WebDriverWait(driver, self.TIMEOUT)
 
     def _es_pagina_registro(self, url: str) -> bool:
+        """Determina si una URL de HubSpot apunta a un registro (ticket/contacto/company/deal).
+
+        Args:
+            url: URL completa de HubSpot en minusculas.
+
+        Returns:
+            True si la URL contiene /ticket/, /contact/, /company/, /deal/ o /record/.
+        """
         url = url.lower()
         return (
             "/ticket/" in url
@@ -13292,79 +13703,6 @@ class SesionService:
                     log(f"  . [{nombre_plugin}] Chrome cerrado.")
                 except Exception:
                     pass
-````
-
-## File: config/config.json
-````json
-{
-  "tema": "dark",
-  "ultimo_monitor": 0,
-  "regiones_apps": {
-    "Wolkbox": {
-      "top": 280,
-      "left": 104,
-      "width": 341,
-      "height": 105
-    },
-    "App 2": {
-      "top": 448,
-      "left": 826,
-      "width": 97,
-      "height": 76
-    },
-    "App 3": {
-      "top": 249,
-      "left": 546,
-      "width": 752,
-      "height": 459
-    },
-    "App 4": {
-      "top": 232,
-      "left": 292,
-      "width": 1509,
-      "height": 674
-    },
-    "App 5": {
-      "top": 288,
-      "left": 186,
-      "width": 1415,
-      "height": 529
-    },
-    "B2Chat": {
-      "top": 375,
-      "left": 1109,
-      "width": 0,
-      "height": 0
-    },
-    "Correo": {
-      "top": 296,
-      "left": 1452,
-      "width": 226,
-      "height": 121
-    }
-  },
-  "keybind": "<Control-p>",
-  "perfiles_region": {
-    "Monitor 1": {
-      "monitor_index": 1
-    },
-    "Monitor 2": {
-      "monitor_index": 1
-    }
-  },
-  "auto_submit_nota": false,
-  "monitores_apps": {
-    "Wolkbox": 1,
-    "App 5": 0,
-    "B2Chat": 0,
-    "Calendar": 0
-  },
-  "headless": false,
-  "chrome_existente": true,
-  "destino_subida": "HUBSPOT",
-  "ultima_celda_calendar": "g20",
-  "ultima_pestana_calendar": "Jun"
-}
 ````
 
 ## File: ui/ventana_comparacion.py
@@ -13836,10 +14174,16 @@ class VentanaComparacion(CustomCTkFrame):
             self.ui_log(f"❌ Error en comparación: {str(e)}", "error")
 
     def _limpiar_resultados(self):
+
         for widget in self._frame_resultados.winfo_children():
             widget.destroy()
 
     def _mostrar_resultado_externo(self):
+
+
+
+
+
 
         resultado = comparar(self._datos_hs, self._datos_sr)
 
@@ -14276,6 +14620,79 @@ screenshots/
 gsheets/sessions/
 gsheets/screenshots/
 gsheets/*.json
+````
+
+## File: config/config.json
+````json
+{
+  "tema": "dark",
+  "ultimo_monitor": 0,
+  "regiones_apps": {
+    "Wolkbox": {
+      "top": 280,
+      "left": 104,
+      "width": 341,
+      "height": 105
+    },
+    "App 2": {
+      "top": 448,
+      "left": 826,
+      "width": 97,
+      "height": 76
+    },
+    "App 3": {
+      "top": 249,
+      "left": 546,
+      "width": 752,
+      "height": 459
+    },
+    "App 4": {
+      "top": 232,
+      "left": 292,
+      "width": 1509,
+      "height": 674
+    },
+    "App 5": {
+      "top": 288,
+      "left": 186,
+      "width": 1415,
+      "height": 529
+    },
+    "B2Chat": {
+      "top": 375,
+      "left": 1109,
+      "width": 0,
+      "height": 0
+    },
+    "Correo": {
+      "top": 296,
+      "left": 1452,
+      "width": 226,
+      "height": 121
+    }
+  },
+  "keybind": "<Control-p>",
+  "perfiles_region": {
+    "Monitor 1": {
+      "monitor_index": 1
+    },
+    "Monitor 2": {
+      "monitor_index": 1
+    }
+  },
+  "auto_submit_nota": false,
+  "monitores_apps": {
+    "Wolkbox": 1,
+    "App 5": 0,
+    "B2Chat": 0,
+    "Calendar": 0
+  },
+  "headless": false,
+  "chrome_existente": true,
+  "destino_subida": "HUBSPOT",
+  "ultima_celda_calendar": "g20",
+  "ultima_pestana_calendar": "Jun"
+}
 ````
 
 ## File: readme.md
@@ -14726,6 +15143,21 @@ class App(CustomCTkFrame):
         self._crear_barra_estado(padre, col=1)
 
     def _seccion(self, padre, titulo, fila, col=0, pady=(0, 10)):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         frame = ctk.CTkFrame(padre, fg_color=("gray95", "gray20"), border_width=1)
         frame.grid(row=fila, column=col, sticky="ew", pady=pady)
 
@@ -14748,15 +15180,39 @@ class App(CustomCTkFrame):
         return cuerpo
 
     def _calcular_ui_scale(self) -> float:
+
+
+
+
+
+
         top = self.winfo_toplevel()
         sw, sh = top.winfo_screenwidth(), top.winfo_screenheight()
         return min(1.45, max(1.0, min(sw / 1920, sh / 1080)))
 
     def _r(self, base: int, mid: int | None = None, maximo: int | None = None) -> int:
+
+
+
+
+
+
+
+
+
+
         valor = int(round((mid if mid is not None else base) * self._ui_scale))
         return min(maximo or valor, max(base, valor))
 
     def _fs(self, base: int) -> int:
+
+
+
+
+
+
+
+
         return max(base, int(round(base * min(self._ui_scale, 1.28))))
 
     def _obtener_monitor_app(self, app: dict) -> int:
@@ -15046,6 +15502,15 @@ class App(CustomCTkFrame):
             )
 
     def _seleccionar_destino(self, opcion: str):
+
+
+
+
+
+
+
+
+
         self.destino_var.set(opcion)
         guardar_destino_subida(opcion)
         for nombre, btn in self._btns_destino.items():
@@ -15183,6 +15648,16 @@ class App(CustomCTkFrame):
 
 
     def _ejecutar_app(self, app: dict):
+
+
+
+
+
+
+
+
+
+
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -15249,6 +15724,17 @@ class App(CustomCTkFrame):
             ui("")
 
     def _proceso_app(self, app: dict, region: dict, monitor_idx: int):
+        """Ejecuta el ciclo completo de captura y subida para una app (en hilo).
+
+        Args:
+            app: dict de APPS_CAPTURA.
+            region: dict con top/left/width/height de la region a capturar.
+            monitor_idx: indice del monitor donde capturar.
+
+        Efectos secundarios:
+            - Minimiza y restaura la ventana principal.
+            - Actualiza el log, la barra de estado y los indicadores de sitios.
+        """
         nombre = app["nombre"]
         prefix = f"[{nombre}] "
 
@@ -15308,6 +15794,7 @@ class App(CustomCTkFrame):
             self.after(0, self._rehabilitar_btns_apps)
 
     def _rehabilitar_btns_apps(self):
+
         for btn in self._btns_apps.values():
             btn.configure(state="normal")
         self.fsd_btn_buscar.configure(state="normal")
@@ -15557,6 +16044,17 @@ class App(CustomCTkFrame):
 
 
     def _medir_region_app(self, app: dict):
+
+
+
+
+
+
+
+
+
+
+
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -15624,6 +16122,12 @@ class App(CustomCTkFrame):
         threading.Thread(target=_esperar, daemon=True).start()
 
     def _crear_barra_estado(self, padre, col=0):
+
+
+
+
+
+
         frame_estado = ctk.CTkFrame(padre, fg_color="transparent")
         frame_estado.grid(row=6, column=col, sticky="ew", pady=(4, 0))
         self._punto_estado = ctk.CTkLabel(
@@ -15658,6 +16162,16 @@ class App(CustomCTkFrame):
 
 
     def _tarjeta(self, padre, titulo):
+
+
+
+
+
+
+
+
+
+
         frame = ctk.CTkFrame(
             padre, fg_color=("gray92", "gray22"), border_width=1, corner_radius=6
         )
@@ -15672,9 +16186,28 @@ class App(CustomCTkFrame):
         return frame, interior
 
     def _fuente_existe(self, nombre):
+
+
+
+
+
+
+
+
         return nombre in tkinter.font.families()
 
     def _keybind_legible(self, kb):
+
+
+
+
+
+
+
+
+
+
+
         return (
             kb.replace("<", "")
             .replace(">", "")
@@ -15827,9 +16360,19 @@ class App(CustomCTkFrame):
 
 
     def _log(self, msg: str):
+
+
+
+
+
         self.log_texto.log(msg)
 
     def _set_status(self, texto: str):
+
+
+
+
+
         self.status_var.set(texto)
         colores = {
             "Listo": ("#2ea043", "#3fb950"),
@@ -15844,9 +16387,20 @@ class App(CustomCTkFrame):
 
 
     def _monitor_var_indice(self) -> int:
+
         return self._monitor_widget.obtener_indice()
 
     def _lanzar_medidor(self):
+
+
+
+
+
+
+
+
+
+
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -15867,12 +16421,26 @@ class App(CustomCTkFrame):
         threading.Thread(target=_esperar, daemon=True).start()
 
     def _aplicar_region(self, region: dict):
+
+
+
+
+
         self._coord_widget.aplicar_region(region)
         self._profile_widget.sincronizar_paste()
         self._log(f"v Region actualizada: {region}")
         self.btn.configure(state="normal")
 
     def _obtener_region_validada(self) -> dict:
+
+
+
+
+
+
+
+
+
         region = {}
         for clave, var in self.region_vars.items():
             texto = var.get().strip()
@@ -15889,6 +16457,18 @@ class App(CustomCTkFrame):
         return region
 
     def _parsear_region(self, texto: str):
+
+
+
+
+
+
+
+
+
+
+
+
         texto = (texto or "").strip()
         if "=" in texto:
             texto = texto.split("=", 1)[1].strip()
@@ -15905,11 +16485,17 @@ class App(CustomCTkFrame):
             )
 
     def _sincronizar_paste(self, *_):
+
         self._profile_widget.sincronizar_paste()
 
 
 
     def _abrir_login_inicial(self):
+
+
+
+
+
         sitios_compat = [
             {"nombre": p.nombre, "necesita_login": p.necesita_login}
             for p in PluginRegistry.con_login()
@@ -15921,6 +16507,12 @@ class App(CustomCTkFrame):
             self._log("✓ Credenciales actualizadas en sesión.")
 
     def _abrir_credenciales(self):
+
+
+
+
+
+
         sitios_compat = [
             {"nombre": p.nombre, "necesita_login": p.necesita_login}
             for p in PluginRegistry.con_login()
@@ -15933,12 +16525,25 @@ class App(CustomCTkFrame):
         self._actualizar_sitios_status()
 
     def _renovar_sesion(self):
+
+
+
+
+
         if COOKIES_DIR.exists():
             shutil.rmtree(COOKIES_DIR)
         self._log("→ Cookies eliminadas. Se hará login en la próxima ejecución.")
         self._actualizar_sitios_status()
 
     def _abrir_chrome_debug(self):
+
+
+
+
+
+
+
+
         from core.browser import puerto_activo, CHROME_USER_DATA, CHROME_PATHS, obtener_chrome_exe
 
         if puerto_activo():
@@ -15964,6 +16569,15 @@ class App(CustomCTkFrame):
     # ── Keybind ───────────────────────────────────────────────────────
 
     def _aplicar_keybind(self):
+        """Registra el atajo de teclado ingresado para ejecutar captura y subida.
+
+        Desvincula el atajo anterior (si existe), vincula el nuevo a
+        self._ejecutar(), y persiste la configuracion en config.json.
+
+        Efectos secundarios:
+            - Modifica el binding de teclas de la ventana raiz.
+            - Guarda en config.json bajo la clave 'keybind'.
+        """
         nuevo = self.keybind_var.get().strip()
         if not nuevo:
             return
@@ -15990,6 +16604,17 @@ class App(CustomCTkFrame):
             self._keybind_actual = None
 
     def _capturar_tecla(self, event):
+
+
+
+
+
+
+
+
+
+
+
         partes = []
         if event.state & 0x4:
             partes.append("Control")
@@ -16007,6 +16632,7 @@ class App(CustomCTkFrame):
 
 
     def _detener(self):
+
         self._cancelado.set()
         self._log("⚠ Deteniendo proceso...")
         self.btn_detener.configure(state="disabled")
@@ -16015,6 +16641,13 @@ class App(CustomCTkFrame):
 
 
     def _ejecutar(self):
+
+
+
+
+
+
+
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -16030,6 +16663,19 @@ class App(CustomCTkFrame):
         threading.Thread(target=self._proceso, daemon=True).start()
 
     def _proceso(self):
+
+
+
+
+
+
+
+
+
+
+
+
+
         def ui(msg):
             self.after(0, lambda m=msg: self._log(m))
 
@@ -16093,6 +16739,7 @@ annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0
 attrs==26.1.0
+beautifulsoup4==4.14.3
 black==26.3.1
 boolean.py==5.0
 CacheControl==0.14.4
@@ -16107,10 +16754,11 @@ customtkinter==5.2.2
 cyclonedx-python-lib==11.7.0
 darkdetect==0.8.0
 defusedxml==0.7.1
+distro==1.9.0
 docopt==0.6.2
 fastapi==0.136.1
 filelock==3.29.0
-git-filter-repo==2.47.0
+google==3.0.0
 google-api-core==2.30.3
 google-api-python-client==2.197.0
 google-auth==2.53.0
@@ -16119,7 +16767,9 @@ google-auth-oauthlib==1.4.0
 googleapis-common-protos==1.75.0
 greenlet==3.5.1
 h11==0.16.0
+httpcore==1.0.9
 httplib2==0.31.2
+httpx==0.28.1
 hubspot-api-client==12.0.0
 idna==3.13
 iniconfig==2.3.0
@@ -16135,10 +16785,12 @@ MouseInfo==0.1.3
 msgpack==1.1.2
 mss==10.2.0
 mypy_extensions==1.1.0
+numpy==2.4.6
 oauthlib==3.3.1
 outcome==1.3.0.post0
 packageurl-python==0.17.6
 packaging==26.2
+pandas==2.3.3
 pathspec==1.1.1
 pefile==2024.8.26
 pillow==12.2.0
@@ -16170,12 +16822,12 @@ PyRect==0.2.0
 PyScreeze==1.0.1
 PySocks==1.7.1
 pytest==9.0.3
-pytest-asyncio==1.4.0
-pytest-mock==3.15.1
+pytest-cov==7.1.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 pytokens==0.4.1
 pytweening==1.2.0
+pytz==2026.2
 pywin32-ctypes==0.2.3
 RapidFuzz==3.14.5
 requests==2.33.1
@@ -16187,13 +16839,16 @@ setuptools==82.0.1
 six==1.17.0
 sniffio==1.3.1
 sortedcontainers==2.4.0
+soupsieve==2.8.4
 starlette==1.0.0
+tenacity==9.1.4
 tomli==2.4.1
 tomli_w==1.2.0
 trio==0.33.0
 trio-websocket==0.12.2
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+tzdata==2026.2
 undetected-chromedriver==3.5.5
 uritemplate==4.2.0
 urllib3==2.6.3
@@ -16246,10 +16901,21 @@ launcher.title("SSAuto")
 
 
 def _clamp(valor: int, minimo: int, maximo: int) -> int:
+
     return max(minimo, min(valor, maximo))
 
 
 def _configurar_ventana_responsive():
+
+
+
+
+
+
+
+
+
+
     sw, sh = launcher.winfo_screenwidth(), launcher.winfo_screenheight()
     escala = _clamp(int(min(sw / 1920, sh / 1080) * 100), 100, 165) / 100
     ctk.set_widget_scaling(escala)
@@ -16270,19 +16936,45 @@ _configurar_ventana_responsive()
 
 
 def mostrar_frame(frame):
+    """Eleva el frame indicado al frente del contenedor apilado.
 
+    Usa tkraise() para traer un frame al frente en un layout de tipo
+    stacked (todos los frames ocupan la misma celda del grid).
+
+    Args:
+        frame: instancia de ctk.CTkFrame a mostrar.
+    """
     frame.tkraise()
 
 
 def abrir_plantillas():
+    """Abre la ventana modal de plantillas de mensajes rapidos.
+
+    Efectos secundarios:
+        - Crea una instancia de VentanaPlantillas como toplevel modal.
+    """
     VentanaPlantillas(launcher)
 
 
 def abrir_generador():
+    """Abre la ventana modal del generador de mensajes de contacto.
+
+    Efectos secundarios:
+        - Crea una instancia de VentanaGeneradorMensajes como toplevel modal.
+    """
     VentanaGeneradorMensajes(launcher)
 
 
 def abrir_credenciales():
+    """Abre la ventana modal de credenciales para los sitios que requieren login.
+
+    Si el usuario confirma, actualiza las credenciales en memoria de la vista
+    principal para usarlas en la sesion actual sin reiniciar la app.
+
+    Efectos secundarios:
+        - Si win.confirmado es True, modifica
+          vista_principal._credenciales_sesion.
+    """
     sitios_compat = [
         {"nombre": p.nombre, "necesita_login": p.necesita_login}
         for p in PluginRegistry.con_login()
@@ -16293,6 +16985,18 @@ def abrir_credenciales():
 
 
 def cambiar_tema(opcion: str):
+
+
+
+
+
+
+
+
+
+
+
+
     tema = "dark" if opcion == "Oscuro" else "light"
     ctk.set_appearance_mode(tema)
     cfg = cargar_config()
@@ -16312,6 +17016,17 @@ barra.pack_propagate(False)
 
 
 def _btn_barra(texto: str, comando, lado="left", acento=False) -> ctk.CTkButton:
+
+
+
+
+
+
+
+
+
+
+
     btn = ctk.CTkButton(
         barra,
         text=texto,
@@ -16329,6 +17044,7 @@ def _btn_barra(texto: str, comando, lado="left", acento=False) -> ctk.CTkButton:
 
 
 def _sep_barra():
+
     ctk.CTkFrame(barra, width=1, fg_color=("gray70", "gray40")).pack(
         side="left", fill="y", padx=4, pady=4
     )
@@ -16387,6 +17103,14 @@ ctk.CTkLabel(
 
 
 def _al_minimizar(event):
+
+
+
+
+
+
+
+
     if launcher.state() == "iconic":
         barra.pack_forget()
     else:

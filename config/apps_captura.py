@@ -26,6 +26,7 @@ _VERDE = ("#2d7a3a", "#256630")
 _NARANJA = ("#a05a00", "#8a4e00")
 _VIOLETA = ("#6b3fa0", "#5a3488")
 _TEAL = ("#1a7a6e", "#146058")
+_YELLOW = ("#f4c542", "#d9a81e")
 
 APPS_CAPTURA = [
     {
@@ -40,7 +41,7 @@ APPS_CAPTURA = [
         "icono": "💬",
         "region": {"top": 200, "left": 100, "width": 900, "height": 500},
         "monitor": 1,
-        "color": _VERDE,
+        "color": _VIOLETA,
     },
     {
         "nombre": "Correo",
@@ -54,7 +55,7 @@ APPS_CAPTURA = [
         "icono": "📅",
         "region": {"top": 300, "left": 200, "width": 850, "height": 550},
         "monitor": 1,
-        "color": _VIOLETA,
+        "color": _VERDE,
     },
     {
         "nombre": "App 5",
@@ -62,5 +63,12 @@ APPS_CAPTURA = [
         "region": {"top": 80, "left": 0, "width": 1920, "height": 980},
         "monitor": 1,
         "color": _TEAL,
+    },
+    {
+        "nombre": "App 6",
+        "icono": "📊",
+        "region": {"top": 80, "left": 0, "width": 1920, "height": 980},
+        "monitor": 1,
+        "color": _YELLOW,
     },
 ]

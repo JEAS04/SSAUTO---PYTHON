@@ -11,7 +11,14 @@ from core.monitors import obtener_monitores
 
 
 def _parse_geometry(widget) -> tuple[int, int, int, int]:
-    """Return (x, y, width, height) for a Tk widget/toplevel."""
+    """Obtiene la geometria real de un widget Tk como (x, y, width, height).
+
+    Args:
+        widget: cualquier widget Tk/Toplevel con winfo_rootx/y/width/height.
+
+    Returns:
+        Tupla de 4 enteros con posicion y dimensiones.
+    """
     widget.update_idletasks()
     return (
         int(widget.winfo_rootx()),
@@ -22,7 +29,15 @@ def _parse_geometry(widget) -> tuple[int, int, int, int]:
 
 
 def _monitor_for_rect(x: int, y: int, width: int, height: int) -> dict | None:
-    """Return the physical monitor containing the rectangle center."""
+    """Determina en que monitor fisico esta el centro de un rectangulo.
+
+    Args:
+        x, y: coordenadas de la esquina superior izquierda.
+        width, height: dimensiones del rectangulo.
+
+    Returns:
+        Dict del monitor que contiene el centro, o None si no hay monitores.
+    """
     monitors = obtener_monitores()
     if not monitors:
         return None
@@ -43,13 +58,21 @@ def _monitor_for_rect(x: int, y: int, width: int, height: int) -> dict | None:
 
 
 def _clamp(value: int, minimum: int, maximum: int) -> int:
+    """Restringe un valor entero al rango [minimum, maximum]."""
     if maximum < minimum:
         return minimum
     return max(minimum, min(value, maximum))
 
 
 def _tk_offset(value: int) -> str:
-    """Return a signed Tk geometry offset: +100, -100, +0."""
+    """Convierte un entero en offset de geometria Tk con signo (+100, -50, +0).
+
+    Args:
+        value: desplazamiento en pixeles (positivo o negativo).
+
+    Returns:
+        String como "+100", "-50", "+0".
+    """
     return f"{value:+d}"
 
 

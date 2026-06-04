@@ -481,11 +481,17 @@ class VentanaComparacion(CustomCTkFrame):
             self.ui_log(f"❌ Error en comparación: {str(e)}", "error")
 
     def _limpiar_resultados(self):
+        """Elimina todos los widgets del area de resultados para una nueva comparacion."""
         for widget in self._frame_resultados.winfo_children():
             widget.destroy()
 
     def _mostrar_resultado_externo(self):
+        """Muestra resultado de comparacion cuando los datos vienen de fuera.
 
+        Se usa cuando la ventana principal ya obtuvo datos de HubSpot y Sunrun
+        y los pasa directamente al constructor. Compara los datos y renderiza
+        la tabla con la informacion adicional de Sunrun (dispatch state, etc.).
+        """
         resultado = comparar(self._datos_hs, self._datos_sr)
 
         resultado["_sunrun_extra"] = {

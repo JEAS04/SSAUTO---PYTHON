@@ -10,15 +10,21 @@ from datetime import datetime
 
 
 class LogWidget(ctk.CTkTextbox):
-    """
-    Area de texto con colores para logs en tiempo real.
+    """Area de texto solo-lectura con colores para logs en tiempo real.
 
-    Tags disponibles:
-      - "ts"    : marca de tiempo (gris)
-      - "ok"    : éxito (verde)
-      - "error" : error (rojo)
-      - "flecha": progreso (azul)
-      - "dim"   : mensaje genérico (gris claro)
+    Cada linea se inserta con una marca de tiempo y un color segun el
+    prefijo del mensaje:
+      - "ok"    (verde) : lineas que empiezan con ✓
+      - "error" (rojo)  : lineas que empiezan con ✗
+      - "flecha"(azul)  : lineas que contienen →
+      - "dim"   (gris)  : resto de mensajes
+      - "ts"    (gris oscuro) : marca de tiempo [HH:MM:SS]
+
+    Args:
+        parent: widget padre.
+        height: altura en lineas de texto (default 160).
+        font_size: tamano de fuente (default 10).
+        **kwargs: argumentos adicionales pasados a CTkTextbox.
     """
 
     def __init__(self, parent, height: int = 160, font_size: int = 10, **kwargs):

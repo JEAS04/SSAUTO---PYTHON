@@ -3,6 +3,10 @@ data/hubspot_constants.py — Nombres de propiedades de HubSpot CRM.
 
 Centraliza todas las constantes de propiedades de tickets y contactos
 que estaban dispersas en data/api.py.
+
+Todas las constantes usan el prefijo _ para indicar que son internas
+y deben usarse a traves de los alias publicos (TICKET_PROPS, CONTACT_PROPS,
+SEARCH_CONTACT_FIELDS, SEARCH_EXACT_FIELDS).
 """
 
 # ── Propiedades de tickets ────────────────────────────────────────────

@@ -1,10 +1,10 @@
-# buscador.py
 """
-Búsquedas adicionales HubSpot.
+data/buscador.py — Busquedas adicionales de contactos en HubSpot.
 
-NO altera api.py
-NO mezcla arquitecturas
-NO usa clases innecesarias
+Define las estrategias de busqueda disponibles en la UI de comparacion y
+proporciona la funcion buscar_contactos() que enriquece cada resultado con
+su FSD asociado. Separa la configuracion de estrategias (SEARCH_STRATEGIES)
+de la logica de API que vive en data/api.py.
 """
 
 from data.api import HubSpotAPI, buscar_fsd_por_id_cliente

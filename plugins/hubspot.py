@@ -56,8 +56,17 @@ class HubSpotPlugin(SitioPlugin):
     """
     Plugin para subir capturas como nota adjunta en HubSpot.
 
-    Flujo:
-      Actividades → Notas → Crear nota → Adjuntar → input file → Guardar
+    Flujo de subida (7 pasos):
+      1. Activar pestana de Actividades en el registro.
+      2. Filtrar por Notas.
+      3. Crear una nota nueva.
+      4. Enfocar el editor de texto para que React renderice la toolbar.
+      5. Adjuntar el archivo via el input file oculto (sin abrir file picker).
+      6. Esperar confirmacion visual del archivo adjunto.
+      7. Guardar la nota.
+
+    Soporta busqueda inteligente de pestanas por FSD usando CDP para evitar
+    activar pestanas innecesarias y mantener el contexto correcto.
     """
 
     # ── Metadatos ─────────────────────────────────────────────────────
@@ -267,6 +276,14 @@ class HubSpotPlugin(SitioPlugin):
         return WebDriverWait(driver, self.TIMEOUT)
 
     def _es_pagina_registro(self, url: str) -> bool:
+        """Determina si una URL de HubSpot apunta a un registro (ticket/contacto/company/deal).
+
+        Args:
+            url: URL completa de HubSpot en minusculas.
+
+        Returns:
+            True si la URL contiene /ticket/, /contact/, /company/, /deal/ o /record/.
+        """
         url = url.lower()
         return (
             "/ticket/" in url

@@ -66,7 +66,7 @@ class TestAppsCaptura:
         assert len(nombres) == len(set(nombres))
 
     def test_nombres_razonables(self):
-        nombres_validos = {"Wolkbox", "B2Chat", "Correo", "Calendar", "App 5"}
+        nombres_validos = {"Wolkbox", "B2Chat", "Correo", "Calendar", "App 5", "App 6"}
         for app in APPS_CAPTURA:
             assert app["nombre"] in nombres_validos
 
@@ -82,6 +82,8 @@ class TestAppsCaptura:
             "#5a3488",
             "#1a7a6e",
             "#146058",
+            "#f4c542",
+            "#d9a81e",
         }
         for app in APPS_CAPTURA:
             for c in app["color"]:
