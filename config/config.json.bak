@@ -3,10 +3,10 @@
   "ultimo_monitor": 0,
   "regiones_apps": {
     "Wolkbox": {
-      "top": 280,
-      "left": 104,
-      "width": 341,
-      "height": 105
+      "top": -66,
+      "left": -1920,
+      "width": 3839,
+      "height": 1145
     },
     "App 2": {
       "top": 448,
@@ -64,6 +64,20 @@
   "headless": false,
   "chrome_existente": true,
   "destino_subida": "HUBSPOT",
-  "ultima_celda_calendar": "g20",
-  "ultima_pestana_calendar": "Jun"
+  "ultima_celda_calendar": "n21",
+  "ultima_pestana_calendar": "Jun",
+  "ui_visibility": {
+    "captura": true,
+    "apps": true,
+    "destino": true,
+    "opciones": true,
+    "registro": true,
+    "barra_estado": true,
+    "capt_perfiles": false,
+    "capt_monitor": false,
+    "capt_coordenadas": false,
+    "capt_btn_detener": true,
+    "capt_btn_medir": true,
+    "capt_btn_capturar": true
+  }
 }

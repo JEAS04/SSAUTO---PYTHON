@@ -623,15 +623,20 @@ class VentanaComparacion(CustomCTkFrame):
                         font_weight = "bold"
                         valor = f"{valor}{sufijo}"
 
-                ctk.CTkLabel(
+                box = ctk.CTkTextbox(
                     sr_frame,
-                    text=valor or "-",
+                    fg_color="transparent",
+                    border_width=0,
+                    border_spacing=0,
+                    height=28,
                     font=ctk.CTkFont(size=11, weight=font_weight),
-                    wraplength=280,
-                    justify="left",
-                    anchor="w",
                     text_color=color,
-                ).grid(
+                    wrap="word",
+                    activate_scrollbars=False,
+                )
+                box.insert("1.0", valor or "-")
+                box.configure(state="disabled")
+                box.grid(
                     row=idx,
                     column=1,
                     sticky="ew",
@@ -694,14 +699,20 @@ class VentanaComparacion(CustomCTkFrame):
                     pady=2,
                 )
 
-                ctk.CTkLabel(
+                box = ctk.CTkTextbox(
                     hs_frame,
-                    text=str(valor),
+                    fg_color="transparent",
+                    border_width=0,
+                    border_spacing=0,
+                    height=28,
                     font=ctk.CTkFont(size=11),
-                    wraplength=280,
-                    justify="left",
-                    anchor="w",
-                ).grid(
+                    text_color=("gray30", "gray70"),
+                    wrap="word",
+                    activate_scrollbars=False,
+                )
+                box.insert("1.0", str(valor))
+                box.configure(state="disabled")
+                box.grid(
                     row=idx,
                     column=1,
                     sticky="ew",
@@ -768,20 +779,36 @@ class VentanaComparacion(CustomCTkFrame):
         row_frame.grid_columnconfigure(2, weight=3)
         row_frame.grid_columnconfigure(3, weight=2)
 
-        def celda(texto, col, bold=False):
-            ctk.CTkLabel(
-                row_frame,
-                text=texto,
-                font=ctk.CTkFont(size=11, weight="bold" if bold else "normal"),
-                text_color=colores["texto"],
-                wraplength=180,
-                justify="left",
-                anchor="w",
-            ).grid(row=0, column=col, sticky="w", padx=14, pady=10)
+        def celda(texto, col, bold=False, selectable=False):
+            if selectable:
+                box = ctk.CTkTextbox(
+                    row_frame,
+                    fg_color="transparent",
+                    border_width=0,
+                    border_spacing=0,
+                    height=36,
+                    font=ctk.CTkFont(size=11, weight="bold" if bold else "normal"),
+                    text_color=colores["texto"],
+                    wrap="word",
+                    activate_scrollbars=False,
+                )
+                box.insert("1.0", texto or "-")
+                box.configure(state="disabled")
+                box.grid(row=0, column=col, sticky="ew", padx=14, pady=8)
+            else:
+                ctk.CTkLabel(
+                    row_frame,
+                    text=texto,
+                    font=ctk.CTkFont(size=11, weight="bold" if bold else "normal"),
+                    text_color=colores["texto"],
+                    wraplength=180,
+                    justify="left",
+                    anchor="w",
+                ).grid(row=0, column=col, sticky="w", padx=14, pady=10)
 
         celda(cr["campo"], col=0, bold=True)
-        celda(cr["valor_hs"], col=1)
-        celda(cr["valor_sr"], col=2)
+        celda(cr["valor_hs"], col=1, selectable=True)
+        celda(cr["valor_sr"], col=2, selectable=True)
 
         estado_txt = f"{colores['icono']} {ETIQUETAS_ESTADO.get(estado, estado)}"
         ctk.CTkLabel(
@@ -842,6 +869,14 @@ class VentanaComparacion(CustomCTkFrame):
         if sunrun_extra:
             lineas.append("\n☀ SUNRUN")
             for k, v in sunrun_extra.items():
+                if v:
+                    lineas.append(f"  {k.replace('_', ' ').title()}: {v}")
+
+        # Datos HubSpot extra
+        hubspot_extra = resultado.get("_hubspot_extra", {})
+        if hubspot_extra:
+            lineas.append("\n⬡ HUBSPOT")
+            for k, v in hubspot_extra.items():
                 if v:
                     lineas.append(f"  {k.replace('_', ' ').title()}: {v}")
 

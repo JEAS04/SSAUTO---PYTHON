@@ -54,16 +54,15 @@ def _retry_stale(max_intentos: int = 3, pausa: float = 0.3):
 
 class HubSpotPlugin(SitioPlugin):
     """
-    Plugin para subir capturas como nota adjunta en HubSpot.
+    Plugin para subir capturas como imagen incrustada en una nota de HubSpot.
 
-    Flujo de subida (7 pasos):
-      1. Activar pestana de Actividades en el registro.
-      2. Filtrar por Notas.
-      3. Crear una nota nueva.
-      4. Enfocar el editor de texto para que React renderice la toolbar.
-      5. Adjuntar el archivo via el input file oculto (sin abrir file picker).
-      6. Esperar confirmacion visual del archivo adjunto.
-      7. Guardar la nota.
+    Flujo de subida:
+      1. Intentar crear nota desde el sidebar (funciona en ticket y contacto).
+      2. Si falla: navegar Actividades → Notas → Crear nota.
+      3. Enfocar el editor de texto para que React renderice la toolbar.
+      4. Insertar imagen via el input file oculto (sin abrir file picker).
+      5. Esperar confirmacion visual de la imagen.
+      6. Guardar la nota.
 
     Soporta busqueda inteligente de pestanas por FSD usando CDP para evitar
     activar pestanas innecesarias y mantener el contexto correcto.
@@ -99,7 +98,9 @@ class HubSpotPlugin(SitioPlugin):
     SEL_TAB_NOTAS = '[data-test-id="timeline-tab-filter-notes"]'
     SEL_BTN_CREAR_NOTA = 'button[data-selenium-test="create-engagement-note-button"]'
     SEL_BTN_ADJUNTAR = '[data-test-id="select-file-dropdown"]'
+    SEL_BTN_INSERTAR_IMAGEN = '[data-test-id="image-upload-toggle"]'
     SEL_INPUT_FILE = 'input[type="file"]'
+    SEL_BTN_NOTA_SIDEBAR = 'button[data-selenium-test="create-engagement-note-button"]'
     SEL_EDITOR = '[data-test-id="rte-content"]'
     SEL_EDITOR_ALT = 'div.ProseMirror[contenteditable="true"]'
     SEL_BTN_GUARDAR = '[data-test-id="activity-creator-window-footer-save-button"]'
@@ -173,12 +174,19 @@ class HubSpotPlugin(SitioPlugin):
             return False
 
     def subir(self, ctx: ContextoSubida) -> ResultadoSubida:
-        """Sube la captura como archivo adjunto en una nueva nota de HubSpot."""
+        """Sube la captura como imagen incrustada en una nueva nota de HubSpot.
+
+        Flujo optimizado para tickets y contactos:
+          1. Intentar crear nota desde el sidebar (funciona en ambas paginas).
+          2. Si falla, navegar por las pestañas Actividades → Notas → Crear nota.
+          3. Enfocar editor, insertar imagen, esperar confirmacion, guardar.
+        """
         log = ctx.log
         driver = ctx.driver
         ruta_abs = os.path.abspath(ctx.ruta_imagen)
         auto_submit = ctx.opciones.get("auto_submit_nota", True)
-        fsd_objetivo = ctx.fsd  # Búsqueda inteligente por FSD
+        mensaje_nota = ctx.opciones.get("mensaje_nota", "") or "Nota de captura."
+        fsd_objetivo = ctx.fsd
         cancel = ctx.cancelado
 
         def _check():
@@ -188,7 +196,6 @@ class HubSpotPlugin(SitioPlugin):
             log("  ⚠ [HubSpot] Cancelado por el usuario.")
             return ResultadoSubida(exitoso=False, mensaje="Cancelado por el usuario.")
 
-        # Búsqueda inteligente: si hay FSD, buscar pestaña correcta
         if fsd_objetivo and not self._encontrar_pestana_fsd(driver, log, fsd_objetivo):
             log(f"  ✗ [HubSpot] No se pudo encontrar pestaña para FSD: {fsd_objetivo}")
             return ResultadoSubida(
@@ -204,62 +211,63 @@ class HubSpotPlugin(SitioPlugin):
 
         try:
             if _check():
-                log("  ⚠ [HubSpot] Cancelado.")
                 return ResultadoSubida(
                     exitoso=False, mensaje="Cancelado por el usuario."
                 )
 
             self._validar_contexto_activo(driver, contexto_activo)
-            self._paso_actividades(driver, log, contexto_activo)
+
+            # Paso 1: intentar crear nota via sidebar (funciona en ticket y contacto)
+            nota_creada = self._paso_crear_nota_directa(driver, log, contexto_activo)
+
+            # Si el sidebar no funciono, navegar por pestañas
+            if not nota_creada:
+                if _check():
+                    return ResultadoSubida(
+                        exitoso=False, mensaje="Cancelado por el usuario."
+                    )
+                self._paso_actividades(driver, log, contexto_activo)
+
+                if _check():
+                    return ResultadoSubida(
+                        exitoso=False, mensaje="Cancelado por el usuario."
+                    )
+                self._paso_notas(driver, log, contexto_activo)
+
+                if _check():
+                    return ResultadoSubida(
+                        exitoso=False, mensaje="Cancelado por el usuario."
+                    )
+                self._paso_crear_nota(driver, log, contexto_activo)
 
             if _check():
-                log("  ⚠ [HubSpot] Cancelado.")
                 return ResultadoSubida(
                     exitoso=False, mensaje="Cancelado por el usuario."
                 )
 
-            self._paso_notas(driver, log, contexto_activo)
+            self._paso_editor(driver, log, contexto_activo, mensaje_nota)
 
             if _check():
-                log("  ⚠ [HubSpot] Cancelado.")
                 return ResultadoSubida(
                     exitoso=False, mensaje="Cancelado por el usuario."
                 )
 
-            self._paso_crear_nota(driver, log, contexto_activo)
+            self._paso_insertar_imagen(driver, log, ruta_abs, contexto_activo)
 
             if _check():
-                log("  ⚠ [HubSpot] Cancelado.")
                 return ResultadoSubida(
                     exitoso=False, mensaje="Cancelado por el usuario."
                 )
 
-            self._paso_editor(driver, log, contexto_activo)
-
-            if _check():
-                log("  ⚠ [HubSpot] Cancelado.")
-                return ResultadoSubida(
-                    exitoso=False, mensaje="Cancelado por el usuario."
-                )
-
-            self._paso_adjuntar(driver, log, ruta_abs, contexto_activo)
-
-            if _check():
-                log("  ⚠ [HubSpot] Cancelado.")
-                return ResultadoSubida(
-                    exitoso=False, mensaje="Cancelado por el usuario."
-                )
-
-            self._paso_esperar_archivo(driver, log, ruta_abs, contexto_activo)
+            self._paso_esperar_imagen(driver, log, ruta_abs, contexto_activo)
 
             if not auto_submit:
-                log("  ✓ [HubSpot] Archivo adjunto. Guardado manual pendiente.")
+                log("  ✓ [HubSpot] Imagen insertada. Guardado manual pendiente.")
                 return ResultadoSubida(
-                    exitoso=True, mensaje="Archivo adjunto (guardado manual)"
+                    exitoso=True, mensaje="Imagen insertada (guardado manual)"
                 )
 
             if _check():
-                log("  ⚠ [HubSpot] Cancelado antes de guardar.")
                 return ResultadoSubida(
                     exitoso=False, mensaje="Cancelado por el usuario."
                 )
@@ -531,10 +539,38 @@ class HubSpotPlugin(SitioPlugin):
         except Exception as e:
             raise RuntimeError(f"No se pudo crear nota: {e}") from e
 
-    def _paso_editor(self, driver, log: Callable, ctx: dict) -> None:
+    @_retry_stale(max_intentos=3)
+    def _paso_crear_nota_directa(self, driver, log: Callable, ctx: dict) -> bool:
+        """Intenta crear una nota desde el sidebar, sin navegar pestañas.
+
+        El sidebar con el boton "Nota" existe tanto en tickets como en
+        contactos, independientemente de la pestaña activa. Si funciona,
+        nos ahorramos los pasos de Actividades y Notas.
+
+        Returns:
+            True si se pudo crear la nota desde el sidebar.
+        """
+        log("  → [HubSpot] Intentando crear nota desde sidebar…")
+        try:
+            btn = WebDriverWait(driver, 8).until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, self.SEL_BTN_NOTA_SIDEBAR)
+                )
+            )
+            self._safe_click(driver, btn, ctx)
+            esperar_carga(driver, timeout=5)
+            log("  ✓ [HubSpot] Nota creada desde sidebar.")
+            return True
+        except (TimeoutException, NoSuchElementException) as e:
+            log(f"  · [HubSpot] Sidebar no disponible: {e}")
+        except Exception as e:
+            log(f"  · [HubSpot] Error en sidebar: {e}")
+        return False
+
+    def _paso_editor(self, driver, log: Callable, ctx: dict, mensaje: str = "Nota de captura.") -> None:
         """
         Da foco al editor e inserta texto vía JS para que React habilite el toolbar.
-        Sin este paso el FileButton no aparece en el DOM.
+        Sin este paso el ImageButton no aparece en el DOM.
         """
         log("  → [HubSpot] Paso 4/7: Enfocando editor…")
         editor_ok = False
@@ -553,14 +589,16 @@ class HubSpotPlugin(SitioPlugin):
                 driver.execute_script(
                     """
                     var el = arguments[0];
+                    var msg = arguments[1];
                     el.focus();
                     document.execCommand('selectAll', false, null);
-                    document.execCommand('insertText', false, 'Nota de captura.');
+                    document.execCommand('insertText', false, msg);
                     ['input', 'change', 'keyup'].forEach(function(t) {
                         el.dispatchEvent(new Event(t, { bubbles: true }));
                     });
                 """,
                     editor,
+                    mensaje,
                 )
                 self._validar_contexto_activo(driver, ctx)
                 log(f"  ✓ [HubSpot] Editor enfocado ({label}).")
@@ -569,34 +607,48 @@ class HubSpotPlugin(SitioPlugin):
                 log(f"  · [HubSpot] Editor {label} no encontrado: {e}")
 
         if not editor_ok:
-            log("  ⚠ [HubSpot] Editor no localizado. El FileButton puede no aparecer.")
+            log("  ⚠ [HubSpot] Editor no localizado. El ImageButton puede no aparecer.")
 
-    def _paso_adjuntar(self, driver, log: Callable, ruta_abs: str, ctx: dict) -> None:
-        log("  → [HubSpot] Paso 5/7: Adjuntando archivo…")
+    def _paso_insertar_imagen(self, driver, log: Callable, ruta_abs: str, ctx: dict) -> None:
+        log("  → [HubSpot] Paso 5/7: Insertando imagen…")
         try:
-            btn = WebDriverWait(driver, self.TIMEOUT_LARGO).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, self.SEL_BTN_ADJUNTAR))
-            )
-            self._safe_click(driver, btn, ctx)
-            file_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, self.SEL_INPUT_FILE))
-            )
-            self._safe_send_file(driver, file_input, ruta_abs, ctx)
-            log(f"  ✓ [HubSpot] Archivo enviado al input.")
+
+            @_retry_stale(max_intentos=3)
+            def _click_btn():
+                btn = WebDriverWait(driver, self.TIMEOUT_LARGO).until(
+                    EC.element_to_be_clickable(
+                        (By.CSS_SELECTOR, self.SEL_BTN_INSERTAR_IMAGEN)
+                    )
+                )
+                self._safe_click(driver, btn, ctx)
+                time.sleep(0.5)
+
+            _click_btn()
+
+            @_retry_stale(max_intentos=5, pausa=0.5)
+            def _send_file():
+                file_input = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, self.SEL_INPUT_FILE)
+                    )
+                )
+                self._safe_send_file(driver, file_input, ruta_abs, ctx)
+
+            _send_file()
+            log(f"  ✓ [HubSpot] Imagen enviada al input.")
         except Exception as e:
-            # Guardar DOM para diagnóstico antes de propagar el error
             try:
                 with open("debug_dom_hubspot.html", "w", encoding="utf-8") as f:
                     f.write(driver.page_source)
                 log("  · [HubSpot] DOM guardado en debug_dom_hubspot.html")
             except Exception:
                 pass
-            raise RuntimeError(f"No se pudo adjuntar el archivo: {e}") from e
+            raise RuntimeError(f"No se pudo insertar la imagen: {e}") from e
 
-    def _paso_esperar_archivo(
+    def _paso_esperar_imagen(
         self, driver, log: Callable, ruta_abs: str, ctx: dict
     ) -> None:
-        log("  → [HubSpot] Paso 6/7: Esperando confirmación de archivo…")
+        log("  → [HubSpot] Paso 6/7: Esperando confirmación de imagen…")
         nombre = os.path.basename(ruta_abs)
         try:
             WebDriverWait(driver, 15).until(
@@ -606,10 +658,10 @@ class HubSpotPlugin(SitioPlugin):
                     or d.find_elements(By.XPATH, f"//*[contains(@title,'{nombre}')]")
                 )
             )
-            log(f"  ✓ [HubSpot] Archivo '{nombre}' confirmado en página.")
+            log(f"  ✓ [HubSpot] Imagen '{nombre}' confirmada en página.")
         except TimeoutException:
             log(
-                "  · [HubSpot] No se confirmó el archivo en DOM (puede estar listo igual)."
+                "  · [HubSpot] No se confirmó la imagen en DOM (puede estar lista igual)."
             )
 
     def _paso_guardar(self, driver, log: Callable, ctx: dict) -> None:

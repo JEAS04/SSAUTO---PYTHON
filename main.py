@@ -132,6 +132,7 @@ def abrir_credenciales():
     win = VentanaCredenciales(launcher, sitios_compat)
     if win.confirmado:
         vista_principal._credenciales_sesion = win.credenciales_sesion
+        vista_principal._actualizar_sitios_status()
 
 
 def cambiar_tema(opcion: str):
@@ -229,6 +230,8 @@ _sep_barra()
 _btn_barra("Credenciales", abrir_credenciales)
 _btn_barra("Plantillas", abrir_plantillas)
 _btn_barra("Mensajes", abrir_generador)
+_sep_barra()
+_btn_barra("Vista", vista_principal.ui_manager.show_customization_menu)
 
 ctk.CTkOptionMenu(
     barra,

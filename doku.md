@@ -1729,3 +1729,375 @@ Resultado
 - Build generado en dist/SSAuto/SSAuto.exe (~106 MB, modo onedir)
 - El .env debe colocarse manualmente en dist/SSAuto/ junto al .exe
 - chrome (chrome.exe) y Playwright (playwright install chromium) deben estar en la maquina destino
+
+
+
+05/06/2026
+273 tests pasando, 0 fallos. Estos fueron los cambios:
+1. ventana_credenciales.py:53-54 — Eliminadas self._config = cargar_config() y ctk.set_appearance_mode(...) que se ejecutaban después de wait_window() (código muerto). También removido el import innecesario de cargar_config.
+2. ventana_principal.py:1520,1537 — Eliminado el self.wait_window(win) redundante en _abrir_login_inicial() y _abrir_credenciales() (el constructor ya bloquea). Reemplazado getattr(win, "confirmado", False) por win.confirmado directo.
+3. main.py:135 — Agregado vista_principal._actualizar_sitios_status() tras confirmar credenciales, igual que ya hacía _abrir_credenciales().
+4. ventana_credenciales.py:68-76 — Si no hay sitios que requieran login, la ventana muestra "No hay sitios que requieran credenciales." en vez de quedarse vacía.
+
+Plan: Sistema de Personalización de Interfaz (UIManager)
+Arquitectura propuesta
+Todo el sistema vive dentro de ventana_principal.py, auto-contenido. Consta de 3 piezas:
+A. Nueva clase UIManager (~200 líneas, antes de App)
+class UIManager:
+    CONFIG_KEY = "ui_visibility"
+    PANEL_ORDER = ["captura", "apps", "destino", "opciones", "registro", "barra_estado"]
+    
+    def __init__(self, app):           # ref a App, carga visibilidad de config.json
+    def register(panel_id, frame, title, row, pady):  # registra un panel
+    def is_visible(panel_id):          # consulta rápida
+    def toggle(panel_id):              # alterna y guarda
+    def _reflow():                     # reasigna filas grid sin huecos
+    def show_menu():                   # CTkToplevel con checkboxes
+    def _load_visibility() / _save()   # JSON via configuracion.guardar_config()
+Mecanismo clave: _reflow()
+1. Itera PANEL_ORDER en orden
+2. Paneles visibles → frame.grid(row=nueva_fila, column=1, sticky="ew", pady=original)
+3. Paneles ocultos → frame.grid_remove()
+4. Resultado: sin huecos, widgets restantes se expanden (columnconfigure weight=2 ya lo garantiza)
+B. Modificaciones a App existente
+Método	Cambio
+__init__	self.ui_manager = UIManager(self)
+_seccion()	Retorna (outer, inner) en vez de solo inner
+_construir_ui()	Cada secX → frame, cuerpo = self._seccion(...) + self.ui_manager.register(...)
+_construir_ui()	Al final: self.ui_manager._reflow() para aplicar estado inicial
+Ejemplo de registro tras crear panel de captura:
+frame_captura, sec1 = self._seccion(padre, "REGIÓN DE CAPTURA", fila=0, col=1, pady=(0, 10))
+self._crear_panel_captura(sec1)
+self.ui_manager.register("captura", frame_captura, "Región de Captura", pady=(0, 10))
+C. Menú de personalización
+Dos puntos de acceso:
+1. Botón "⚙ Personalizar" en el encabezado de CONFIGURACIÓN (auto-contenido en ventana_principal.py)
+2. Botón "Vista" en la barra de main.py (1 línea opcional: _btn_barra("Vista", vista_principal.ui_manager.show_menu))
+El menú es un CTkToplevel (mismo patrón que el modal Calendar existente):
+- Checkbox por cada panel registrado
+- Cambio instantáneo al marcar/desmarcar
+- Sin botón "Aplicar" — se actualiza en vivo
+- Tema dark/light consistente
+D. Persistencia
+Reusa config.json y la función guardar_config() existente:
+{
+  "ui_visibility": {
+    "captura": true,
+    "apps": true,
+    "destino": true,
+    "opciones": true,
+    "registro": true,
+    "barra_estado": true
+  }
+}
+- Si no existe la clave → todos visibles (backward compatible)
+- Guardado automático en cada toggle
+- Restauración al iniciar
+E. Paneles registrados (6 paneles iniciales)
+ID	Título en menú
+captura	Región de Captura
+apps	Aplicaciones de Captura
+destino	Destino y Sesión
+opciones	Configuración
+registro	Registro (Log)
+barra_estado	Barra de Estado
+F. Escalabilidad futura
+El register() acepta cualquier widget (botones, tarjetas, dropdowns individuales):
+self.ui_manager.register("btn_detener", self.btn_detener, "Botón Detener",
+                         parent=coord_row, pack_side="right", pack_padx=(8, 0))
+El gestor soporta grid(), pack(), y grid_remove()/pack_forget() para restaurar. Pero el MVP comienza con los 6 paneles principales.
+G. Resumen de impacto
+- Archivos modificados: Solo ventana_principal.py
+- Archivo opcional: main.py (+1 línea para botón "Vista")
+- Líneas nuevas: ~250 (clase UIManager + registro + menu)
+- Líneas modificadas: ~30 (ajustes en _seccion, _construir_ui, __init__)
+- Tests: 273 tests existentes no deberían romperse (UI es solo visual)
+- Riesgo: Bajo — no se toca lógica de captura, subida, ni plugins
+¿Quieres que proceda con la implementación o hay algo que ajustar del plan? Por ejemplo: ¿prefieres que el botón de acceso al menú esté en la barra superior de main.py en vez de dentro de ventana_principal.py?
+
+
+Tienes toda la razón en ambos puntos.
+Archivo separado: ui/ui_manager.py es lo correcto. El proyecto ya tiene una arquitectura modular clara (ui/widgets/, core/, services/, config/), y ventana_principal.py con 1748 líneas no necesita 200 más. Sigue el patrón existente.
+Botón en main.py: La barra superior ya aloja navegación y herramientas ("Principal", "Comparación", "Credenciales", "Plantillas", "Mensajes", selector de tema). "Vista" encaja perfectamente ahí.
+Plan revisado — 3 archivos
+1. Nuevo: ui/ui_manager.py (~250 líneas)
+class UIManager:
+    CONFIG_KEY = "ui_visibility"
+    
+    def __init__(self, parent_scroll, app_ref)
+    def register(panel_id, frame, title, pady, col)
+    def is_visible(panel_id) -> bool
+    def toggle(panel_id)
+    def show(panel_id)
+    def hide(panel_id)
+    def _reflow()                          # reasigna filas grid de paneles visibles
+    def _load_visibility() / _save()        # config.json I/O
+    def show_customization_menu()           # CTkToplevel con CTkSwitch por panel
+    def get_panels() -> list[dict]          # para el menu (id, title, visible)
+Sin dependencia circular: solo necesita referencias a cargar_config/guardar_config y una referencia al _frame_scroll para hacer grid()/grid_remove().
+2. Modificar: ui/ventana_principal.py (~30 líneas cambiadas)
+Qué cambia	Detalle
+import	Agregar from ui.ui_manager import UIManager
+_seccion()	Retornar (outer_frame, inner_body) en vez de solo inner_body
+_construir_ui()	Desempaquetar tupla, registrar cada sección con self.ui_manager.register(...)
+_construir_ui()	Al final: self.ui_manager._reflow() para aplicar estado inicial
+__init__	self.ui_manager = UIManager(self._frame_scroll, self)
+Ejemplo concreto del cambio en _construir_ui:
+# Antes:
+sec1 = self._seccion(padre, "  REGIÓN DE CAPTURA", fila=0, col=1)
+self._crear_panel_captura(sec1)
+
+# Después:
+frame_captura, sec1 = self._seccion(padre, "  REGIÓN DE CAPTURA", fila=0, col=1)
+self._crear_panel_captura(sec1)
+self.ui_manager.register("captura", frame_captura, "Región de Captura", pady=(0, 10))
+3. Modificar: main.py (~3 líneas)
+# En la sección de botones de navegación:
+_btn_barra("Vista", vista_principal.ui_manager.show_customization_menu)
+¿Te parece bien esta arquitectura? ¿Procedo con la implementación?
+
+Implementación completa. 273 tests pasan, smoke test OK. Resumen de lo entregado:
+Archivos creados/modificados
+Archivo	Acción	Líneas
+ui/ui_manager.py	Nuevo	263
+ui/ventana_principal.py	Modificado (~20 líneas)	+registro de 6 paneles
+main.py	Modificado (+2 líneas)	botón "Vista" en barra
+UIManager (ui/ui_manager.py)
+- 6 paneles registrados: Región de Captura, Aplicaciones, Destino y Sesión, Configuración, Registro (Log), Barra de Estado
+- _reflow(): reasigna filas grid secuencialmente sin huecos — usa grid_remove() (no destruye)
+- Persistencia: config.json["ui_visibility"] — guarda/restaura automáticamente en cada toggle
+- Menú modal: CTkToplevel con switches por panel, cambios instantáneos, mismo patrón que Calendar
+- Escalable: register(id, frame, pady, col) acepta cualquier widget; PANEL_ORDER define orden
+Cómo usarlo
+Desde la barra superior: Vista → se abre el menú con checkboxes. Marcar/desmarcar cualquier panel lo muestra/oculta al instante. Al reiniciar la app, el estado se restaura desde config.json.
+
+
+273 tests pass, smoke test OK.
+Hecho. Ahora el menú "Vista" incluye 12 elementos organizados por sección:
+Mostrar / ocultar paneles
+───────────────────────────
+  Región de Captura          ← encabezado de sección
+  ☑ Región de Captura        ← sección completa
+  ☑     Perfiles
+  ☑     Monitor
+  ☑     Coordenadas
+  ☑     Botón Detener
+  ☑     Botón Medir región
+  ☑     Botón Capturar y subir
+  ───────────────────────────
+  Aplicaciones de Captura
+  ☑ Aplicaciones de Captura
+  ...
+6 widgets hijos en Región de Captura (ui_manager.py:68-78):
+- capt_perfiles — ProfileManagerWidget (grid)
+- capt_monitor — MonitorSelectorWidget (grid)
+- capt_coordenadas — CoordinateInputsWidget (pack)
+- capt_btn_detener — Botón Detener (pack)
+- capt_btn_medir — Botón Medir región (pack)
+- capt_btn_capturar — Botón Capturar y subir (pack)
+Cada uno usa pack_forget()/pack() o grid_remove()/grid() para ocultar/restaurar sin destruir. La persistencia es automática en config.json["ui_visibility"].
+
+Corregido. El UIManager ahora gestiona padres automáticamente:
+Mecanismo de auto-hide de padres (ui/ui_manager.py):
+- register_child() acepta parent_pack_info — cómo re-packear el contenedor padre
+- _show_child(): si el padre no está mapeado (winfo_ismapped), lo re-packea antes de mostrar el hijo
+- _hide_child(): después de ocultar el hijo, verifica si todos los hermanos del mismo padre están ocultos → pack_forget() del padre, eliminando el gap del pady
+- _apply_initial_state(): aplica auto-hide de padres en 3 fases (ocultar hijos → ocultar padres vacíos → reflow secciones)
+3 filas de contenedores protegidas (ventana_principal.py):
+Contenedor	pady original	Hijos
+_row_perfiles_monitor	(0, 4)	Perfiles + Monitor
+_row_coords	(2, 4)	Coordenadas + Detener
+_row_botones	—	Medir + Capturar
+Si ocultas ambos hijos de una fila, la fila desaparece por completo (sin gap). Si vuelves a mostrar cualquiera, la fila reaparece automáticamente.
+Listo. btn_detener ahora está junto a los otros botones:
+[Medir región en pantalla]  ...  [Capturar y subir] [Detener]
+- Movido de _row_coords a _row_botones
+- Orden de pack: side="right" primero Detener (va al extremo derecho), luego Capturar y subir (va a su izquierda)
+- Registro UIManager de capt_btn_detener actualizado al nuevo padre _row_botones
+
+Listo. Los 3 botones ahora tienen el mismo alto y ancho:
+- Grid con grid_columnconfigure((0, 1, 2), weight=1, uniform="btn") — columnas de ancho idéntico
+- Alto unificado: alto_boton = self._r(32, 36, 44) para los tres
+- [Medir región] [Capturar y subir] [Detener] — centrados y proporcionales
+
+273 tests pass. Cambios aplicados en 3 secciones:
+- _fila_campo() — columnas valor_hs y valor_sr ahora usan CTkTextbox(selectable=True) con wrap="word", fg_color="transparent", border_width=0. Campo y Estado siguen con CTkLabel.
+- Datos extra Sunrun (dispatch_state, appointment_date, case_reason) — CTkTextbox seleccionable, conserva color dinámico del dispatch state.
+- Datos extra HubSpot (ticket_id, contact_id) — CTkTextbox seleccionable.
+Todos los textbox usan state="disabled" (bloquea edición, permite selección y Ctrl+C), activate_scrollbars=False, sin borde ni fondo visible.
+
+Listo. El botón "Copiar" ahora incluye los datos de HubSpot:
+COMPARACIÓN FSD: FSD-123456
+==================================================
+
+☀ SUNRUN
+  Dispatch State: ...
+  Appointment Date: ...
+  Case Reason: ...
+
+⬡ HUBSPOT         ← nuevo
+  Ticket Id: ...
+  Contact Id: ...
+
+📋 CAMPOS COMPARADOS
+...
+
+
+1. Debe quedar como previsualizacion sin que sea necesario entrar para ver el archivo, hay un boton para esto que dice "Insertar imagen" <div data-test-id="image-upload-toggle" aria-pressed="false" role="button" aria-disabled="false" class="sc-AxirZ eWrBFr sc-fzomME cTSZyK" tabindex="0"><span class="IconHolder__StyledIconHolder-gQLlhR hHfCeb"><span class="IconHolder__StyledIconWrapper-iVlqGS jMWuCE"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" focusable="false" data-icon-name="InsertImage" class="StyledIcon-jibXlG iDXvhq"><path d="M25.51 4h-19C4.02 4 2.01 6.01 2 8.5v15c0 2.48 2.01 4.49 4.49 4.5h19c2.48 0 4.49-2 4.51-4.47V8.5c0-2.48-2.01-4.49-4.49-4.5M27 23.53c0 .83-.67 1.5-1.5 1.5h-19c-.83 0-1.5-.67-1.5-1.5V8.5c0-.82.67-1.49 1.49-1.5H25.5c.83 0 1.5.67 1.5 1.5zm-2.94-11.42a1.505 1.505 0 0 0-1.66.4s-6 7-6 7c-.09.11-.23.17-.38.17-.08 0-.16-.02-.23-.06s-3-3.3-3-3.3c-.25-.2-.57-.32-.92-.32-.08 0-.15 0-.23.02-.41.05-.77.26-1 .57s-3.38 4-3.38 4c-.18.25-.29.56-.29.89 0 .83.67 1.5 1.5 1.5h15.01c.83 0 1.5-.67 1.5-1.5v-8c0-.63-.38-1.16-.92-1.39h-.01Zm-13.07-1.1c0 1.1-.9 2-2 2s-2-.9-2-2 .89-2 2-2 2 .89 2 2"></path></svg></span></span></div> , el actual creo que es "insertar archivo"
+
+2. El modal debe aparecer en todos los botones de captura
+
+3. Esta ingresando a "Descripcion", y ahi no hay boton de nota. Recuerda que son 2 tipos de subida, para EL TICKET y para EL CONTACTO, pero el flujo es practicamente el mismo, nada mas que en ticket esta asi: Descripcion - Actividades y en Contacto es asi: Actividades - Descripcion, en actividades es donde esta el boton de nota, igualmente en ambas pestañas fuera de nota, como a la izquierda en un sidebar esta un boton de nota, que sirve para meterse a la creacion de la nota sin estar en actividades.
+
+
+Plan — 3 cambios en el proceso de subida
+Cambio 1 — Imagen incrustada en vez de archivo adjunto
+Archivo: plugins/hubspot.py
+Qué cambia
+Nuevo selector
+_paso_adjuntar() → _paso_insertar_imagen()
+_paso_esperar_archivo() → _paso_esperar_imagen()
+subir()
+Riesgo bajo — solo cambia el target del click, el resto de la pipeline es igual.
+Cambio 2 — Modal de mensajes antes de capturar
+Archivos: ventana_principal.py + plugins/hubspot.py
+ventana_principal.py
+1. Nuevo método _abrir_modal_mensaje() — mismo patrón que _abrir_modal_calendar():
+- CTkToplevel modal con transient(self), grab_set(), wait_window()
+- Carga plantillas desde config/plantillas.json (usando _cargar_plantillas de ventana_plantillas.py)
+- Panel izquierdo: lista de plantillas agrupadas por categoría
+- Panel derecho: CTkTextbox para preview/edición del mensaje
+- Botones: "Continuar con mensaje" / "Limpiar" / "Cancelar"
+- Retorna str | None
+2. Insertar en _ejecutar() (línea 1711), después del anti-reentry y antes del Thread:
+mensaje = self._abrir_modal_mensaje()
+if mensaje is None:
+    self._proceso_en_curso = False
+    # re-enable buttons
+    return
+self._mensaje_nota = mensaje
+3. Insertar en _ejecutar_app() (línea 720): misma lógica
+4. Insertar en _abrir_modal_calendar() → closure _ejecutar() (línea ~968): antes de modal.destroy(), pasar mensaje
+5. Modificar _subir_a_destinos(): agregar "mensaje_nota": self._mensaje_nota a opciones
+plugins/hubspot.py
+6. Modificar _paso_editor(): línea 558, usar ctx.opciones.get("mensaje_nota", "Nota de captura.") en vez del string hardcodeado
+Cambio 3 — Arreglar flujo en páginas de Contacto
+Archivo: plugins/hubspot.py
+Problema: _paso_actividades() usa a[data-tab-id="1"] que en páginas de contacto apunta a "Descripción" (los tabs están en orden inverso: Actividades | Descripción vs Descripción | Actividades en tickets). Al hacer click en Descripción no hay botón de nota.
+Solución: Usar el botón lateral de "Nota" (sidebar), que funciona en ambas páginas sin depender de la pestaña activa.
+Paso	Acción
+1	Nuevo selector: SEL_BTN_NOTA_SIDEBAR = '[data-selenium-test*="note" i]' + fallbacks XPath
+2	Nuevo método _paso_crear_nota_desde_sidebar() — busca el botón lateral primero
+3	Modificar subir(): probar _paso_crear_nota_desde_sidebar() → si funciona, saltar _paso_actividades() + _paso_notas() + _paso_crear_nota() e ir directo a _paso_editor()
+4	Si el sidebar falla, mantener el flujo actual como fallback (compatible con ambas páginas)
+5	También mejorar _paso_actividades(): en el JS fallback, priorizar tabs que contengan exactamente "Actividades" o "Activities" sobre cualquier otro match
+Lógica del nuevo flujo en subir():
+1. Validar contexto
+2. Intentar _paso_crear_nota_desde_sidebar()  ← NUEVO: funciona en ticket Y contacto
+   ├─ OK → saltar a paso 4 (editor)
+   └─ Falló → continuar:
+      3a. _paso_actividades()
+      3b. _paso_notas()
+      3c. _paso_crear_nota()
+4. _paso_editor()
+5. _paso_insertar_imagen()
+6. _paso_esperar_imagen()
+7. _paso_guardar()
+
+Plan refinado — Cambio 3
+Archivo: plugins/hubspot.py — solo subir() (~15 líneas)
+Reordenar los pasos en subir(): intentar _paso_crear_nota() primero, desde el sidebar. Si funciona → saltar Actividades y Notas. Si falla → flujo actual como fallback.
+Flujo NUEVO:
+1. validar contexto ✓
+2. _paso_crear_nota()          ← PRIMERO (sidebar, funciona en ticket Y contacto)
+   ├─ OK → saltar a paso 5 (editor)
+   └─ Falló → continuar:
+       3. _paso_actividades()
+       4. _paso_notas()
+       5. _paso_crear_nota()   ← intentar de nuevo (dentro de Actividades)
+6. _paso_editor()
+7. _paso_insertar_imagen()
+8. _paso_esperar_imagen()
+9. _paso_guardar()
+Riesgo bajo: el sidebar existe en ambas páginas. Si por alguna razón no está presente, el fallback mantiene el comportamiento actual.
+Plan resumen de los 3 cambios
+#	Qué	Archivos	Líneas estimadas
+1	Imagen incrustada — SEL_BTN_INSERTAR_IMAGEN	hubspot.py	~20 (selector + renombrar método)
+2	Modal mensajes antes de capturar	ventana_principal.py + hubspot.py	~120 (modal) + ~10 (integración) + ~3 (editor usa mensaje)
+3	Sidebar "Crear nota" primero	hubspot.py	~15 (reordenar subir())
+¿Procedo con la implementación?
+
+Cambio 1 — Imagen incrustada (plugins/hubspot.py)
+- Nuevo selector SEL_BTN_INSERTAR_IMAGEN = '[data-test-id="image-upload-toggle"]'
+- _paso_adjuntar() → _paso_insertar_imagen() — clickea el botón de imagen en vez del de archivo
+- _paso_esperar_archivo() → _paso_esperar_imagen()
+- La imagen queda visible inline en la nota sin necesidad de abrir el adjunto
+Cambio 2 — Modal de mensajes (ventana_principal.py + hubspot.py)
+- Nuevo método _abrir_modal_mensaje() — modal con lista de plantillas (izquierda) + editor de texto (derecha), botones Limpiar/Cancelar/Continuar
+- Carga plantillas desde config/plantillas.json agrupadas por categoría
+- Integrado en todos los botones de captura: _ejecutar(), _ejecutar_app(), Calendar
+- El mensaje viaja en ContextoSubida.opciones["mensaje_nota"] → _paso_editor() lo inserta en vez de "Nota de captura."
+Cambio 3 — Flujo en Contactos (plugins/hubspot.py)
+- Nuevo _paso_crear_nota_directa() — clickea el botón "Nota" del sidebar (data-selenium-test="create-engagement-note-button"), visible en cualquier pestaña
+- subir() reordenado: intenta sidebar primero → si funciona, salta Actividades+Notas y va directo al editor
+- Si el sidebar falla, mantiene el flujo tradicional como fallback
+
+273 tests pass. El problema era que _paso_editor() recibía contexto_activo (un dict con {handle, url, title}), no el ContextoSubida original. Ahora mensaje_nota se extrae en subir() y se pasa como parámetro explícito:
+# en subir():
+mensaje_nota = ctx.opciones.get("mensaje_nota", "") or "Nota de captura."
+self._paso_editor(driver, log, contexto_activo, mensaje_nota)
+
+# en _paso_editor():
+def _paso_editor(self, driver, log, ctx, mensaje="Nota de captura."):
+    # usa 'mensaje' en vez de ctx.opciones[...]
+
+
+El stale element ahora se maneja con dos retry independientes:
+1. Click del botón de imagen — reintenta 3 veces si el botón se vuelve stale (React re-render antes del click)
+2. Envío del archivo al input — reintenta 5 veces con pausa de 0.5s si el input aparece/desaparece por React
+Ambos bloques son independientes, así que si falla el send_keys, no re-clickea el botón de imagen (evita togglearlo). Solo re-busca el input[type="file"] fresco y reintenta el envío.
+
+Resumen — SSAuto, 5 de junio de 2026
+1. Sistema de personalización de interfaz (UIManager)
+Archivo	Acción
+ui/ui_manager.py	Nuevo (395 líneas) — gestor de visibilidad, reflow, persistencia, menú
+ui/ventana_principal.py	Modificado — retorno de _seccion() como tupla (frame, cuerpo), registro de 6 secciones + 6 widgets hijos
+main.py	+2 líneas — botón "Vista" en barra superior
+6 secciones (grid-based, reflow automático): Región de Captura, Aplicaciones, Destino y Sesión, Configuración, Registro (Log), Barra de Estado
+6 widgets hijos de Región de Captura (pack/grid, auto-hide de padres): Perfiles, Monitor, Coordenadas, Botón Detener, Botón Medir, Botón Capturar
+Mecanismos clave:
+- _reflow(): reasigna filas grid sin huecos al ocultar secciones
+- register_child() + parent_pack_info: auto-oculta el contenedor padre cuando todos sus hijos están ocultos (elimina gaps del pady)
+- Persistencia en config.json["ui_visibility"]
+- Menú "Vista" → modal agrupado por sección con switches instantáneos
+Reorganización de botones: Detener movido a la fila de botones (Medir | Capturar y subir | Detener), los 3 con grid de columnas iguales (uniform="btn") y misma altura.
+2. Campos seleccionables en VentanaComparacion
+Archivo	Cambio
+ui/ventana_comparacion.py	CTkLabel → CTkTextbox(state="disabled") en valores comparados
+Columnas valor_hs y valor_sr ahora son CTkTextbox seleccionables con wrap="word", fg_color="transparent", border_width=0, activate_scrollbars=False. También datos extra de Sunrun y HubSpot.
+3. Tres cambios en subida a HubSpot
+#	Cambio
+1	Imagen incrustada (no adjunto) — usa [data-test-id="image-upload-toggle"]
+2	Modal de mensajes antes de capturar — plantillas de plantillas.json
+3	Flujo de contacto arreglado — sidebar "Nota" primero, fallback a pestañas
+Cambio 1: _paso_adjuntar → _paso_insertar_imagen, target cambia de select-file-dropdown a image-upload-toggle. Imagen queda inline en la nota.
+Cambio 2: _abrir_modal_mensaje() — modal con plantillas agrupadas por categoría (HubSpot/Sunrun/General) + editor de texto + botones Limpiar/Cancelar/Continuar. Integrado en _ejecutar(), _ejecutar_app() y Calendar. El mensaje viaja por ContextoSubida.opciones["mensaje_nota"].
+Cambio 3: _paso_crear_nota_directa() — usa el botón create-engagement-note-button del sidebar (visible en cualquier pestaña). subir() intenta sidebar primero → si funciona, salta Actividades+Notas y va directo al editor. Si falla, flujo tradicional como fallback.
+4. Hotfixes
+- _paso_editor() recibía contexto_activo (dict) como ctx, causando 'dict' object has no attribute 'opciones'. Solución: pasar mensaje_nota como parámetro explícito desde subir().
+- Stale element en _paso_insertar_imagen por re-render de React. Solución: dos bloques @_retry_stale independientes (click del botón y send_keys del input), + time.sleep(0.5) post-click.
+Tests: 273/273 pasan en todas las verificaciones.
+
+AGENTS.md actualizado. Cambios principales respecto al anterior:
+- _seccion() — documentado que retorna tupla (frame, cuerpo), no solo cuerpo
+- UIManager — sección nueva con register(), register_child(), show_customization_menu(), _apply_initial_state(), parent auto-hide
+- Modal patterns — sección nueva con el patrón canónico (CTkToplevel + transient + withdraw/deiconify + grab_set + wait_window)
+- Capture flow + message modal — _abrir_modal_mensaje() antes de lanzar el hilo, self._mensaje_nota, flujo de cancelación
+- VentanaComparacion — CTkTextbox seleccionable en valores
+- HubSpot upload — image-upload-toggle, @_retry_stale dual, sidebar create-engagement-note-button, _paso_editor(mensaje=...)
+- Module map — agregados ui_manager.py, posicion_ventanas.py, widgets, driver_provider.py, session_manager.py, plantillas.py (_cargar_plantillas)
+- Se eliminó contenido redundante con el README (guías de uso, estructura de carpetas, docs de features)
+
+
+
+PENDIENTE: HACER QUE NI EL MENSAJE NI EL CONTENIDO DE LA IMAGEN SEAN REEMPLAZADOS AL SUBIR UNA NUEVA IMAGEN, PARA PODER SUBIR VARIAS IMAGENES EN UNA SOLA NOTA SI TENER QUE CREAR VARIAS.

@@ -48,7 +48,9 @@ from config.credenciales import _COOKIES_DIR as COOKIES_DIR
 from config.apps_captura import APPS_CAPTURA
 from core.medidor_runner import ejecutar_medidor
 from ui.ventana_credenciales import VentanaCredenciales
+from ui.ventana_plantillas import _cargar_plantillas
 from ui.custom_ctkframe import CustomCTkFrame
+from ui.ui_manager import UIManager
 from ui.widgets.log_widget import LogWidget
 from utils.colors import oscurecer
 from utils.fsd import normalizar_fsd
@@ -90,6 +92,7 @@ class App(CustomCTkFrame):
         self._cancelado = threading.Event()  # cancelación del proceso principal
         self._fsd_detectado = None
         self._servicio = SesionService()
+        self.ui_manager = UIManager(self)
         ctk.set_appearance_mode(self._config.get("tema", "dark"))
         self._construir_ui()
 
@@ -129,19 +132,23 @@ class App(CustomCTkFrame):
 
         padre = self._frame_scroll
 
-        sec1 = self._seccion(padre, "  REGIÓN DE CAPTURA", fila=0, col=1)
+        frame_captura, sec1 = self._seccion(padre, "  REGIÓN DE CAPTURA", fila=0, col=1)
         self._crear_panel_captura(sec1)
+        self.ui_manager.register("captura", frame_captura)
 
-        sec_apps = self._seccion(padre, "  APLICACIONES DE CAPTURA", fila=1, col=1)
+        frame_apps, sec_apps = self._seccion(padre, "  APLICACIONES DE CAPTURA", fila=1, col=1)
         self._crear_panel_apps(sec_apps)
+        self.ui_manager.register("apps", frame_apps)
 
-        sec2 = self._seccion(padre, "  DESTINO Y SESIÓN", fila=2, col=1)
+        frame_dest, sec2 = self._seccion(padre, "  DESTINO Y SESIÓN", fila=2, col=1)
         self._crear_panel_destino(sec2)
+        self.ui_manager.register("destino", frame_dest)
 
-        sec3 = self._seccion(padre, "  CONFIGURACIÓN", fila=3, col=1)
+        frame_cfg, sec3 = self._seccion(padre, "  CONFIGURACIÓN", fila=3, col=1)
         self._crear_opciones(sec3)
+        self.ui_manager.register("opciones", frame_cfg)
 
-        sec4 = self._seccion(
+        frame_log, sec4 = self._seccion(
             padre, "  REGISTRO", fila=4, col=1, pady=(0, 8)
         )
         fuente = (
@@ -155,8 +162,12 @@ class App(CustomCTkFrame):
             height=self._r(140, 180, 260),
         )
         self.log_texto.pack(fill="both", expand=True)
+        self.ui_manager.register("registro", frame_log, pady=(0, 8))
 
         self._crear_barra_estado(padre, col=1)
+        self.ui_manager.register("barra_estado", self._frame_estado, pady=(4, 0))
+
+        self.ui_manager._apply_initial_state()
 
     def _seccion(self, padre, titulo, fila, col=0, pady=(0, 10)):
         """Crea una seccion con encabezado y borde para organizar la UI.
@@ -172,7 +183,9 @@ class App(CustomCTkFrame):
             pady: padding vertical de la seccion.
 
         Returns:
-            CTkFrame interior (cuerpo) donde empaquetar los widgets.
+            Tupla (frame_exterior, cuerpo_interior). frame_exterior es
+            el CTkFrame con borde; cuerpo_interior es donde empaquetar
+            los widgets hijos.
         """
         frame = ctk.CTkFrame(padre, fg_color=("gray95", "gray20"), border_width=1)
         frame.grid(row=fila, column=col, sticky="ew", pady=pady)
@@ -193,7 +206,7 @@ class App(CustomCTkFrame):
             fill="both", expand=True,
             padx=self._r(14, 20, 32), pady=self._r(12, 16, 24),
         )
-        return cuerpo
+        return frame, cuerpo
 
     def _calcular_ui_scale(self) -> float:
         """Calcula un factor de escala entre 1.0 y 1.45 basado en la resolucion.
@@ -274,12 +287,12 @@ class App(CustomCTkFrame):
         monitor_guardado = int(self._config.get("ultimo_monitor", 1))
 
         # ── Row 0: Perfiles (left) | Monitor (right) ─────────────
-        r0 = ctk.CTkFrame(padre, fg_color="transparent")
-        r0.pack(fill="x", pady=(0, 4))
-        r0.grid_columnconfigure((0, 1), weight=1)
+        self._row_perfiles_monitor = ctk.CTkFrame(padre, fg_color="transparent")
+        self._row_perfiles_monitor.pack(fill="x", pady=(0, 4))
+        self._row_perfiles_monitor.grid_columnconfigure((0, 1), weight=1)
 
         self._profile_widget = ProfileManagerWidget(
-            r0,
+            self._row_perfiles_monitor,
             region_vars=self.region_vars,
             perfiles_iniciales=self._perfiles,
             on_cargar_perfil=self._on_cargar_perfil,
@@ -289,9 +302,15 @@ class App(CustomCTkFrame):
             on_log=self._log,
         )
         self._profile_widget.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
+        self.ui_manager.register_child(
+            "capt_perfiles", self._profile_widget, self._row_perfiles_monitor,
+            "    Perfiles", "grid",
+            {"row": 0, "column": 0, "sticky": "nsew", "padx": (0, 3)},
+            parent_pack_info={"fill": "x", "pady": (0, 4)},
+        )
 
         self._monitor_widget = MonitorSelectorWidget(
-            r0,
+            self._row_perfiles_monitor,
             nombres_monitores=nombres_monitores,
             monitores_raw=monitores_raw,
             indice_inicial=monitor_guardado,
@@ -299,50 +318,86 @@ class App(CustomCTkFrame):
         )
         self._monitor_widget.grid(row=0, column=1, sticky="nsew", padx=(3, 0))
         self._monitor_var = self._monitor_widget.monitor_var
+        self.ui_manager.register_child(
+            "capt_monitor", self._monitor_widget, self._row_perfiles_monitor,
+            "    Monitor", "grid",
+            {"row": 0, "column": 1, "sticky": "nsew", "padx": (3, 0)},
+            parent_pack_info={"fill": "x", "pady": (0, 4)},
+        )
 
-        # ── Row 1: Coordenadas + Detener ──────────────────────────
-        coord_row = ctk.CTkFrame(padre, fg_color="transparent")
-        coord_row.pack(fill="x", pady=(2, 4))
+        # ── Row 1: Coordenadas ────────────────────────────────────
+        self._row_coords = ctk.CTkFrame(padre, fg_color="transparent")
+        self._row_coords.pack(fill="x", pady=(2, 4))
 
         self._coord_widget = CoordinateInputsWidget(
-            coord_row,
+            self._row_coords,
             valores_iniciales=PERFIL_POR_DEFECTO,
             on_change=self._on_coords_change,
         )
         self._coord_widget.pack(side="left", fill="x", expand=True)
         self.region_vars = self._coord_widget.region_vars
+        self.ui_manager.register_child(
+            "capt_coordenadas", self._coord_widget, self._row_coords,
+            "    Coordenadas", "pack",
+            {"side": "left", "fill": "x", "expand": True},
+            parent_pack_info={"fill": "x", "pady": (2, 4)},
+        )
+
+        # ── Row 2: Medir | Capturar y subir | Detener ────────────
+        self._row_botones = ctk.CTkFrame(padre, fg_color="transparent")
+        self._row_botones.pack(fill="x")
+        self._row_botones.grid_columnconfigure((0, 1, 2), weight=1, uniform="btn")
+
+        alto_boton = self._r(32, 36, 44)
+
+        self._btn_medir = ctk.CTkButton(
+            self._row_botones, text="  Medir region en pantalla",
+            command=self._lanzar_medidor,
+            font=ctk.CTkFont(size=self._fs(11)),
+            height=alto_boton,
+            fg_color=("gray75", "gray30"),
+            hover_color=("gray65", "gray25"),
+        )
+        self._btn_medir.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.ui_manager.register_child(
+            "capt_btn_medir", self._btn_medir, self._row_botones,
+            "    Boton Medir region", "grid",
+            {"row": 0, "column": 0, "sticky": "ew", "padx": (0, 4)},
+            parent_pack_info={"fill": "x"},
+        )
+
+        self.btn = ctk.CTkButton(
+            self._row_botones, text="  Capturar y subir",
+            command=self._ejecutar,
+            font=ctk.CTkFont(size=self._fs(12), weight="bold"),
+            height=alto_boton,
+            fg_color=("#238636", "#2ea043"),
+            hover_color=("#1e7a30", "#26963a"),
+        )
+        self.btn.grid(row=0, column=1, sticky="ew", padx=(2, 2))
+        self.ui_manager.register_child(
+            "capt_btn_capturar", self.btn, self._row_botones,
+            "    Boton Capturar y subir", "grid",
+            {"row": 0, "column": 1, "sticky": "ew", "padx": (2, 2)},
+            parent_pack_info={"fill": "x"},
+        )
 
         self.btn_detener = ctk.CTkButton(
-            coord_row, text="  Detener",
+            self._row_botones, text="  Detener",
             command=self._detener,
             font=ctk.CTkFont(size=self._fs(11), weight="bold"),
-            height=self._r(30, 34, 40),
+            height=alto_boton,
             fg_color=("#d73a49", "#f85149"),
             hover_color=("#b6232e", "#da3633"),
             state="disabled",
         )
-        self.btn_detener.pack(side="right", padx=(8, 0))
-
-        # ── Row 2: Botones de accion ─────────────────────────────
-        b_row = ctk.CTkFrame(padre, fg_color="transparent")
-        b_row.pack(fill="x")
-        ctk.CTkButton(
-            b_row, text="  Medir region en pantalla",
-            command=self._lanzar_medidor,
-            font=ctk.CTkFont(size=self._fs(11)),
-            height=self._r(32, 36, 44),
-            fg_color=("gray75", "gray30"),
-            hover_color=("gray65", "gray25"),
-        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
-        self.btn = ctk.CTkButton(
-            b_row, text="  Capturar y subir",
-            command=self._ejecutar,
-            font=ctk.CTkFont(size=self._fs(12), weight="bold"),
-            height=self._r(36, 42, 50),
-            fg_color=("#238636", "#2ea043"),
-            hover_color=("#1e7a30", "#26963a"),
+        self.btn_detener.grid(row=0, column=2, sticky="ew", padx=(4, 0))
+        self.ui_manager.register_child(
+            "capt_btn_detener", self.btn_detener, self._row_botones,
+            "    Boton Detener", "grid",
+            {"row": 0, "column": 2, "sticky": "ew", "padx": (4, 0)},
+            parent_pack_info={"fill": "x"},
         )
-        self.btn.pack(side="right", fill="x", expand=True, padx=(4, 0))
 
     # ── Widget callbacks ─────────────────────────────────────────────
 
@@ -688,6 +743,15 @@ class App(CustomCTkFrame):
         self._set_status("Ejecutando...")
         self.log_texto.clear()
 
+        mensaje = self._abrir_modal_mensaje(f"Capturar {nombre}")
+        if mensaje is None:
+            self._proceso_en_curso = False
+            self.btn.configure(state="normal")
+            self._rehabilitar_btns_apps()
+            self._set_status("Listo")
+            return
+        self._mensaje_nota = mensaje
+
         self._label_estado_app.configure(
             text=f"  ▶  {nombre} — capturando {region['width']}×{region['height']} px…"
         )
@@ -733,7 +797,10 @@ class App(CustomCTkFrame):
                 headless=headless,
                 usar_chrome_existente=usar_existente,
                 credenciales_sesion=self._credenciales_sesion,
-                opciones={"auto_submit_nota": auto_submit},
+                opciones={
+                    "auto_submit_nota": auto_submit,
+                    "mensaje_nota": getattr(self, "_mensaje_nota", None) or "",
+                },
                 fsd=fsd_plugin,
                 cancel_event=self._cancelado,
             )
@@ -815,6 +882,156 @@ class App(CustomCTkFrame):
             btn.configure(state="normal")
         self.fsd_btn_buscar.configure(state="normal")
         self.btn_detener.configure(state="disabled")
+
+    # ── Modal Mensaje — seleccion de plantilla antes de capturar ──────
+
+    def _abrir_modal_mensaje(self, titulo_btn: str = "Capturar y subir"):
+        """Abre un modal para seleccionar/editar el mensaje de la nota.
+
+        Carga las plantillas desde config/plantillas.json agrupadas por
+        categoria. El usuario puede seleccionar una, editarla, o escribir
+        un mensaje libre. Retorna el texto del mensaje o None si cancela.
+
+        Args:
+            titulo_btn: texto para el boton principal de accion.
+
+        Returns:
+            str con el mensaje seleccionado, o None si el usuario cancela.
+        """
+        resultado = [None]  # mutable para capturar desde closure
+
+        modal = ctk.CTkToplevel(self)
+        modal.title("Mensaje de la nota")
+        modal.resizable(False, False)
+        modal.transient(self)
+        modal.withdraw()
+
+        modal.grid_columnconfigure(0, weight=1)
+        modal.grid_columnconfigure(1, weight=2)
+        modal.grid_rowconfigure(0, weight=1)
+
+        # ── Columna izquierda: lista de plantillas ──────────────────
+        left = ctk.CTkFrame(modal, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="nsew", padx=(16, 4), pady=(12, 8))
+        left.grid_rowconfigure(1, weight=1)
+        left.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            left, text="Plantillas", font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=0, column=0, sticky="w", pady=(0, 6))
+
+        scroll_plantillas = ctk.CTkScrollableFrame(
+            left, fg_color="transparent", width=220,
+        )
+        scroll_plantillas.grid(row=1, column=0, sticky="nsew")
+        scroll_plantillas.grid_columnconfigure(0, weight=1)
+
+        # ── Columna derecha: preview / edicion ──────────────────────
+        right = ctk.CTkFrame(modal, fg_color="transparent")
+        right.grid(row=0, column=1, sticky="nsew", padx=(4, 16), pady=(12, 8))
+        right.grid_rowconfigure(0, weight=1)
+        right.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            right, text="Mensaje de la nota",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(anchor="w", pady=(0, 6))
+
+        texto_nota = ctk.CTkTextbox(
+            right, font=ctk.CTkFont(size=11), wrap="word",
+        )
+        texto_nota.pack(fill="both", expand=True)
+
+        # ── Cargar plantillas y poblar lista ────────────────────────
+        plantillas = _cargar_plantillas()
+        categorias = {}
+        for p in plantillas:
+            cat = p.get("categoria", "General")
+            categorias.setdefault(cat, []).append(p)
+
+        def _seleccionar(texto):
+            texto_nota.configure(state="normal")
+            texto_nota.delete("1.0", "end")
+            texto_nota.insert("1.0", texto)
+            texto_nota.configure(state="normal")
+
+        row_cat = 0
+        # Orden fijo de categorias
+        for cat in ["HubSpot", "Sunrun", "General"]:
+            items = categorias.get(cat, [])
+            if not items:
+                continue
+            ctk.CTkLabel(
+                scroll_plantillas, text=cat,
+                font=ctk.CTkFont(size=10, weight="bold"),
+                text_color=("gray50", "gray50"),
+            ).grid(row=row_cat, column=0, sticky="w", pady=(8, 2), padx=4)
+            row_cat += 1
+
+            for p in items:
+                titulo = p.get("titulo", "Sin título")
+                texto = p.get("texto", "")
+                btn = ctk.CTkButton(
+                    scroll_plantillas, text=f"  {titulo}",
+                    font=ctk.CTkFont(size=11),
+                    anchor="w",
+                    fg_color="transparent",
+                    text_color=("gray30", "gray70"),
+                    hover_color=("gray85", "gray30"),
+                    height=28,
+                    command=lambda t=texto: _seleccionar(t),
+                )
+                btn.grid(row=row_cat, column=0, sticky="ew", pady=1, padx=2)
+                row_cat += 1
+
+        # ── Fila de botones ─────────────────────────────────────────
+        btn_row = ctk.CTkFrame(modal, fg_color="transparent")
+        btn_row.grid(row=1, column=0, columnspan=2, sticky="ew",
+                      padx=16, pady=(4, 12))
+        btn_row.grid_columnconfigure(0, weight=1)
+        btn_row.grid_columnconfigure(1, weight=1)
+        btn_row.grid_columnconfigure(2, weight=1)
+
+        ctk.CTkButton(
+            btn_row, text="Limpiar",
+            font=ctk.CTkFont(size=11),
+            fg_color=("gray70", "gray35"),
+            hover_color=("gray60", "gray45"),
+            command=lambda: _seleccionar(""),
+        ).grid(row=0, column=0, padx=(0, 4), sticky="ew")
+
+        ctk.CTkButton(
+            btn_row, text="Cancelar",
+            font=ctk.CTkFont(size=11),
+            fg_color=("gray70", "gray35"),
+            hover_color=("gray60", "gray45"),
+            command=modal.destroy,
+        ).grid(row=0, column=1, padx=(2, 2), sticky="ew")
+
+        def _confirmar():
+            resultado[0] = texto_nota.get("1.0", "end-1c").strip() or None
+            modal.destroy()
+
+        ctk.CTkButton(
+            btn_row, text=f"  Continuar: {titulo_btn}",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#238636", "#2ea043"),
+            hover_color=("#1e7a30", "#26963a"),
+            command=_confirmar,
+        ).grid(row=0, column=2, padx=(4, 0), sticky="ew")
+
+        modal.bind("<Return>", lambda e: _confirmar())
+        modal.bind("<Escape>", lambda e: modal.destroy())
+
+        from ui.posicion_ventanas import ubicar_junto_a_padre
+
+        modal.deiconify()
+        ubicar_junto_a_padre(modal, self)
+        texto_nota.focus_set()
+        modal.grab_set()
+        modal.wait_window()
+
+        return resultado[0]
 
     # ── Modal Calendar — captura de celda Google Sheets ───────────────
 
@@ -917,13 +1134,18 @@ class App(CustomCTkFrame):
                 messagebox.showwarning("Celda requerida", "Ingresa una referencia de celda (ej. F6).", parent=modal)
                 return
             sheet_name = sheet_var.get().strip() if _sheet_names else None
-            # Persistir selecciones
             config = cargar_config()
             config["ultima_celda_calendar"] = cell_ref
             if sheet_name:
                 config["ultima_pestana_calendar"] = sheet_name
             guardar_config(config)
             modal.destroy()
+
+            mensaje = self._abrir_modal_mensaje("Capturar celda")
+            if mensaje is None:
+                return
+            self._mensaje_nota = mensaje
+
             self._ejecutar_captura_calendar(cell_ref, sheet_url, service_account, sheet_name)
 
         # ── Botones ──────────────────────────────────────────────────
@@ -1144,10 +1366,10 @@ class App(CustomCTkFrame):
             padre: widget padre (CTkScrollableFrame).
             col: columna del grid donde ubicar la barra.
         """
-        frame_estado = ctk.CTkFrame(padre, fg_color="transparent")
-        frame_estado.grid(row=6, column=col, sticky="ew", pady=(4, 0))
+        self._frame_estado = ctk.CTkFrame(padre, fg_color="transparent")
+        self._frame_estado.grid(row=6, column=col, sticky="ew", pady=(4, 0))
         self._punto_estado = ctk.CTkLabel(
-            frame_estado,
+            self._frame_estado,
             text="●",
             font=ctk.CTkFont(size=12),
             text_color=("#2ea043", "#3fb950"),
@@ -1155,20 +1377,20 @@ class App(CustomCTkFrame):
         self._punto_estado.pack(side="left")
         self.status_var = ctk.StringVar(value="Listo")
         ctk.CTkLabel(
-            frame_estado,
+            self._frame_estado,
             textvariable=self.status_var,
             font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray60"),
         ).pack(side="left", padx=(4, 0))
         self._label_estado_app = ctk.CTkLabel(
-            frame_estado,
+            self._frame_estado,
             text="",
             font=ctk.CTkFont(size=10),
             text_color=("gray50", "gray50"),
         )
         self._label_estado_app.pack(side="left", padx=(12, 0), fill="x", expand=True)
         self._label_ultimo_proceso = ctk.CTkLabel(
-            frame_estado,
+            self._frame_estado,
             text="",
             font=ctk.CTkFont(size=10),
             text_color=("gray50", "gray50"),
@@ -1517,8 +1739,7 @@ class App(CustomCTkFrame):
             for p in PluginRegistry.con_login()
         ]
         win = VentanaCredenciales(self, sitios_compat)
-        self.wait_window(win)
-        if getattr(win, "confirmado", False):
+        if win.confirmado:
             self._credenciales_sesion = win.credenciales_sesion
             self._log("✓ Credenciales actualizadas en sesión.")
 
@@ -1534,8 +1755,7 @@ class App(CustomCTkFrame):
             for p in PluginRegistry.con_login()
         ]
         win = VentanaCredenciales(self, sitios_compat)
-        self.wait_window(win)
-        if getattr(win, "confirmado", False):
+        if win.confirmado:
             self._credenciales_sesion = win.credenciales_sesion
             self._log("✓ Credenciales actualizadas en sesión.")
         self._actualizar_sitios_status()
@@ -1676,6 +1896,17 @@ class App(CustomCTkFrame):
         self.fsd_btn_buscar.configure(state="disabled")
         self._set_status("Ejecutando...")
         self.log_texto.clear()
+
+        mensaje = self._abrir_modal_mensaje("Capturar y subir")
+        if mensaje is None:
+            self._proceso_en_curso = False
+            self.btn.configure(state="normal")
+            self.btn_detener.configure(state="disabled")
+            self._rehabilitar_btns_apps()
+            self._set_status("Listo")
+            return
+        self._mensaje_nota = mensaje
+
         threading.Thread(target=self._proceso, daemon=True).start()
 
     def _proceso(self):

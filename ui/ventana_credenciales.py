@@ -11,7 +11,6 @@ Al confirmar, las credenciales quedan en:
 
 import customtkinter as ctk
 from tkinter import messagebox
-from config.configuracion import cargar_config
 from config.credenciales import (
     cargar_credenciales,
     guardar_credenciales,
@@ -50,8 +49,6 @@ class VentanaCredenciales(ctk.CTkToplevel):
         self.transient(parent)
         # wait_window() pausa la ejecución hasta que esta ventana se cierre.
         self.wait_window()
-        self._config = cargar_config()
-        ctk.set_appearance_mode(self._config.get("tema", "dark"))
 
     def _construir_ui(self):
         """Construye el formulario con un bloque por cada sitio con login."""
@@ -65,6 +62,16 @@ class VentanaCredenciales(ctk.CTkToplevel):
 
         self.campos = {}  # {nombre_sitio: {usuario, clave, recordar}}
         indice_fila = 1
+
+        sitios_login = [s for s in self.sitios if s.get("necesita_login")]
+        if not sitios_login:
+            ctk.CTkLabel(
+                self,
+                text="No hay sitios que requieran credenciales.",
+                font=ctk.CTkFont(size=12),
+                text_color=("gray40", "gray60"),
+            ).grid(row=1, column=0, pady=(20, 20), padx=20)
+            return
 
         for sitio in self.sitios:
             if not sitio.get("necesita_login"):
