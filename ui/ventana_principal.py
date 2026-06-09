@@ -48,7 +48,7 @@ from config.credenciales import _COOKIES_DIR as COOKIES_DIR
 from config.apps_captura import APPS_CAPTURA
 from core.medidor_runner import ejecutar_medidor
 from ui.ventana_credenciales import VentanaCredenciales
-from ui.ventana_plantillas import _cargar_plantillas
+from ui.ventana_plantillas import _cargar_plantillas, _guardar_plantillas
 from ui.custom_ctkframe import CustomCTkFrame
 from ui.ui_manager import UIManager
 from ui.widgets.log_widget import LogWidget
@@ -78,7 +78,11 @@ ctk.deactivate_automatic_dpi_awareness()
 
 
 class App(CustomCTkFrame):
-    """Ventana principal de SSAuto."""
+    """Ventana principal de SSAuto.
+
+    Args:
+        parent: widget padre de tkinter/CustomTkinter donde se incrusta la app.
+    """
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -91,6 +95,10 @@ class App(CustomCTkFrame):
         self._proceso_en_curso = False  # anti-reentrada
         self._cancelado = threading.Event()  # cancelación del proceso principal
         self._fsd_detectado = None
+        self._cola_imagenes: list[str] = (
+            []
+        )  # cola de capturas para HubSpot (auto_submit OFF)
+        self._cola_mensajes: list[str] = []  # mensajes asociados a cada captura
         self._servicio = SesionService()
         self.ui_manager = UIManager(self)
         ctk.set_appearance_mode(self._config.get("tema", "dark"))
@@ -107,6 +115,12 @@ class App(CustomCTkFrame):
             self.after(100, self._abrir_login_inicial)
 
     def _abrir_comparacion(self):
+        """Abre la ventana de comparacion de propiedades entre HubSpot y Sunrun.
+
+        Efectos secundarios:
+            - Instancia y muestra VentanaComparacion pasando self._log como
+              callback de registro.
+        """
         from ui.ventana_comparacion import VentanaComparacion
 
         VentanaComparacion(self, log_callback=self._log)
@@ -114,6 +128,18 @@ class App(CustomCTkFrame):
     # ── UI ────────────────────────────────────────────────────────────
 
     def _construir_ui(self):
+        """Construye la UI completa de la ventana principal.
+
+        Crea el frame scrolleable, las secciones (region de captura, apps,
+        destino, opciones, registro y barra de estado) y registra todos los
+        paneles y widgets hijos en el UIManager para control de visibilidad.
+
+        Efectos secundarios:
+            - Configura el grid del frame principal y del scroll.
+            - Registra secciones y widgets en self.ui_manager.
+            - Llama a _apply_initial_state() para aplicar visibilidad
+              persistida desde config.json.
+        """
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -136,7 +162,9 @@ class App(CustomCTkFrame):
         self._crear_panel_captura(sec1)
         self.ui_manager.register("captura", frame_captura)
 
-        frame_apps, sec_apps = self._seccion(padre, "  APLICACIONES DE CAPTURA", fila=1, col=1)
+        frame_apps, sec_apps = self._seccion(
+            padre, "  APLICACIONES DE CAPTURA", fila=1, col=1
+        )
         self._crear_panel_apps(sec_apps)
         self.ui_manager.register("apps", frame_apps)
 
@@ -148,14 +176,8 @@ class App(CustomCTkFrame):
         self._crear_opciones(sec3)
         self.ui_manager.register("opciones", frame_cfg)
 
-        frame_log, sec4 = self._seccion(
-            padre, "  REGISTRO", fila=4, col=1, pady=(0, 8)
-        )
-        fuente = (
-            "Cascadia Code"
-            if self._fuente_existe("Cascadia Code")
-            else "Consolas"
-        )
+        frame_log, sec4 = self._seccion(padre, "  REGISTRO", fila=4, col=1, pady=(0, 8))
+        fuente = "Cascadia Code" if self._fuente_existe("Cascadia Code") else "Consolas"
         self.log_texto = LogWidget(
             sec4,
             font=ctk.CTkFont(family=fuente, size=self._fs(10)),
@@ -203,8 +225,10 @@ class App(CustomCTkFrame):
         ).pack(side="left", padx=self._r(14, 18, 28))
         cuerpo = ctk.CTkFrame(frame, fg_color="transparent")
         cuerpo.pack(
-            fill="both", expand=True,
-            padx=self._r(14, 20, 32), pady=self._r(12, 16, 24),
+            fill="both",
+            expand=True,
+            padx=self._r(14, 20, 32),
+            pady=self._r(12, 16, 24),
         )
         return frame, cuerpo
 
@@ -279,6 +303,17 @@ class App(CustomCTkFrame):
         self._log(f"✓ Monitor de '{nombre}' → {nombre_monitor}")
 
     def _crear_panel_captura(self, padre):
+        """Crea el panel de region de captura con perfiles, monitor y coordenadas.
+
+        Args:
+            padre: widget padre donde empaquetar el panel.
+
+        Efectos secundarios:
+            - Inicializa self._perfiles, self.region_vars, self._profile_widget,
+              self._monitor_widget, self._coord_widget y los botones de accion.
+            - Inicializa el frame de cola de imagenes (oculto por defecto).
+            - Registra widgets hijos en el UIManager.
+        """
         self._perfiles = cargar_perfiles()
         self.region_vars = {}
 
@@ -303,8 +338,11 @@ class App(CustomCTkFrame):
         )
         self._profile_widget.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
         self.ui_manager.register_child(
-            "capt_perfiles", self._profile_widget, self._row_perfiles_monitor,
-            "    Perfiles", "grid",
+            "capt_perfiles",
+            self._profile_widget,
+            self._row_perfiles_monitor,
+            "    Perfiles",
+            "grid",
             {"row": 0, "column": 0, "sticky": "nsew", "padx": (0, 3)},
             parent_pack_info={"fill": "x", "pady": (0, 4)},
         )
@@ -319,8 +357,11 @@ class App(CustomCTkFrame):
         self._monitor_widget.grid(row=0, column=1, sticky="nsew", padx=(3, 0))
         self._monitor_var = self._monitor_widget.monitor_var
         self.ui_manager.register_child(
-            "capt_monitor", self._monitor_widget, self._row_perfiles_monitor,
-            "    Monitor", "grid",
+            "capt_monitor",
+            self._monitor_widget,
+            self._row_perfiles_monitor,
+            "    Monitor",
+            "grid",
             {"row": 0, "column": 1, "sticky": "nsew", "padx": (3, 0)},
             parent_pack_info={"fill": "x", "pady": (0, 4)},
         )
@@ -337,8 +378,11 @@ class App(CustomCTkFrame):
         self._coord_widget.pack(side="left", fill="x", expand=True)
         self.region_vars = self._coord_widget.region_vars
         self.ui_manager.register_child(
-            "capt_coordenadas", self._coord_widget, self._row_coords,
-            "    Coordenadas", "pack",
+            "capt_coordenadas",
+            self._coord_widget,
+            self._row_coords,
+            "    Coordenadas",
+            "pack",
             {"side": "left", "fill": "x", "expand": True},
             parent_pack_info={"fill": "x", "pady": (2, 4)},
         )
@@ -351,7 +395,8 @@ class App(CustomCTkFrame):
         alto_boton = self._r(32, 36, 44)
 
         self._btn_medir = ctk.CTkButton(
-            self._row_botones, text="  Medir region en pantalla",
+            self._row_botones,
+            text="  Medir region en pantalla",
             command=self._lanzar_medidor,
             font=ctk.CTkFont(size=self._fs(11)),
             height=alto_boton,
@@ -360,14 +405,18 @@ class App(CustomCTkFrame):
         )
         self._btn_medir.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         self.ui_manager.register_child(
-            "capt_btn_medir", self._btn_medir, self._row_botones,
-            "    Boton Medir region", "grid",
+            "capt_btn_medir",
+            self._btn_medir,
+            self._row_botones,
+            "    Boton Medir region",
+            "grid",
             {"row": 0, "column": 0, "sticky": "ew", "padx": (0, 4)},
             parent_pack_info={"fill": "x"},
         )
 
         self.btn = ctk.CTkButton(
-            self._row_botones, text="  Capturar y subir",
+            self._row_botones,
+            text="  Capturar y subir",
             command=self._ejecutar,
             font=ctk.CTkFont(size=self._fs(12), weight="bold"),
             height=alto_boton,
@@ -376,14 +425,18 @@ class App(CustomCTkFrame):
         )
         self.btn.grid(row=0, column=1, sticky="ew", padx=(2, 2))
         self.ui_manager.register_child(
-            "capt_btn_capturar", self.btn, self._row_botones,
-            "    Boton Capturar y subir", "grid",
+            "capt_btn_capturar",
+            self.btn,
+            self._row_botones,
+            "    Boton Capturar y subir",
+            "grid",
             {"row": 0, "column": 1, "sticky": "ew", "padx": (2, 2)},
             parent_pack_info={"fill": "x"},
         )
 
         self.btn_detener = ctk.CTkButton(
-            self._row_botones, text="  Detener",
+            self._row_botones,
+            text="  Detener",
             command=self._detener,
             font=ctk.CTkFont(size=self._fs(11), weight="bold"),
             height=alto_boton,
@@ -393,24 +446,77 @@ class App(CustomCTkFrame):
         )
         self.btn_detener.grid(row=0, column=2, sticky="ew", padx=(4, 0))
         self.ui_manager.register_child(
-            "capt_btn_detener", self.btn_detener, self._row_botones,
-            "    Boton Detener", "grid",
+            "capt_btn_detener",
+            self.btn_detener,
+            self._row_botones,
+            "    Boton Detener",
+            "grid",
             {"row": 0, "column": 2, "sticky": "ew", "padx": (4, 0)},
             parent_pack_info={"fill": "x"},
         )
 
+        # ── Row 3: Cola de imágenes (HubSpot, auto_submit OFF) ───────
+        self._frame_cola = ctk.CTkFrame(padre, fg_color="transparent")
+        self._label_cola = ctk.CTkLabel(
+            self._frame_cola,
+            text="Cola: 0 imágenes",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray70"),
+        )
+        self._label_cola.pack(side="left", padx=(0, 8))
+
+        self._btn_subir_cola = ctk.CTkButton(
+            self._frame_cola,
+            text="Subir cola",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            width=90,
+            height=28,
+            corner_radius=6,
+            fg_color=("#1f6aa5", "#1f6aa5"),
+            hover_color=("#144e7a", "#144e7a"),
+            command=self._subir_cola_hubspot,
+        )
+        self._btn_subir_cola.pack(side="left", padx=(0, 4))
+
+        self._btn_limpiar_cola = ctk.CTkButton(
+            self._frame_cola,
+            text="Limpiar",
+            font=ctk.CTkFont(size=10),
+            width=60,
+            height=28,
+            corner_radius=6,
+            fg_color="transparent",
+            border_width=1,
+            command=self._limpiar_cola,
+        )
+        self._btn_limpiar_cola.pack(side="left")
+
+        self._frame_cola.pack_forget()
+
     # ── Widget callbacks ─────────────────────────────────────────────
 
     def _on_monitor_change(self, *_):
+        """Persiste el indice del monitor seleccionado en config.json."""
         indice = self._monitor_widget.obtener_indice()
         cfg = cargar_config()
         cfg["ultimo_monitor"] = indice
         guardar_config(cfg)
 
     def _on_coords_change(self):
+        """Sincroniza el campo 'Pegar region' cuando cambian las coordenadas."""
         self._profile_widget.sincronizar_paste()
 
     def _on_cargar_perfil(self, nombre, region):
+        """Callback al cargar un perfil guardado desde el ProfileManagerWidget.
+
+        Args:
+            nombre: nombre del perfil cargado.
+            region: dict con top/left/width/height y opcionalmente monitor_index.
+
+        Efectos secundarios:
+            - Aplica la region a los campos de coordenadas.
+            - Cambia el monitor si el perfil incluye monitor_index.
+        """
         self._aplicar_region(region)
         monitor_idx = region.get("monitor_index")
         if monitor_idx is not None:
@@ -420,6 +526,17 @@ class App(CustomCTkFrame):
         self._log(f"v Perfil cargado: '{nombre}' -> {region}")
 
     def _on_guardar_perfil(self, nombre, region):
+        """Callback al guardar un perfil desde el ProfileManagerWidget.
+
+        Args:
+            nombre: nombre del perfil a guardar.
+            region: dict con top/left/width/height de la region actual.
+
+        Efectos secundarios:
+            - Agrega monitor_index a la region.
+            - Persiste en perfiles.json via guardar_perfiles().
+            - Actualiza la lista de perfiles en el widget.
+        """
         region["monitor_index"] = self._monitor_widget.obtener_indice()
         perfiles = cargar_perfiles()
         perfiles[nombre] = region
@@ -429,6 +546,15 @@ class App(CustomCTkFrame):
         self._log(f"v Perfil guardado: '{nombre}' -> {region}")
 
     def _on_eliminar_perfil(self, nombre):
+        """Callback al eliminar un perfil desde el ProfileManagerWidget.
+
+        Args:
+            nombre: nombre del perfil a eliminar.
+
+        Efectos secundarios:
+            - Elimina el perfil de perfiles.json via guardar_perfiles().
+            - Actualiza la lista de perfiles en el widget.
+        """
         perfiles = cargar_perfiles()
         perfiles.pop(nombre, None)
         guardar_perfiles(perfiles)
@@ -437,6 +563,17 @@ class App(CustomCTkFrame):
         self._log(f"v Perfil eliminado: '{nombre}'")
 
     def _crear_panel_destino(self, padre):
+        """Crea el panel de destino y sesion con indicadores de sitios y selectores.
+
+        Args:
+            padre: widget padre donde empaquetar el panel.
+
+        Efectos secundarios:
+            - Construye los indicadores de estado de sesion para cada plugin.
+            - Crea los botones de destino (HubSpot, Sunrun, AMBOS).
+            - Inicializa self.destino_var, self._btns_destino.
+            - Vincula cambios de destino con _verificar_limpiar_cola().
+        """
         r0 = ctk.CTkFrame(padre, fg_color="transparent")
         r0.pack(fill="x")
         r0.grid_columnconfigure((0, 1), weight=1)
@@ -453,12 +590,20 @@ class App(CustomCTkFrame):
         btn_row = ctk.CTkFrame(c_sitios, fg_color="transparent")
         btn_row.pack(fill="x", pady=(4, 0))
         ctk.CTkButton(
-            btn_row, text="Credenciales", command=self._abrir_credenciales,
-            font=ctk.CTkFont(size=10), width=110, height=28,
+            btn_row,
+            text="Credenciales",
+            command=self._abrir_credenciales,
+            font=ctk.CTkFont(size=10),
+            width=110,
+            height=28,
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
-            btn_row, text="Renovar sesión", command=self._renovar_sesion,
-            font=ctk.CTkFont(size=10), width=110, height=28,
+            btn_row,
+            text="Renovar sesión",
+            command=self._renovar_sesion,
+            font=ctk.CTkFont(size=10),
+            width=110,
+            height=28,
         ).pack(side="left")
 
         # Right: Destino
@@ -467,18 +612,24 @@ class App(CustomCTkFrame):
         c_dest.grid_columnconfigure(0, weight=1)
 
         self.destino_var = ctk.StringVar(value=cargar_destino_subida())
+        self.destino_var.trace_add("write", lambda *_: self._verificar_limpiar_cola())
         db = ctk.CTkFrame(c_dest, fg_color="transparent")
         db.pack(anchor="w", pady=2)
         ctk.CTkLabel(
-            db, text="Subir a:", font=ctk.CTkFont(size=11),
+            db,
+            text="Subir a:",
+            font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray60"),
         ).pack(side="left", padx=(0, 6))
         self._btns_destino = {}
         for opcion in PluginRegistry.nombres() + ["AMBOS"]:
             btn = ctk.CTkButton(
-                db, text=opcion,
+                db,
+                text=opcion,
                 font=ctk.CTkFont(size=11, weight="bold"),
-                width=72, height=28, corner_radius=6,
+                width=72,
+                height=28,
+                corner_radius=6,
                 fg_color=("#1f6aa5", "#1f6aa5"),
                 hover_color=("#144e7a", "#144e7a"),
             )
@@ -488,6 +639,17 @@ class App(CustomCTkFrame):
         self._seleccionar_destino(self.destino_var.get())
 
     def _crear_opciones(self, padre):
+        """Crea el panel de configuracion con switches de comportamiento y atajos.
+
+        Args:
+            padre: widget padre donde empaquetar el panel.
+
+        Efectos secundarios:
+            - Inicializa switches para headless, Chrome existente y auto-submit.
+            - Inicializa el campo de atajo de teclado (keybind).
+            - Los switches persisten automaticamente al cambiar via sus trace_add.
+              El switch auto_submit tambien dispara _verificar_limpiar_cola().
+        """
         gap = self._r(6, 8, 10)
 
         cont = ctk.CTkFrame(padre, fg_color="transparent")
@@ -504,32 +666,47 @@ class App(CustomCTkFrame):
             "write", lambda *_: guardar_headless(self.headless_var.get())
         )
         ctk.CTkSwitch(
-            i0, text="Modo sin ventana de Chrome",
-            variable=self.headless_var, font=ctk.CTkFont(size=11),
+            i0,
+            text="Modo sin ventana de Chrome",
+            variable=self.headless_var,
+            font=ctk.CTkFont(size=11),
         ).pack(anchor="w", pady=2)
 
         self.chrome_existente_var = ctk.BooleanVar(value=cargar_chrome_existente())
         self.chrome_existente_var.trace_add(
-            "write", lambda *_: guardar_chrome_existente(self.chrome_existente_var.get())
+            "write",
+            lambda *_: guardar_chrome_existente(self.chrome_existente_var.get()),
         )
         hc = ctk.CTkFrame(i0, fg_color="transparent")
         hc.pack(fill="x", pady=2)
         ctk.CTkSwitch(
-            hc, text="Usar Chrome ya abierto (puerto 9222)",
-            variable=self.chrome_existente_var, font=ctk.CTkFont(size=11),
+            hc,
+            text="Usar Chrome ya abierto (puerto 9222)",
+            variable=self.chrome_existente_var,
+            font=ctk.CTkFont(size=11),
         ).pack(side="left")
         ctk.CTkButton(
-            hc, text="Abrir Chrome", command=self._abrir_chrome_debug,
-            font=ctk.CTkFont(size=10), height=28, width=110,
+            hc,
+            text="Abrir Chrome",
+            command=self._abrir_chrome_debug,
+            font=ctk.CTkFont(size=10),
+            height=28,
+            width=110,
         ).pack(side="right")
 
         self.auto_submit_var = ctk.BooleanVar(value=cargar_auto_submit())
         self.auto_submit_var.trace_add(
-            "write", lambda *_: guardar_auto_submit(self.auto_submit_var.get())
+            "write",
+            lambda *_: (
+                guardar_auto_submit(self.auto_submit_var.get()),
+                self._verificar_limpiar_cola(),
+            ),
         )
         ctk.CTkSwitch(
-            i0, text="Auto-submit nota (HubSpot)",
-            variable=self.auto_submit_var, font=ctk.CTkFont(size=11),
+            i0,
+            text="Auto-submit nota (HubSpot)",
+            variable=self.auto_submit_var,
+            font=ctk.CTkFont(size=11),
         ).pack(anchor="w", pady=2)
 
         # ── Col 1: Herramientas ────────────────────────────────────
@@ -539,21 +716,31 @@ class App(CustomCTkFrame):
         hb = ctk.CTkFrame(i1, fg_color="transparent")
         hb.pack(fill="x", pady=2)
         ctk.CTkLabel(
-            hb, text="Atajo:", font=ctk.CTkFont(size=11),
+            hb,
+            text="Atajo:",
+            font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray60"),
         ).pack(side="left", padx=(0, 8))
         self.keybind_var = ctk.StringVar()
         self.keybind_entry = ctk.CTkEntry(
-            hb, textvariable=self.keybind_var, font=ctk.CTkFont(size=11),
+            hb,
+            textvariable=self.keybind_var,
+            font=ctk.CTkFont(size=11),
         )
         self.keybind_entry.pack(side="left", padx=(0, 8), fill="x", expand=True)
         self.keybind_entry.bind("<KeyPress>", self._capturar_tecla)
         ctk.CTkButton(
-            hb, text="Aplicar", command=self._aplicar_keybind,
-            font=ctk.CTkFont(size=10), width=68, height=28,
+            hb,
+            text="Aplicar",
+            command=self._aplicar_keybind,
+            font=ctk.CTkFont(size=10),
+            width=68,
+            height=28,
         ).pack(side="left")
         self.keybind_label = ctk.CTkLabel(
-            i1, text="", font=ctk.CTkFont(size=10),
+            i1,
+            text="",
+            font=ctk.CTkFont(size=10),
             text_color=("gray40", "gray60"),
         )
         self.keybind_label.pack(anchor="w", pady=(4, 0))
@@ -597,49 +784,77 @@ class App(CustomCTkFrame):
     # ── Panel de aplicaciones de captura ─────────────────────────────
 
     def _crear_panel_apps(self, padre):
+        """Crea el panel de aplicaciones de captura con busqueda FSD y grid de apps.
+
+        Incluye el panel de busqueda inteligente por FSD (switch, campo de texto,
+        botones de limpiar y buscar en Sunrun) y una grilla de tarjetas con botones
+        de captura, selectores de monitor y botones de medicion por app.
+
+        Args:
+            padre: widget padre donde empaquetar el panel.
+
+        Efectos secundarios:
+            - Inicializa self._btns_apps, self._regiones_apps.
+            - Inicializa self.usar_fsd_var, self.fsd_var, self.fsd_entry y
+              self.fsd_btn_limpiar (las variables FSD se inicializan aqui,
+              no en _crear_opciones).
+            - Construye tarjetas dinamicas para cada entrada de APPS_CAPTURA.
+        """
         self._btns_apps = {}
         self._regiones_apps = {}
 
         # ── FSD (Búsqueda inteligente) ────────────────────────────────
         self.usar_fsd_var = ctk.BooleanVar(value=True)
-        fsd_row = ctk.CTkFrame(padre, fg_color=("gray92", "gray22"), border_width=1, corner_radius=6)
+        fsd_row = ctk.CTkFrame(
+            padre, fg_color=("gray92", "gray22"), border_width=1, corner_radius=6
+        )
         fsd_row.pack(fill="x", pady=(0, 8))
 
         fsd_inner = ctk.CTkFrame(fsd_row, fg_color="transparent")
         fsd_inner.pack(fill="x", padx=10, pady=(6, 4))
         ctk.CTkSwitch(
-            fsd_inner, text="Búsqueda inteligente por FSD",
-            variable=self.usar_fsd_var, font=ctk.CTkFont(size=11),
+            fsd_inner,
+            text="Búsqueda inteligente por FSD",
+            variable=self.usar_fsd_var,
+            font=ctk.CTkFont(size=11),
             command=self._actualizar_estado_fsd,
         ).pack(anchor="w")
 
         fsd_input = ctk.CTkFrame(fsd_row, fg_color="transparent")
         fsd_input.pack(fill="x", padx=10, pady=(0, 6))
         ctk.CTkLabel(
-            fsd_input, text="FSD:", font=ctk.CTkFont(size=11),
+            fsd_input,
+            text="FSD:",
+            font=ctk.CTkFont(size=11),
             text_color=("gray40", "gray60"),
         ).pack(side="left", padx=(0, 8))
         self.fsd_var = ctk.StringVar(value="")
         self.fsd_entry = ctk.CTkEntry(
-            fsd_input, textvariable=self.fsd_var, font=ctk.CTkFont(size=11),
-            placeholder_text="Ej: 980124 o FSD-980124", state="disabled",
+            fsd_input,
+            textvariable=self.fsd_var,
+            font=ctk.CTkFont(size=11),
+            placeholder_text="Ej: 980124 o FSD-980124",
         )
         self.fsd_entry.pack(side="left", padx=(0, 8), fill="x", expand=True)
         self.fsd_btn_limpiar = ctk.CTkButton(
-            fsd_input, text="Limpiar", command=self._limpiar_fsd,
-            font=ctk.CTkFont(size=10), width=68, height=28, state="disabled",
+            fsd_input,
+            text="Limpiar",
+            command=self._limpiar_fsd,
+            font=ctk.CTkFont(size=10),
+            width=68,
+            height=28,
         )
         self.fsd_btn_limpiar.pack(side="left")
 
         self.fsd_btn_buscar = ctk.CTkButton(
-            fsd_input, text="Buscar en Sunrun", command=self._buscar_fsd_sunrun,
-            font=ctk.CTkFont(size=10), width=110, height=28,
+            fsd_input,
+            text="Buscar en Sunrun",
+            command=self._buscar_fsd_sunrun,
+            font=ctk.CTkFont(size=10),
+            width=110,
+            height=28,
         )
         self.fsd_btn_buscar.pack(side="right", padx=(4, 0))
-
-        self.fsd_entry.configure(state="normal")
-        self.fsd_btn_limpiar.configure(state="normal")
-        self.fsd_btn_buscar.configure(state="normal")
 
         # ── Grid de apps ──────────────────────────────────────────────
         grid = ctk.CTkFrame(padre, fg_color="transparent")
@@ -662,10 +877,13 @@ class App(CustomCTkFrame):
             gap = self._r(4, 6, 8)
 
             card = ctk.CTkFrame(
-                grid, fg_color=("gray90", "gray22"), corner_radius=8,
+                grid,
+                fg_color=("gray90", "gray22"),
+                corner_radius=8,
             )
             card.grid(
-                row=row, column=col,
+                row=row,
+                column=col,
                 sticky="ew",
                 padx=(0 if col == 0 else gap, gap if col == 0 else 0),
                 pady=(0, gap * 2),
@@ -677,10 +895,16 @@ class App(CustomCTkFrame):
                 card,
                 text=f"{icono}  {nombre}   ▶  {'Capturar celda' if es_calendar else 'Capturar'}   ({r['width']}×{r['height']} px)",
                 font=ctk.CTkFont(size=12, weight="bold"),
-                height=38, corner_radius=7, anchor="w",
+                height=38,
+                corner_radius=7,
+                anchor="w",
                 fg_color=color_base,
                 hover_color=(oscurecer(color_base[0]), oscurecer(color_base[1])),
-                command=lambda a=app: self._abrir_modal_calendar() if a["nombre"] == "Calendar" else self._ejecutar_app(a),
+                command=lambda a=app: (
+                    self._abrir_modal_calendar()
+                    if a["nombre"] == "Calendar"
+                    else self._ejecutar_app(a)
+                ),
             )
             btn_main.pack(fill="x", padx=6, pady=(5, 2))
             self._btns_apps[nombre] = btn_main
@@ -699,7 +923,9 @@ class App(CustomCTkFrame):
                 values=nombres_monitores,
                 variable=ctk.StringVar(value=nombre_monitor_actual),
                 command=lambda sel, a=app: self._cambiar_monitor_app(a, sel),
-                width=160, height=34, corner_radius=7,
+                width=160,
+                height=34,
+                corner_radius=7,
                 font=ctk.CTkFont(size=9),
                 dropdown_font=ctk.CTkFont(size=9),
                 state="readonly",
@@ -708,9 +934,12 @@ class App(CustomCTkFrame):
 
             if not es_calendar:
                 ctk.CTkButton(
-                    bot_row, text="⚙",
+                    bot_row,
+                    text="⚙",
                     font=ctk.CTkFont(size=14),
-                    width=36, height=34, corner_radius=7,
+                    width=36,
+                    height=34,
+                    corner_radius=7,
                     fg_color=("gray70", "gray35"),
                     hover_color=("gray60", "gray45"),
                     command=lambda a=app: self._medir_region_app(a),
@@ -763,7 +992,26 @@ class App(CustomCTkFrame):
         ).start()
 
     def _subir_a_destinos(self, ruta, ui, prefix=""):
-        """Sube la imagen capturada a los destinos configurados."""
+        """Sube la imagen capturada a los destinos configurados.
+
+        Si auto_submit esta desactivado y el destino es HubSpot o AMBOS, la imagen
+        se encola en self._cola_imagenes en lugar de subirse inmediatamente. Las
+        imagenes encoladas se suben juntas al llamar a _subir_cola_hubspot().
+
+        Args:
+            ruta: ruta absoluta del archivo de imagen a subir.
+            ui: funcion callback para loguear mensajes (debe ser thread-safe).
+            prefix: prefijo opcional para los mensajes de log (ej. "[App] ").
+
+        Efectos secundarios:
+            - En modo cola: agrega la imagen a self._cola_imagenes y actualiza
+              la UI via _actualizar_cola_ui.
+            - En modo directo: llama a self._servicio.ejecutar_subida() por
+              cada plugin destino.
+            - Respeta self._cancelado para cancelacion entre plugins.
+            - Retorna temprano (sin error) si no hay plugins para el destino
+              seleccionado.
+        """
         headless = self.headless_var.get()
         usar_existente = self.chrome_existente_var.get()
         auto_submit = self.auto_submit_var.get()
@@ -783,11 +1031,26 @@ class App(CustomCTkFrame):
         )
         if not plugins:
             ui(f"{prefix}✗ No hay plugins para destino: {destino}")
+            return
 
         for plugin in plugins:
             if self._cancelado.is_set():
                 ui(f"{prefix}⚠ Cancelado antes de subir a {plugin.nombre}.")
                 break
+
+            # Modo cola: HubSpot con auto_submit OFF + destino incluye HubSpot
+            if (
+                plugin.nombre == "HUBSPOT"
+                and not auto_submit
+                and destino in ("HUBSPOT", "AMBOS")
+            ):
+                self._cola_imagenes.append(ruta)
+                self._cola_mensajes.append(getattr(self, "_mensaje_nota", "") or "")
+                n = len(self._cola_imagenes)
+                ui(f"{prefix}→ Imagen encolada ({n} en cola)")
+                self.after(0, self._actualizar_cola_ui)
+                continue
+
             ui(f"{prefix}→ Subiendo a {plugin.nombre}…")
             fsd_plugin = fsd
             self._servicio.ejecutar_subida(
@@ -805,6 +1068,156 @@ class App(CustomCTkFrame):
                 cancel_event=self._cancelado,
             )
             ui("")
+
+    def _actualizar_cola_ui(self):
+        """Muestra u oculta el frame de cola de imagenes segun las condiciones.
+
+        El frame se muestra solo si hay imagenes encoladas, auto_submit esta
+        desactivado y el destino es HubSpot o AMBOS. En cualquier otro caso se
+        oculta.
+
+        Efectos secundarios:
+            - Muestra/oculta self._frame_cola con pack()/pack_forget().
+            - Actualiza el texto del label con la cantidad de imagenes.
+            - Habilita/deshabilita los botones Subir cola y Limpiar.
+        """
+        n = len(self._cola_imagenes)
+        if (
+            n > 0
+            and not self.auto_submit_var.get()
+            and self.destino_var.get() in ("HUBSPOT", "AMBOS")
+        ):
+            self._frame_cola.pack(fill="x", pady=(12, 0))
+            self._label_cola.configure(text=f"Cola: {n} imágen(es)")
+            self._btn_subir_cola.configure(state="normal")
+            self._btn_limpiar_cola.configure(state="normal")
+        else:
+            self._frame_cola.pack_forget()
+
+    def _verificar_limpiar_cola(self):
+        """Descarta la cola si las condiciones ya no permiten cola activa.
+
+        Si hay imagenes encoladas pero el usuario activa auto_submit o cambia
+        el destino a algo distinto de HubSpot/AMBOS, la cola se descarta
+        automaticamente con una advertencia en el log.
+
+        Efectos secundarios:
+            - Llama a _limpiar_cola(silencioso=False) cuando corresponde.
+            - Se dispara desde los trace_add de destino_var y auto_submit_var.
+        """
+        if self._cola_imagenes:
+            auto_submit = self.auto_submit_var.get()
+            destino = self.destino_var.get()
+            if auto_submit or destino not in ("HUBSPOT", "AMBOS"):
+                self._limpiar_cola(silencioso=False)
+
+    def _limpiar_cola(self, silencioso=True):
+        """Vacia la cola de imagenes y mensajes asociados.
+
+        Args:
+            silencioso: si es True no emite mensaje en el log. Si es False,
+                        registra una advertencia explicando el motivo del
+                        descarte.
+
+        Efectos secundarios:
+            - Vacia self._cola_imagenes y self._cola_mensajes.
+            - Actualiza la visibilidad del frame de cola via _actualizar_cola_ui.
+        """
+        if not self._cola_imagenes:
+            return
+        self._cola_imagenes.clear()
+        self._cola_mensajes.clear()
+        self._actualizar_cola_ui()
+        if not silencioso:
+            self._log("⚠ Cola descartada (cambio de destino o auto-submit).")
+
+    def _subir_cola_hubspot(self):
+        """Sube todas las imagenes encoladas a HubSpot en una sola nota.
+
+        Combina los mensajes de cada captura separados por '---' y los envia
+        junto con todas las imagenes en una unica llamada a SesionService.
+        Bloquea la UI durante el proceso y la restaura al finalizar.
+
+        Efectos secundarios:
+            - Deshabilita los botones principales y de cola.
+            - Ejecuta self._servicio.ejecutar_subida() con rutas_imagenes
+              multiple (la primera como ruta_imagen, todas como lista extra).
+            - En exito: vacia la cola, actualiza UI y barra de estado.
+            - En error: registra el error en el log.
+            - En finally: restaura los botones, libera _proceso_en_curso y
+              limpia _cancelado.
+
+        Raises:
+            Las excepciones se capturan internamente; no se propagan al
+            llamador.
+        """
+        if not self._cola_imagenes:
+            return
+        if self._proceso_en_curso:
+            self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
+            return
+
+        self._proceso_en_curso = True
+        self.btn.configure(state="disabled")
+        self._btn_subir_cola.configure(state="disabled")
+        self._btn_limpiar_cola.configure(state="disabled")
+
+        rutas = list(self._cola_imagenes)
+        mensajes = list(self._cola_mensajes)
+        auto_submit = self.auto_submit_var.get()
+        headless = self.headless_var.get()
+        usar_existente = self.chrome_existente_var.get()
+        fsd = self._obtener_fsd_actual() or self._fsd_detectado
+
+        # Combinar mensajes: cada uno en su propia línea, separados por ---
+        mensaje_combinado = (
+            "\n---\n".join(m for m in mensajes if m.strip()) or "Nota de captura."
+        )
+
+        def _hilo():
+            ui = lambda msg: self.after(0, lambda m=msg: self._log(m))
+            ui(f"→ Subiendo cola de {len(rutas)} imágenes a HubSpot…")
+
+            try:
+                self._servicio.ejecutar_subida(
+                    nombre_plugin="HUBSPOT",
+                    ruta_imagen=rutas[0],
+                    rutas_imagenes=rutas,
+                    log=ui,
+                    headless=headless,
+                    usar_chrome_existente=usar_existente,
+                    credenciales_sesion=self._credenciales_sesion,
+                    opciones={
+                        "auto_submit_nota": auto_submit,
+                        "mensaje_nota": mensaje_combinado,
+                    },
+                    fsd=fsd,
+                    cancel_event=self._cancelado,
+                )
+
+                self._cola_imagenes.clear()
+                self._cola_mensajes.clear()
+                self.after(0, self._actualizar_cola_ui)
+                ahora = datetime.now().strftime("%H:%M:%S")
+                self.after(
+                    0,
+                    lambda: self._label_ultimo_proceso.configure(
+                        text=f"Último proceso: cola ({len(rutas)} img) {ahora}"
+                    ),
+                )
+                self.after(0, lambda: self._set_status("Completado"))
+                self.after(0, self._actualizar_sitios_status)
+            except Exception as e:
+                self.after(0, lambda: self._log(f"✗ Error subiendo cola: {e}"))
+                self.after(0, lambda: self._set_status("Error"))
+            finally:
+                self._proceso_en_curso = False
+                self._cancelado.clear()
+                self.after(0, lambda: self.btn.configure(state="normal"))
+                self.after(0, lambda: self.btn_detener.configure(state="disabled"))
+                self.after(0, self._rehabilitar_btns_apps)
+
+        threading.Thread(target=_hilo, daemon=True).start()
 
     def _proceso_app(self, app: dict, region: dict, monitor_idx: int):
         """Ejecuta el ciclo completo de captura y subida para una app (en hilo).
@@ -853,9 +1266,7 @@ class App(CustomCTkFrame):
             self.after(0, self._actualizar_sitios_status)
 
         except ErrorCaptura as e:
-            self.after(
-                0, lambda err=e: self._log(f"✗ {prefix}Error de captura: {err}")
-            )
+            self.after(0, lambda err=e: self._log(f"✗ {prefix}Error de captura: {err}"))
             self.after(0, lambda: self._set_status("Error"))
             self.after(
                 0,
@@ -888,9 +1299,8 @@ class App(CustomCTkFrame):
     def _abrir_modal_mensaje(self, titulo_btn: str = "Capturar y subir"):
         """Abre un modal para seleccionar/editar el mensaje de la nota.
 
-        Carga las plantillas desde config/plantillas.json agrupadas por
-        categoria. El usuario puede seleccionar una, editarla, o escribir
-        un mensaje libre. Retorna el texto del mensaje o None si cancela.
+        Integra plantillas rápidas, gestión de plantillas (vía VentanaPlantillas)
+        y generador de mensajes de contacto (vía VentanaGeneradorMensajes).
 
         Args:
             titulo_btn: texto para el boton principal de accion.
@@ -902,7 +1312,9 @@ class App(CustomCTkFrame):
 
         modal = ctk.CTkToplevel(self)
         modal.title("Mensaje de la nota")
-        modal.resizable(False, False)
+        modal.geometry("820x540")
+        modal.minsize(640, 400)
+        modal.resizable(True, True)
         modal.transient(self)
         modal.withdraw()
 
@@ -916,12 +1328,29 @@ class App(CustomCTkFrame):
         left.grid_rowconfigure(1, weight=1)
         left.grid_columnconfigure(0, weight=1)
 
+        # Cabecera izquierda con botones
+        hdr_left = ctk.CTkFrame(left, fg_color="transparent")
+        hdr_left.grid(row=0, column=0, sticky="ew", pady=(0, 4))
         ctk.CTkLabel(
-            left, text="Plantillas", font=ctk.CTkFont(size=12, weight="bold"),
-        ).grid(row=0, column=0, sticky="w", pady=(0, 6))
+            hdr_left,
+            text="Plantillas",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).pack(side="left")
+        ctk.CTkButton(
+            hdr_left,
+            text="Editar",
+            font=ctk.CTkFont(size=10),
+            width=48,
+            height=22,
+            fg_color="transparent",
+            border_width=1,
+            command=lambda: self._abrir_editor_plantillas(modal, _poblar),
+        ).pack(side="right", padx=(4, 0))
 
         scroll_plantillas = ctk.CTkScrollableFrame(
-            left, fg_color="transparent", width=220,
+            left,
+            fg_color="transparent",
+            width=220,
         )
         scroll_plantillas.grid(row=1, column=0, sticky="nsew")
         scroll_plantillas.grid_columnconfigure(0, weight=1)
@@ -932,22 +1361,75 @@ class App(CustomCTkFrame):
         right.grid_rowconfigure(0, weight=1)
         right.grid_columnconfigure(0, weight=1)
 
+        hdr_right = ctk.CTkFrame(right, fg_color="transparent")
+        hdr_right.pack(fill="x", pady=(0, 6))
         ctk.CTkLabel(
-            right, text="Mensaje de la nota",
+            hdr_right,
+            text="Mensaje de la nota",
             font=ctk.CTkFont(size=12, weight="bold"),
-        ).pack(anchor="w", pady=(0, 6))
+        ).pack(side="left")
+        ctk.CTkButton(
+            hdr_right,
+            text="Gen.",
+            font=ctk.CTkFont(size=10),
+            width=36,
+            height=22,
+            fg_color="transparent",
+            border_width=1,
+            command=lambda: self._abrir_generador_mensajes(modal, texto_nota),
+        ).pack(side="right")
 
         texto_nota = ctk.CTkTextbox(
-            right, font=ctk.CTkFont(size=11), wrap="word",
+            right,
+            font=ctk.CTkFont(size=11),
+            wrap="word",
         )
         texto_nota.pack(fill="both", expand=True)
 
-        # ── Cargar plantillas y poblar lista ────────────────────────
-        plantillas = _cargar_plantillas()
-        categorias = {}
-        for p in plantillas:
-            cat = p.get("categoria", "General")
-            categorias.setdefault(cat, []).append(p)
+        # ── Funciones auxiliares ────────────────────────────────────
+        def _cargar_template_lista():
+            """Carga las plantillas desde archivo."""
+            return _cargar_plantillas()
+
+        def _poblar():
+            """Reconstruye la lista de plantillas en el scroll."""
+            for w in scroll_plantillas.winfo_children():
+                w.destroy()
+            plantillas = _cargar_template_lista()
+            categorias = {}
+            for p in plantillas:
+                cat = p.get("categoria", "General")
+                categorias.setdefault(cat, []).append(p)
+
+            row = 0
+            for cat in ["HubSpot", "Sunrun", "General"]:
+                items = categorias.get(cat, [])
+                if not items:
+                    continue
+                ctk.CTkLabel(
+                    scroll_plantillas,
+                    text=cat,
+                    font=ctk.CTkFont(size=10, weight="bold"),
+                    text_color=("gray50", "gray50"),
+                ).grid(row=row, column=0, sticky="w", pady=(8, 2), padx=4)
+                row += 1
+
+                for p in items:
+                    titulo = p.get("titulo", "Sin título")
+                    texto = p.get("texto", "")
+                    btn = ctk.CTkButton(
+                        scroll_plantillas,
+                        text=f"  {titulo}",
+                        font=ctk.CTkFont(size=11),
+                        anchor="w",
+                        fg_color="transparent",
+                        text_color=("gray30", "gray70"),
+                        hover_color=("gray85", "gray30"),
+                        height=28,
+                        command=lambda t=texto: _seleccionar(t),
+                    )
+                    btn.grid(row=row, column=0, sticky="ew", pady=1, padx=2)
+                    row += 1
 
         def _seleccionar(texto):
             texto_nota.configure(state="normal")
@@ -955,45 +1437,34 @@ class App(CustomCTkFrame):
             texto_nota.insert("1.0", texto)
             texto_nota.configure(state="normal")
 
-        row_cat = 0
-        # Orden fijo de categorias
-        for cat in ["HubSpot", "Sunrun", "General"]:
-            items = categorias.get(cat, [])
-            if not items:
-                continue
-            ctk.CTkLabel(
-                scroll_plantillas, text=cat,
-                font=ctk.CTkFont(size=10, weight="bold"),
-                text_color=("gray50", "gray50"),
-            ).grid(row=row_cat, column=0, sticky="w", pady=(8, 2), padx=4)
-            row_cat += 1
+        _poblar()
 
-            for p in items:
-                titulo = p.get("titulo", "Sin título")
-                texto = p.get("texto", "")
-                btn = ctk.CTkButton(
-                    scroll_plantillas, text=f"  {titulo}",
-                    font=ctk.CTkFont(size=11),
-                    anchor="w",
-                    fg_color="transparent",
-                    text_color=("gray30", "gray70"),
-                    hover_color=("gray85", "gray30"),
-                    height=28,
-                    command=lambda t=texto: _seleccionar(t),
-                )
-                btn.grid(row=row_cat, column=0, sticky="ew", pady=1, padx=2)
-                row_cat += 1
+        # ── Botón "+ nueva" ─────────────────────────────────────────
+        def _nueva_plantilla():
+            texto = texto_nota.get("1.0", "end-1c").strip()
+            self._abrir_nueva_plantilla(modal, texto, _poblar)
+
+        btn_nueva = ctk.CTkButton(
+            left,
+            text="+ nueva plantilla",
+            font=ctk.CTkFont(size=10),
+            height=28,
+            fg_color=("#1f6aa5", "#1f6aa5"),
+            hover_color=("#144e7a", "#144e7a"),
+            command=_nueva_plantilla,
+        )
+        btn_nueva.grid(row=2, column=0, sticky="ew", pady=(8, 0))
 
         # ── Fila de botones ─────────────────────────────────────────
         btn_row = ctk.CTkFrame(modal, fg_color="transparent")
-        btn_row.grid(row=1, column=0, columnspan=2, sticky="ew",
-                      padx=16, pady=(4, 12))
+        btn_row.grid(row=1, column=0, columnspan=2, sticky="ew", padx=16, pady=(4, 12))
         btn_row.grid_columnconfigure(0, weight=1)
         btn_row.grid_columnconfigure(1, weight=1)
         btn_row.grid_columnconfigure(2, weight=1)
 
         ctk.CTkButton(
-            btn_row, text="Limpiar",
+            btn_row,
+            text="Limpiar",
             font=ctk.CTkFont(size=11),
             fg_color=("gray70", "gray35"),
             hover_color=("gray60", "gray45"),
@@ -1001,7 +1472,8 @@ class App(CustomCTkFrame):
         ).grid(row=0, column=0, padx=(0, 4), sticky="ew")
 
         ctk.CTkButton(
-            btn_row, text="Cancelar",
+            btn_row,
+            text="Cancelar",
             font=ctk.CTkFont(size=11),
             fg_color=("gray70", "gray35"),
             hover_color=("gray60", "gray45"),
@@ -1013,7 +1485,8 @@ class App(CustomCTkFrame):
             modal.destroy()
 
         ctk.CTkButton(
-            btn_row, text=f"  Continuar: {titulo_btn}",
+            btn_row,
+            text=f"  Continuar: {titulo_btn}",
             font=ctk.CTkFont(size=11, weight="bold"),
             fg_color=("#238636", "#2ea043"),
             hover_color=("#1e7a30", "#26963a"),
@@ -1033,9 +1506,192 @@ class App(CustomCTkFrame):
 
         return resultado[0]
 
+    # ── Helpers del modal de mensaje ───────────────────────────────────
+
+    def _abrir_editor_plantillas(self, parent, on_close=None):
+        """Abre la ventana de edicion de plantillas como modal.
+
+        Args:
+            parent: ventana padre (el modal de mensaje).
+            on_close: callback opcional que se ejecuta al cerrar el editor.
+                      Tipicamente repuebla la lista de plantillas del modal.
+
+        Efectos secundarios:
+            - Abre VentanaPlantillas como ventana hija de parent.
+            - Bloquea con parent.wait_window() hasta que el editor se cierre.
+            - Si se proporciona on_close, lo ejecuta tras cerrar.
+        """
+        from ui.ventana_plantillas import VentanaPlantillas
+
+        win = VentanaPlantillas(parent)
+        parent.wait_window(win)
+        if on_close:
+            on_close()
+
+    def _abrir_generador_mensajes(self, parent, texto_widget):
+        """Abre el generador de mensajes de contacto e inserta el resultado.
+
+        Args:
+            parent: ventana padre (el modal de mensaje).
+            texto_widget: CTkTextbox donde insertar el mensaje generado.
+
+        Efectos secundarios:
+            - Abre VentanaGeneradorMensajes como ventana hija de parent.
+            - Bloquea con parent.wait_window() hasta que el generador cierre.
+            - Si el generador produce un resultado (gen.resultado), reemplaza
+              el contenido del texto_widget con el mensaje generado.
+        """
+        from ui.ventana_generador_mensajes import VentanaGeneradorMensajes
+
+        gen = VentanaGeneradorMensajes(parent)
+        # wait_window no funciona con grab_set en customtkinter bien,
+        # pero el generador cierra automaticamente al copiar (self.destroy)
+        parent.wait_window(gen)
+        if gen.resultado:
+            texto_widget.configure(state="normal")
+            texto_widget.delete("1.0", "end")
+            texto_widget.insert("1.0", gen.resultado)
+            texto_widget.configure(state="normal")
+
+    def _abrir_nueva_plantilla(self, parent, texto_inicial: str, on_save=None):
+        """Abre un popup modal para guardar el texto actual como nueva plantilla.
+
+        Args:
+            parent: ventana padre (el modal de mensaje).
+            texto_inicial: texto a precargar en el campo de mensaje del popup.
+            on_save: callback opcional ejecutado tras guardar exitosamente.
+                     Tipicamente repuebla la lista de plantillas del modal.
+
+        Efectos secundarios:
+            - Muestra un popup con campos de titulo, categoria y mensaje.
+            - Al guardar, persiste la plantilla en plantillas.json via
+              _guardar_plantillas() y cierra el popup.
+            - Si on_save esta definido, lo ejecuta tras el guardado.
+        """
+        popup = ctk.CTkToplevel(parent)
+        popup.title("Nueva plantilla")
+        popup.resizable(False, False)
+        popup.transient(parent)
+        popup.withdraw()
+
+        popup.grid_columnconfigure(0, weight=0)
+        popup.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            popup,
+            text="Título:",
+            font=ctk.CTkFont(size=11),
+        ).grid(row=0, column=0, sticky="w", padx=(16, 4), pady=(16, 4))
+        titulo_var = ctk.StringVar()
+        ctk.CTkEntry(
+            popup,
+            textvariable=titulo_var,
+            font=ctk.CTkFont(size=12),
+            width=260,
+        ).grid(row=0, column=1, sticky="ew", padx=(0, 16), pady=(16, 4))
+
+        ctk.CTkLabel(
+            popup,
+            text="Categoría:",
+            font=ctk.CTkFont(size=11),
+        ).grid(row=1, column=0, sticky="w", padx=(16, 4), pady=4)
+        cat_var = ctk.StringVar(value="General")
+        ctk.CTkOptionMenu(
+            popup,
+            variable=cat_var,
+            values=["General", "HubSpot", "Sunrun"],
+            font=ctk.CTkFont(size=11),
+            width=120,
+        ).grid(row=1, column=1, sticky="w", padx=(0, 16), pady=4)
+
+        ctk.CTkLabel(
+            popup,
+            text="Mensaje:",
+            font=ctk.CTkFont(size=11),
+        ).grid(row=2, column=0, sticky="nw", padx=(16, 4), pady=(8, 4))
+        texto_box = ctk.CTkTextbox(
+            popup,
+            font=ctk.CTkFont(size=11),
+            wrap="word",
+            height=100,
+            width=300,
+        )
+        texto_box.grid(row=2, column=1, sticky="ew", padx=(0, 16), pady=(8, 4))
+        if texto_inicial:
+            texto_box.insert("1.0", texto_inicial)
+
+        def _guardar():
+            titulo = titulo_var.get().strip()
+            if not titulo:
+                from tkinter import messagebox
+
+                messagebox.showwarning(
+                    "Campo vacío", "Escribe un título.", parent=popup
+                )
+                return
+            texto = texto_box.get("1.0", "end-1c").strip()
+            plantillas = _cargar_plantillas()
+            plantillas.append(
+                {
+                    "titulo": titulo,
+                    "categoria": cat_var.get(),
+                    "texto": texto,
+                }
+            )
+            _guardar_plantillas(plantillas)
+            popup.destroy()
+            if on_save:
+                on_save()
+
+        btn_row_p = ctk.CTkFrame(popup, fg_color="transparent")
+        btn_row_p.grid(
+            row=3, column=0, columnspan=2, sticky="ew", padx=16, pady=(12, 16)
+        )
+        btn_row_p.grid_columnconfigure((0, 1), weight=1)
+
+        ctk.CTkButton(
+            btn_row_p,
+            text="Cancelar",
+            font=ctk.CTkFont(size=11),
+            fg_color=("gray70", "gray35"),
+            command=popup.destroy,
+        ).grid(row=0, column=0, padx=(0, 4), sticky="ew")
+
+        ctk.CTkButton(
+            btn_row_p,
+            text="Guardar",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#1f6aa5", "#1f6aa5"),
+            command=_guardar,
+        ).grid(row=0, column=1, padx=(4, 0), sticky="ew")
+
+        popup.bind("<Return>", lambda e: _guardar())
+        popup.bind("<Escape>", lambda e: popup.destroy())
+
+        from ui.posicion_ventanas import ubicar_junto_a_padre
+
+        popup.deiconify()
+        ubicar_junto_a_padre(popup, parent)
+        popup.grab_set()
+        popup.wait_window()
+
     # ── Modal Calendar — captura de celda Google Sheets ───────────────
 
     def _abrir_modal_calendar(self):
+        """Abre el modal de captura de celda de Google Sheets (Calendar).
+
+        Permite seleccionar la pestana y la referencia de celda (ej. F6).
+        Las pestanas se cargan en un hilo secundario para no bloquear la UI.
+        Al confirmar, persiste la ultima celda y pestana en config.json
+        y lanza la captura via _ejecutar_captura_calendar() pasando antes
+        por el modal de mensaje (_abrir_modal_mensaje).
+
+        Efectos secundarios:
+            - Valida que las variables de entorno GOOGLE_SERVICE_ACCOUNT_PATH
+              y SHEETS_SPREADSHEET_ID esten configuradas.
+            - Carga las pestanas de Google Sheets en background (thread).
+            - Abre _abrir_modal_mensaje antes de ejecutar la captura.
+        """
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
@@ -1131,7 +1787,11 @@ class App(CustomCTkFrame):
         def _ejecutar():
             cell_ref = cell_var.get().strip()
             if not cell_ref:
-                messagebox.showwarning("Celda requerida", "Ingresa una referencia de celda (ej. F6).", parent=modal)
+                messagebox.showwarning(
+                    "Celda requerida",
+                    "Ingresa una referencia de celda (ej. F6).",
+                    parent=modal,
+                )
                 return
             sheet_name = sheet_var.get().strip() if _sheet_names else None
             config = cargar_config()
@@ -1146,7 +1806,9 @@ class App(CustomCTkFrame):
                 return
             self._mensaje_nota = mensaje
 
-            self._ejecutar_captura_calendar(cell_ref, sheet_url, service_account, sheet_name)
+            self._ejecutar_captura_calendar(
+                cell_ref, sheet_url, service_account, sheet_name
+            )
 
         # ── Botones ──────────────────────────────────────────────────
         btn_frame = ctk.CTkFrame(modal, fg_color="transparent")
@@ -1177,32 +1839,63 @@ class App(CustomCTkFrame):
                 spreadsheet_id = GoogleSheetsClient.extract_spreadsheet_id(sheet_url)
                 sheets = sheets_client.list_sheets(spreadsheet_id)
                 _sheet_names = [s["title"] for s in sheets]
-                self._log(f"→ Pestañas detectadas: {', '.join(_sheet_names)}")
 
-                sheet_dropdown.configure(values=_sheet_names, state="readonly")
-                if _sheet_names:
-                    if _ultima_pestana_inicial and _ultima_pestana_inicial in _sheet_names:
-                        sheet_var.set(_ultima_pestana_inicial)
-                    else:
-                        sheet_var.set(_sheet_names[0])
+                def _aplicar():
+                    self._log(f"→ Pestañas detectadas: {', '.join(_sheet_names)}")
+                    sheet_dropdown.configure(values=_sheet_names, state="readonly")
+                    if _sheet_names:
+                        if (
+                            _ultima_pestana_inicial
+                            and _ultima_pestana_inicial in _sheet_names
+                        ):
+                            sheet_var.set(_ultima_pestana_inicial)
+                        else:
+                            sheet_var.set(_sheet_names[0])
+
+                self.after(0, _aplicar)
             except Exception as e:
-                self._log(f"✗ No se pudieron obtener las pestañas: {e}")
-                sheet_dropdown.configure(values=["(sin pestañas)"], state="disabled")
-                sheet_var.set("")
+                def _error():
+                    self._log(f"✗ No se pudieron obtener las pestañas: {e}")
+                    sheet_dropdown.configure(values=["(sin pestañas)"], state="disabled")
+                    sheet_var.set("")
 
-        modal.after(10, _load_sheets)
+                self.after(0, _error)
+
+        threading.Thread(target=_load_sheets, daemon=True).start()
 
         # Posicionar y mostrar
         from ui.posicion_ventanas import ubicar_junto_a_padre
+
         modal.deiconify()
         ubicar_junto_a_padre(modal, self)
         modal.grab_set()
         modal.wait_window()
 
     def _ejecutar_captura_calendar(
-        self, cell_ref: str, sheet_url: str, service_account: str,
+        self,
+        cell_ref: str,
+        sheet_url: str,
+        service_account: str,
         sheet_name: str | None = None,
     ):
+        """Ejecuta la captura de una celda de Google Sheets y la sube a los destinos.
+
+        Usa TicketCaptureService para tomar una captura compuesta de la celda
+        indicada y luego sube la imagen via _subir_a_destinos(). Corre en un
+        hilo secundario para no bloquear la UI.
+
+        Args:
+            cell_ref: referencia de celda (ej. "F6", "AA10").
+            sheet_url: ID o URL de la spreadsheet de Google Sheets.
+            service_account: ruta al JSON de la service account de Google.
+            sheet_name: nombre opcional de la pestana a usar.
+
+        Efectos secundarios:
+            - Deshabilita los botones de apps y el boton principal.
+            - Logea los valores de las celdas capturadas.
+            - Sube la imagen compuesta a los destinos configurados.
+            - Restaura los botones y el estado de la UI en el finally.
+        """
         nombre = "Calendar"
         prefix = f"[{nombre}] "
         sheet_label = f" ({sheet_name})" if sheet_name else ""
@@ -1223,7 +1916,9 @@ class App(CustomCTkFrame):
 
         def _ejecutar():
             try:
-                ui(f"{prefix}→ Iniciando captura de celda {cell_ref} desde Google Sheets{sheet_label}…")
+                ui(
+                    f"{prefix}→ Iniciando captura de celda {cell_ref} desde Google Sheets{sheet_label}…"
+                )
                 config = TicketCaptureConfig(
                     spreadsheet_id=sheet_url,
                     credentials_path=service_account,
@@ -1261,9 +1956,7 @@ class App(CustomCTkFrame):
                 self.after(0, self._actualizar_sitios_status)
 
             except Exception as e:
-                self.after(
-                    0, lambda err=e: self._log(f"✗ {prefix}Error: {err}")
-                )
+                self.after(0, lambda err=e: self._log(f"✗ {prefix}Error: {err}"))
                 self.after(0, lambda: self._set_status("Error"))
                 self.after(
                     0,
@@ -1315,7 +2008,9 @@ class App(CustomCTkFrame):
                 nueva_region = ejecutar_medidor(monitor_idx)
 
                 if nueva_region is None:
-                    self.after(0, lambda: self._log(f"✗ Medición cancelada para {nombre}."))
+                    self.after(
+                        0, lambda: self._log(f"✗ Medición cancelada para {nombre}.")
+                    )
                     self.after(0, lambda: self._label_estado_app.configure(text=""))
                     self.after(0, self.deiconify_window)
                     self.after(0, self._rehabilitar_btns_apps)
@@ -1331,8 +2026,14 @@ class App(CustomCTkFrame):
                     if nombre in self._btns_apps:
                         tooltip = f"{nueva_region['width']}×{nueva_region['height']} px"
                         btn = self._btns_apps[nombre]
-                        icono = next((a["icono"] for a in APPS_CAPTURA if a["nombre"] == nombre), "")
-                        color_base = next((a["color"] for a in APPS_CAPTURA if a["nombre"] == nombre), ("#1f6aa5", "#1a5496"))
+                        icono = next(
+                            (a["icono"] for a in APPS_CAPTURA if a["nombre"] == nombre),
+                            "",
+                        )
+                        color_base = next(
+                            (a["color"] for a in APPS_CAPTURA if a["nombre"] == nombre),
+                            ("#1f6aa5", "#1a5496"),
+                        )
                         btn.configure(
                             text=f"{icono}  {nombre}   ▶  Capturar y subir   ({tooltip})",
                             fg_color=color_base,
@@ -1347,15 +2048,20 @@ class App(CustomCTkFrame):
 
                 self.after(0, _actualizar_ui)
             except Exception as e:
-                self.after(0, lambda err=e: self._log(f"✗ [{nombre}] Error en medidor: {err}"))
-                self.after(0, lambda: self._label_estado_app.configure(
-                    text=f"  ✗ {nombre} — error en medidor"
-                ))
+                self.after(
+                    0, lambda err=e: self._log(f"✗ [{nombre}] Error en medidor: {err}")
+                )
+                self.after(
+                    0,
+                    lambda: self._label_estado_app.configure(
+                        text=f"  ✗ {nombre} — error en medidor"
+                    ),
+                )
                 self.after(0, self.deiconify_window)
                 self.after(0, self._rehabilitar_btns_apps)
                 self.after(0, lambda: self.btn.configure(state="normal"))
             finally:
-                self.after(0, lambda: setattr(self, '_proceso_en_curso', False))
+                self.after(0, lambda: setattr(self, "_proceso_en_curso", False))
 
         threading.Thread(target=_esperar, daemon=True).start()
 
@@ -1482,17 +2188,26 @@ class App(CustomCTkFrame):
 
     @staticmethod
     def _detectar_fsd_de_chrome() -> str | None:
-        """
-        Lee el título de ventanas visibles de Chrome vía Windows API y extrae
-        el primer FSD que encuentre (patrón FSD-XXXXXX o FSDXXXXXX).
-        Se llama con la app minimizada para que Chrome esté en primer plano.
+        """Detecta el FSD desde el titulo de ventanas visibles de Chrome.
+
+        Enumera las ventanas del sistema via Windows API (EnumWindows) y busca
+        en los titulos de ventanas de Chrome/Chromium un patron FSD-XXXXXX o
+        FSDXXXXXX. Se llama con la app minimizada para que Chrome este en
+        primer plano.
+
+        Returns:
+            str con el FSD detectado (formato "FSD-XXXXXX"), o None si no se
+            encuentra ninguno.
         """
         import re
+
         user32 = ctypes.windll.user32
 
         fsd_encontrado = [None]
 
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        WNDENUMPROC = ctypes.WINFUNCTYPE(
+            ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p
+        )
 
         def enum_proc(hwnd, _lparam):
             if not user32.IsWindowVisible(hwnd):
@@ -1505,7 +2220,7 @@ class App(CustomCTkFrame):
             title = buf.value
             if "Google Chrome" not in title and "Chromium" not in title:
                 return True
-            match = re.search(r'FSD[-\s]*(\d+)', title, re.IGNORECASE)
+            match = re.search(r"FSD[-\s]*(\d+)", title, re.IGNORECASE)
             if match:
                 fsd = f"FSD-{match.group(1)}"
                 fsd_encontrado[0] = fsd
@@ -1516,11 +2231,17 @@ class App(CustomCTkFrame):
         return fsd_encontrado[0]
 
     def _buscar_fsd_sunrun(self):
-        """
-        Ejecuta SOLO la búsqueda FSD en Sunrun (navega al ticket) sin scraping.
+        """Busca un FSD en Sunrun navegando al ticket sin extraer datos.
 
-        Usa exactamente la misma lógica que el módulo de scraping (ScraperSunrun),
-        pero se detiene en la página de detalle del ticket sin extraer datos.
+        Usa ScraperSunrun.navegar_a_fsd() para navegar a la pagina de detalle
+        del ticket. No realiza scraping de datos, solo navegacion. Corre en
+        un hilo secundario para no bloquear la UI.
+
+        Efectos secundarios:
+            - Deshabilita botones durante la ejecucion.
+            - Minimiza la ventana principal.
+            - Logea el resultado de la navegacion.
+            - Restaura los botones y el estado en el finally.
         """
         fsd = self.fsd_var.get().strip()
         if not fsd:
@@ -1553,7 +2274,9 @@ class App(CustomCTkFrame):
                     ui(f"✗ {resultado['mensaje']}")
                 self.after(0, lambda: self._set_status("Listo"))
             except Exception as e:
-                self.after(0, lambda err=e: self._log(f"✗ Error en búsqueda FSD: {err}"))
+                self.after(
+                    0, lambda err=e: self._log(f"✗ Error en búsqueda FSD: {err}")
+                )
                 self.after(0, lambda: self._set_status("Error"))
             finally:
                 self._proceso_en_curso = False
@@ -1566,6 +2289,16 @@ class App(CustomCTkFrame):
     # ── Sitios status ─────────────────────────────────────────────────
 
     def _actualizar_sitios_status(self):
+        """Reconstruye los indicadores de estado de sesion para todos los plugins.
+
+        Para cada plugin registrado verifica si tiene cookies guardadas,
+        credenciales configuradas o no necesita login, y muestra el estado
+        correspondiente con iconos de color (● verde = sesion activa,
+        ◑ naranja = credenciales OK, ○ rojo = sin configurar).
+
+        Efectos secundarios:
+            - Destruye y recrea todos los widgets dentro de self._frame_sitios.
+        """
         for widget in self._frame_sitios.winfo_children():
             widget.destroy()
 
@@ -1652,7 +2385,9 @@ class App(CustomCTkFrame):
             if region is not None:
                 self.after(0, lambda r=region: self._aplicar_region(r))
             else:
-                self.after(0, lambda: self._log("✗ No se pudo leer la región del medidor."))
+                self.after(
+                    0, lambda: self._log("✗ No se pudo leer la región del medidor.")
+                )
             self.after(0, self.deiconify_window)
             self.after(0, lambda: self.btn.configure(state="normal"))
 
@@ -1780,7 +2515,12 @@ class App(CustomCTkFrame):
         Efectos secundarios:
             - Lanza un subproceso de Chrome (subprocess.Popen, no bloqueante).
         """
-        from core.browser import puerto_activo, CHROME_USER_DATA, CHROME_PATHS, obtener_chrome_exe
+        from core.browser import (
+            puerto_activo,
+            CHROME_USER_DATA,
+            CHROME_PATHS,
+            obtener_chrome_exe,
+        )
 
         if puerto_activo():
             self._log("✓ Chrome con depuración ya está activo en el puerto 9222.")
@@ -1832,7 +2572,6 @@ class App(CustomCTkFrame):
             self._config = cfg = cargar_config()
             cfg["keybind"] = nuevo
             guardar_config(cfg)
-            self._config = cfg
         except Exception as e:
             self.keybind_label.configure(
                 text=f"Atajo inválido: {e}", text_color=("red", "#f85149")
@@ -1923,6 +2662,7 @@ class App(CustomCTkFrame):
         Efectos secundarios:
             - Usa self.after() para toda interaccion con la UI desde el hilo.
         """
+
         def ui(msg):
             self.after(0, lambda m=msg: self._log(m))
 
@@ -1977,5 +2717,3 @@ class App(CustomCTkFrame):
             self.after(0, lambda: self.btn.configure(state="normal"))
             self.after(0, lambda: self.btn_detener.configure(state="disabled"))
             self.after(0, self._rehabilitar_btns_apps)
-
-

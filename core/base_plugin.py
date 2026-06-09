@@ -50,17 +50,27 @@ class ContextoSubida:
 
     Se construye en el servicio y se pasa al plugin — el plugin no toca
     la UI ni la configuración global.
+
+    Attributes:
+        ruta_imagen: Ruta de la imagen principal a subir.
+        log: Callback para emitir mensajes de progreso.
+        driver: Instancia de WebDriver (tipado débil para no acoplar a Selenium).
+        credenciales: Diccionario con credenciales de sesión (usuario, clave).
+        opciones: Flags extra por sitio (auto_submit, mensaje_nota, etc.).
+        fsd: FSD para búsqueda inteligente de pestaña.
+        cancelado: threading.Event para cancelar el proceso en curso.
+        rutas_imagenes: Lista opcional de rutas de imágenes adicionales
+            para incrustar en una sola nota (ej. HubSpot).
     """
 
     ruta_imagen: str
     log: Callable[[str], None]
-    driver: object  # WebDriver (tipado débil para no forzar selenium aquí)
-    credenciales: dict = field(default_factory=dict)  # {"usuario": ..., "clave": ...}
-    opciones: dict = field(
-        default_factory=dict
-    )  # flags extra por sitio (auto_submit, etc.)
-    fsd: str | None = None  # FSD para búsqueda inteligente de pestaña
-    cancelado: object | None = None  # threading.Event para cancelar proceso
+    driver: object
+    credenciales: dict = field(default_factory=dict)
+    opciones: dict = field(default_factory=dict)
+    fsd: str | None = None
+    cancelado: object | None = None
+    rutas_imagenes: list[str] | None = None
 
 
 # ── Contrato base ─────────────────────────────────────────────────────

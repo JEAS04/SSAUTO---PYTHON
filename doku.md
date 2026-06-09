@@ -2101,3 +2101,261 @@ AGENTS.md actualizado. Cambios principales respecto al anterior:
 
 
 PENDIENTE: HACER QUE NI EL MENSAJE NI EL CONTENIDO DE LA IMAGEN SEAN REEMPLAZADOS AL SUBIR UNA NUEVA IMAGEN, PARA PODER SUBIR VARIAS IMAGENES EN UNA SOLA NOTA SI TENER QUE CREAR VARIAS.
+
+09/06/2026
+Tengo una comprensión completa del flujo. Aquí está el análisis y plan:
+Situación actual
+El pipeline completo asume una sola imagen por subida:
+Captura (1 screenshot) → _subir_a_destinos(ruta) → ejecutar_subida(ruta_imagen=ruta) 
+→ ContextoSubida(ruta_imagen=ruta) → hubspot.subir() → _paso_insertar_imagen (1 vez)
+En plugins/hubspot.py:255, _paso_insertar_imagen se llama una sola vez con un solo path. Cada subida crea una nota nueva en HubSpot.
+Qué cambiar para multi-imagen (solo HubSpot)
+Capa	Archivo	Cambio
+Contrato	core/base_plugin.py:55	Agregar rutas_imagenes: list[str] a ContextoSubida
+Servicio	services/sesion_service.py:51	Aceptar rutas_imagenes y pasarlo al contexto
+UI	ui/ventana_principal.py:765	_subir_a_destinos acepte lista de paths
+HubSpot	plugins/hubspot.py:255	Loop: _paso_insertar_imagen por cada ruta
+Captura	ui/ventana_principal.py	Permitir capturar múltiples regiones o acumular screenshots
+Pregunta clave
+¿De dónde vienen las múltiples imágenes? Hay dos opciones:
+1. Capturar múltiples regiones de una vez — el usuario define varias regiones en la UI, se capturan todas juntas y se suben en bloque
+2. Cola/acumulación — el usuario captura varias veces (una por una) y las screenshots se acumulan, luego se suben todas juntas
+¿Cuál de estos dos enfoques prefieres? ¿O tienes otro en mente?
+
+Aquí está el plan detallado:
+Plan: Cola de imágenes para HubSpot (auto_submit OFF)
+Comportamiento
+auto_submit	Destino	Flujo
+ON	cualquiera	Sin cambios: captura → sube 1 imagen inmediatamente
+OFF	HubSpot	Captura → encola. Botón "Subir cola" crea 1 nota con todas las imágenes, queda abierta para guardado manual
+OFF	Sunrun / AMBOS	Sin cambios (no aplica cola)
+Archivos a modificar
+1. core/base_plugin.py:55 — Nuevo campo en ContextoSubida
+rutas_imagenes: list[str] | None = None
+ruta_imagen se mantiene intacto (backward compat con Sunrun).
+2. services/sesion_service.py:48 — Nuevo parámetro en ejecutar_subida()
+def ejecutar_subida(self, ..., rutas_imagenes: list[str] | None = None, ...):
+Se pasa a ContextoSubida(rutas_imagenes=rutas_imagenes).
+3. plugins/hubspot.py:176 — Loop multi-imagen en subir()
+rutas = ctx.rutas_imagenes if ctx.rutas_imagenes else [ctx.ruta_imagen]
+
+# Crear nota + enfocar editor (igual que ahora, una sola vez)
+
+for ruta in rutas:
+    self._paso_insertar_imagen(driver, log, ruta, contexto_activo)
+    self._paso_esperar_imagen(driver, log, ruta, contexto_activo)
+
+# Guardar o no según auto_submit
+El _paso_insertar_imagen ya hace click en el toggle + send file, así que funciona para cada imagen adicional sin cambios.
+4. ui/ventana_principal.py — Cola + UI
+Variables:
+self._cola_imagenes: list[str] = []
+Elementos UI (en _crear_panel_destino(), debajo de los botones de destino):
+┌─ DESTINO Y SESIÓN ─────────────────────────────┐
+│ [HubSpot] [Sunrun] [AMBOS]                      │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ Cola: 3 imágenes  [Subir cola] [Limpiar]   │ │  ← oculto inicialmente
+│ └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+- _frame_cola — frame contenedor (pack_forget por defecto)
+- _label_cola — contador
+- _btn_subir_cola — botón azul
+- _btn_limpiar_cola — botón borde transparente
+Métodos nuevos:
+- _actualizar_cola_ui() — muestra/oculta frame + actualiza contador + habilita/deshabilita botones
+- _subir_cola_hubspot() — hilo que llama a ejecutar_subida(rutas_imagenes=cola), limpia al terminar
+- _limpiar_cola() — vacía lista, actualiza UI
+Modificación en _subir_a_destinos():
+Cuando plugin == HubSpot and not auto_submit and destino == HubSpot → _cola_imagenes.append(ruta) + _actualizar_cola_ui() + log "Imagen encolada". El resto de plugins siguen igual.
+Trace callbacks en destino_var y auto_submit_var:
+Si cambian a condiciones que invalidan la cola → _limpiar_cola() + log de advertencia.
+Flujos de captura (_proceso, _proceso_app, Calendar):
+Sin cambios — la lógica de encolado está dentro de _subir_a_destinos.
+5. tests/test_base_plugin.py — 2 tests nuevos
+- test_con_rutas_imagenes — verifica que el campo se setea y default es None
+- test_rutas_imagenes_no_se_comparten — independencia entre instancias
+Edge cases cubiertos
+Caso	Comportamiento
+Cambiar destino de HubSpot a otro	Limpia cola, log: "Cola descartada por cambio de destino"
+Activar auto_submit con cola	Limpia cola, log: "Cola descartada, auto-submit activado"
+Cancelar durante subida de cola	cancel_event detiene entre imágenes (el _check() en el loop)
+Cola con 1 sola imagen	Funciona igual (1 nota, 1 imagen, guardado manual)
+Cerrar app con cola	Se pierde (no se persiste)
+¿Te parece bien este plan? ¿Algún ajuste antes de implementar?
+
+Hecho. Ahora con AMBOS + auto_submit OFF:
+- HubSpot → las imágenes se encolan
+- Sunrun → se sube inmediatamente cada captura (sin cambios)
+- Botón "Subir cola" → sube todas las encoladas a HubSpot en una sola nota
+- Si cambias a solo Sunrun, la cola se limpia automáticamente
+
+Hecho. El fix agrega un <br><br> (doble salto de línea) después de cada imagen (excepto la última) en plugins/hubspot.py:282-297. Esto:
+1. Colapsa el cursor al final del contenido del editor antes de insertar el <br>
+2. Separa visualmente las imágenes
+3. Evita que la siguiente imagen reemplace a la anterior, porque el cursor ya no está sobre la imagen anterior
+El flujo ahora es: crear nota → enfocar editor → imagen 1 → <br><br> → imagen 2 → <br><br> → imagen 3 → dejar abierta para guardado manual.
+
+El botón sí existe, pero está oculto hasta que se cumplan 3 condiciones:
+1. auto_submit OFF → el toggle "Auto-submit nota (HubSpot)" en CONFIGURACIÓN debe estar desmarcado
+2. Destino HubSpot o AMBOS → seleccionado en DESTINO Y SESIÓN
+3. Al menos 1 imagen capturada → tras hacer clic en "Capturar y subir"
+El frame aparece debajo de los botones de destino, dentro de la sección DESTINO Y SESIÓN:
+┌─ DESTINO Y SESIÓN ─────────────────────────────┐
+│ [HubSpot] [Sunrun] [AMBOS]                      │
+│ ┌─────────────────────────────────────────────┐ │
+│ │ Cola: 3 imágenes  [Subir cola] [Limpiar]   │ │  ← aparece aquí
+│ └─────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────┘
+El problema es que está 100% invisible hasta que captures con auto_submit OFF. ¿Quieres que lo muestre siempre pero con los botones deshabilitados (gris) cuando no hay imágenes, para que se vea la funcionalidad desde el inicio?
+
+Encontré el bug. El problema es case mismatch:
+Las condiciones en _subir_a_destinos comparan contra "HubSpot", pero el plugin de HubSpot se registra con nombre "HUBSPOT" (todo mayúsculas):
+# plugins/hubspot.py
+@property
+def nombre(self) -> str:
+    return "HUBSPOT"  # ← mayúsculas
+Pero en las 3 condiciones escribí "HubSpot":
+# ui/ventana_principal.py — las 3 condiciones actuales (ERRÓNEAS):
+plugin.nombre == "HubSpot"              # línea 829 → debería ser "HUBSPOT"
+destino in ("HubSpot", "AMBOS")         # línea 831 → debería ser ("HUBSPOT", "AMBOS")
+self.destino_var.get() in ("HubSpot", "AMBOS")  # línea 860
+destino not in ("HubSpot", "AMBOS")     # línea 873
+Como "HUBSPOT" != "HubSpot", nunca entra en modo cola, y la imagen se sube directamente como antes.
+El fix es simple: cambiar "HubSpot" → "HUBSPOT" en los 3 lugares. Son 4 ocurrencias en 3 métodos: _subir_a_destinos, _actualizar_cola_ui, _verificar_limpiar_cola.
+¿Lo corrijo?
+
+Bueno, analicemos. Actualmente cada captura abre el modal, el mensaje se guarda en self._mensaje_nota (pisando el anterior), y al subir la cola solo se usa el último mensaje.
+Plan: Acumular mensajes junto con las imágenes
+Lo que cambiaría:
+1. Nueva variable self._cola_mensajes: list[str] = [] junto a _cola_imagenes
+2. Al encolar en _subir_a_destinos, también guardar el mensaje actual
+3. En _subir_cola_hubspot, juntar todos los mensajes con un separador y pasarlos combinados
+4. _limpiar_cola limpia ambas listas
+Resultado: la nota en HubSpot tendría algo como:
+Mensaje 1
+---
+Mensaje 2
+---
+Mensaje 3
+
+[imagen 1]
+[imagen 2]
+[imagen 3]
+Pregunta rápida
+¿Cómo prefieres que se combinen los mensajes?:
+Opción	Formato en la nota
+A	Todos los mensajes juntos al inicio, luego todas las imágenes (simple)
+B	Cada mensaje seguido de su imagen: mensaje 1 → imagen 1 → mensaje 2 → imagen 2... (más natural pero requiere cambiar también hubspot.py)
+
+Hecho. Así funciona ahora:
+1. Cada captura abre el modal → el mensaje se guarda junto con la imagen en la cola
+2. Al subir la cola, todos los mensajes se combinan con \n---\n como separador
+3. El mensaje combinado va al inicio de la nota, seguido de todas las imágenes con <br> entre ellas
+Ejemplo de nota resultante en HubSpot:
+Mensaje de la captura 1
+---
+Mensaje de la captura 2
+---
+Mensaje de la captura 3
+
+[imagen 1]
+[imagen 2]
+[imagen 3]
+
+Hecho. La cola ahora está en REGIÓN DE CAPTURA, como una nueva fila debajo de los botones:
+┌─ REGIÓN DE CAPTURA ─────────────────────────────┐
+│ [Perfiles ▼]              [Monitor ▼]            │
+│ [ Top ][ Left ][ Width ][ Height ]               │
+│ [ Medir región ] [ Capturar y subir ] [ Detener ]│
+│ [ Cola: 3 imágenes  Subir cola  Limpiar ]        │  ← aquí
+└──────────────────────────────────────────────────┘
+- Visible solo con auto_submit OFF + destino HubSpot/AMBOS + al menos 1 captura
+- Los mensajes se acumulan y combinan al subir
+
+Arreglado. Cambios en _paso_esperar_imagen (plugins/hubspot.py:684-698):
+Antes
+Busca el nombre de archivo como texto/title en el DOM
+Timeout 15 segundos (casi siempre falla)
+Si falla: solo log de advertencia
+Para 2 imágenes, pasaste de ~30s de espera a ~10s máximo (y típicamente menos de 3s si el <img> aparece rápido).
+
+Hecho. El modal de captura ahora integra todo:
+┌─ Mensaje de la nota ─────────────────────────────────────────────┐
+│ Plantillas        [Editar]     │ Mensaje de la nota        [Gen.]│
+│ ┌──────────────┐               │ ┌──────────────────────────────┐│
+│ │ HubSpot      │               │ │ Mensaje editable...          ││
+│ │ Saludo       │               │ │                              ││
+│ │ Seguimiento  │               │ │                              ││
+│ │ Sunrun       │               │ └──────────────────────────────┘│
+│ │ Actualización│               │                                  │
+│ │ General      │               │                                  │
+│ │ Sin respuesta│               │                                  │
+│ └──────────────┘               │                                  │
+│ [+ nueva plantilla]            │                                  │
+│ [Limpiar]  [Cancelar]  [Continuar: Capturar y subir]             │
+└──────────────────────────────────────────────────────────────────┘
+Cambios:
+Archivo	Qué
+ui/ventana_generador_mensajes.py:158	self.resultado = None — almacena el mensaje generado
+ui/ventana_generador_mensajes.py:520	Al copiar, guarda en self.resultado y cierra la ventana
+ui/ventana_principal.py:51	Importa _guardar_plantillas
+ui/ventana_principal.py:1128-1330	Modal rediseñado con 3 nuevos helpers
+Botones nuevos en el modal:
+- Editar → abre VentanaPlantillas, al cerrar refresca la lista
+- Gen. → abre VentanaGeneradorMensajes, al copiar inserta el texto directamente en el mensaje
+- + nueva plantilla → popup rápido para guardar el mensaje actual como plantilla (título + categoría)
+
+Arreglado. El crash era por self.update_idletasks() en VentanaComparacion.ui_log():314 — forzaba el redraw de widgets customtkinter que podían ya estar destruidos (un CTkEntry cuyo canvas interno ya no existía). Al quitarlo, tkinter maneja los redraws en su ciclo normal de eventos sin crash.
+
+Hecho. Ambos botones ahora usan sticky="ew" sin ancho fijo, así que se estiran por igual ocupando cada uno la mitad del espacio:
+- HubSpot → naranja, se estira a la izquierda
+- Sunrun → azul, se estira a la derecha
+- Mismo alto (36px), misma fila, columnas con igual peso
+
+Listo. El problema era que la columna 0 tenía weight=0 y la columna 1 weight=1, por eso el botón de Sunrun salía más ancho. Ahora ambas tienen weight=1, uniform="search_btn" — mismo ancho garantizado.
+
+Arreglado. Los botones ahora están en su propio sub-frame (frame_botones) con columnas iguales (uniform="search_btn"), mientras que el combo y el input conservan sus pesos originales (weight=0 y weight=1). El input del FSD ya no se descuadra.
+
+Arreglado. El problema era un doble offset:
+- El medidor (medidor_code.py:146-149) ya suma MON_X/MON_Y para devolver coordenadas absolutas (ej: monitor 2 con left=1920 → coordenada left=2120)
+- CapturaService.capturar() volvía a sumar el offset del monitor (left=2120+1920=4040) → región fuera de pantalla → captura negra
+Se eliminó ese segundo ajuste en core/captura.py:65-66. Ahora las coordenadas se pasan directo a mss.grab() sin modificar, que es justo lo que el medidor ya entrega.
+
+Ninguno de los 6 fixes rompe funcionalidad. Análisis uno por uno:
+#	Fix
+1	return en plugins vacío
+2	try/except/finally en _hilo
+3	wait_window(win)
+4	Eliminar self._config = cfg
+5	Limpiar state="disabled" + .configure
+6	_load_sheets en thread + self.after para widgets
+¿Aplico los 6?
+
+#	Fix	Líneas
+1	return tras log cuando plugins vacío	~917
+2	try/except/finally en _hilo; cola se preserva en error, UI se restaura siempre	~1013-1057
+3	parent.wait_window(win) antes de on_close	~1342-1349
+4	Eliminada asignación redundante self._config = cfg	~2317
+5	Eliminado state="disabled" muerto + 3 .configure(state="normal") redundantes	~734, 744, 758-760
+6	_load_sheets ejecuta I/O en threading.Thread; widgets se actualizan con self.after(0, ...)	~1617-1646
+
+Docstrings actualizados en 7 archivos — 25 métodos nuevos documentados, 11 actualizados:
+Archivo	Agregados	Actualizados
+core/base_plugin.py	ContextoSubida con Attributes + rutas_imagenes	—
+core/captura.py	—	Ya estaban correctos
+services/sesion_service.py	—	ejecutar_subida con rutas_imagenes
+plugins/hubspot.py	9 métodos (_safe_click, _safe_send_file, pasos 1-7, etc.)	Clase + subir
+ui/ventana_generador_mensajes.py	—	Clase + _copiar_mensaje con resultado
+ui/ventana_plantillas.py	_cargar_plantillas, _guardar_plantillas	—
+ui/ventana_comparacion.py	3 métodos (_fila_campo, _resumen, _mostrar_error)	Módulo, clase, _buscar_candidatos, _mostrar_resultado
+ui/ventana_principal.py	14 métodos (cola, modal, callbacks)	11 métodos (_subir_a_destinos, _subir_cola_hubspot, etc.)
+
+Build y guía actualizados:
+- Dist generado → dist/SSAuto/SSAuto.exe (~102 MB + _internal/ ~274 MB = 376 MB total)
+- guide_pyinstaller.md actualizado con:
+- Tamaño real del build (376 MB, antes decía ~106 MB)
+- Estructura con carpetas generadas en runtime (config/, screenshots/, etc.)
+- Sección de warnings esperados (los 4 que no afectan funcionamiento)
+- Hidden imports actualizados (pydantic, numpy, rapidfuzz, google_auth_oauthlib)
+- Sección de troubleshooting para la cola de imágenes
+- config/plantillas.json como archivo opcional pre-cargable

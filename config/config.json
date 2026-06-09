@@ -1,12 +1,12 @@
 {
   "tema": "dark",
-  "ultimo_monitor": 0,
+  "ultimo_monitor": 1,
   "regiones_apps": {
     "Wolkbox": {
-      "top": 273,
-      "left": 155,
-      "width": 311,
-      "height": 77
+      "top": 277,
+      "left": 104,
+      "width": 368,
+      "height": 105
     },
     "App 2": {
       "top": 448,
@@ -33,10 +33,10 @@
       "height": 529
     },
     "B2Chat": {
-      "top": 375,
-      "left": 1109,
-      "width": 0,
-      "height": 0
+      "top": 274,
+      "left": 96,
+      "width": 385,
+      "height": 81
     },
     "Correo": {
       "top": 296,
@@ -64,7 +64,7 @@
   "headless": false,
   "chrome_existente": true,
   "destino_subida": "HUBSPOT",
-  "ultima_celda_calendar": "n21",
+  "ultima_celda_calendar": "s27",
   "ultima_pestana_calendar": "Jun",
   "ui_visibility": {
     "captura": true,

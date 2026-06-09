@@ -50,6 +50,13 @@ PLANTILLAS_DEFAULT = [
 
 
 def _cargar_plantillas() -> list:
+    """Carga las plantillas desde config/plantillas.json.
+
+    Returns:
+        list de dicts con formato [{titulo, categoria, texto}, ...].
+        Si el archivo no existe o hay error de parseo, retorna las
+        PLANTILLAS_DEFAULT.
+    """
     if PLANTILLAS_PATH.exists():
         try:
             return json.loads(PLANTILLAS_PATH.read_text(encoding="utf-8"))
@@ -59,6 +66,13 @@ def _cargar_plantillas() -> list:
 
 
 def _guardar_plantillas(plantillas: list):
+    """Persiste la lista de plantillas en config/plantillas.json.
+
+    Crea el directorio si no existe y escribe con indent=2 y UTF-8.
+
+    Args:
+        plantillas: list de dicts [{titulo, categoria, texto}, ...] a guardar.
+    """
     PLANTILLAS_PATH.parent.mkdir(parents=True, exist_ok=True)
     PLANTILLAS_PATH.write_text(
         json.dumps(plantillas, ensure_ascii=False, indent=2), encoding="utf-8"

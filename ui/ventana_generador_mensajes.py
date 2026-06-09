@@ -148,8 +148,14 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
     """
     Ventana para generar mensajes de contacto estandarizados.
 
-    Permite seleccionar tipo de mensaje, idioma, ingresar hasta 2 números
-    telefónicos, previsualizar el mensaje y copiarlo al portapapeles.
+    Permite seleccionar tipo de mensaje, idioma, ingresar hasta 2 numeros
+    telefonicos, previsualizar el mensaje y copiarlo al portapapeles. Al
+    copiar, el resultado se guarda en self.resultado y la ventana se cierra
+    automaticamente.
+
+    Attributes:
+        resultado: str | None. Mensaje generado al presionar "Copiar Mensaje",
+            None si la ventana se cerro sin copiar.
     """
 
     def __init__(self, parent):
@@ -160,6 +166,7 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         self.transient(parent)
         self.grab_set()
 
+        self.resultado: str | None = None  # mensaje generado al cerrar
         self._tipo_mensaje_var = ctk.StringVar(value="fuera_servicio")
         self._idioma_var = ctk.StringVar(value="es")
 
@@ -500,10 +507,10 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
         self._preview_valido = True
 
     def _copiar_mensaje(self):
-        """Copia el mensaje generado al portapapeles del sistema.
+        """Copia el mensaje generado al portapapeles, lo guarda en self.resultado
+        y cierra la ventana automaticamente tras 1.5 segundos.
 
-        Solo copia si el mensaje es valido (preview_valido=True). Muestra
-        una advertencia si no hay mensaje o no es valido.
+        Muestra un aviso si no hay un mensaje valido para copiar.
         """
         mensaje = self._textbox_preview.get("0.0", "end").strip()
 
@@ -515,6 +522,7 @@ class VentanaGeneradorMensajes(ctk.CTkToplevel):
 
         self.clipboard_clear()
         self.clipboard_append(mensaje)
+        self.resultado = mensaje
 
         self._label_estado.configure(text="✓ Mensaje copiado al portapapeles")
-        self.after(2500, lambda: self._label_estado.configure(text=""))
+        self.after(1500, self.destroy)

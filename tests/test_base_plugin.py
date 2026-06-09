@@ -116,6 +116,39 @@ class TestContextoSubida:
         )
         assert ctx.fsd is None
 
+    def test_rutas_imagenes_none_por_defecto(self):
+        ctx = ContextoSubida(
+            ruta_imagen="/tmp/x.png",
+            log=print,
+            driver=MagicMock(),
+        )
+        assert ctx.rutas_imagenes is None
+
+    def test_con_rutas_imagenes(self):
+        rutas = ["/tmp/a.png", "/tmp/b.png", "/tmp/c.png"]
+        ctx = ContextoSubida(
+            ruta_imagen="/tmp/x.png",
+            log=print,
+            driver=MagicMock(),
+            rutas_imagenes=rutas,
+        )
+        assert ctx.rutas_imagenes == rutas
+        assert len(ctx.rutas_imagenes) == 3
+
+    def test_rutas_imagenes_no_se_comparten_entre_instancias(self):
+        ctx1 = ContextoSubida(
+            ruta_imagen="/tmp/a.png",
+            log=print,
+            driver=MagicMock(),
+            rutas_imagenes=["/tmp/1.png"],
+        )
+        ctx2 = ContextoSubida(
+            ruta_imagen="/tmp/b.png",
+            log=print,
+            driver=MagicMock(),
+        )
+        assert ctx2.rutas_imagenes is None
+
     def test_credenciales_no_se_comparten_entre_instancias(self):
         ctx1 = ContextoSubida(ruta_imagen="/tmp/a.png", log=print, driver=MagicMock())
         ctx2 = ContextoSubida(ruta_imagen="/tmp/b.png", log=print, driver=MagicMock())

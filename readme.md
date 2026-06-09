@@ -2,7 +2,7 @@
 
 ## Descripción
 
-SSAuto es una herramienta de escritorio para Windows que automatiza capturas de pantalla de regiones específicas y las sube a portales web (HubSpot y Sunrun). Incluye un comparador de datos entre HubSpot y Sunrun con visualización de estado de dispatch, un generador de mensajes de contacto estandarizados, y botones de captura rápida para múltiples aplicaciones.
+SSAuto es una herramienta de escritorio para Windows que automatiza capturas de pantalla de regiones específicas y las sube a portales web (HubSpot y Sunrun). Soporta cola de imágenes para subir múltiples capturas en una sola nota de HubSpot, incluye un comparador de datos entre HubSpot y Sunrun con visualización de estado de dispatch, un generador de mensajes de contacto estandarizados, y botones de captura rápida para múltiples aplicaciones.
 
 Combina `customtkinter` (GUI), `mss` (captura de pantalla) y `Selenium` (automatización de navegador). La arquitectura es modular, con un sistema de plugins para agregar nuevos sitios de destino.
 
@@ -86,7 +86,7 @@ ssauto/
 │   ├── iniciar_chrome_sesion.py    # Lanza Chrome con puerto de depuración 9222
 │   └── recuperar_puerto.py         # Diagnóstico y recuperación del puerto 9222
 │
-├── tests/                          # Suite de tests principal (273 tests)
+├── tests/                          # Suite de tests principal (276 tests)
 │   ├── conftest.py                 # Fixtures compartidos
 │   ├── test_apps_captura.py        # Tests de configuración de apps
 │   ├── test_base_plugin.py         # Tests del contrato ABC
@@ -163,10 +163,20 @@ pip install -r requirements.txt
 
 1. Define la región de pantalla con el botón **Medir** o introduce coordenadas manualmente.
 2. Selecciona el sitio de destino (HubSpot, Sunrun o Ambos).
-3. Presiona la tecla rápida (por defecto `Ctrl+Enter`) para capturar y subir automáticamente.
+3. Presiona el botón **Capturar y subir** o la tecla rápida (por defecto `Ctrl+Enter`).
 4. El botón **Detener** (rojo) permite cancelar el proceso en curso en cualquier momento.
 
 El sistema detecta automáticamente el FSD desde el título de la ventana de Chrome al ejecutar la captura. También se puede ingresar un FSD manualmente en el campo de búsqueda inteligente.
+
+#### Cola de imágenes (HubSpot)
+
+Cuando **Auto-submit nota** está **desactivado** y el destino es HubSpot (o Ambos), las capturas se acumulan en una **cola** en lugar de subirse inmediatamente. El frame de cola aparece debajo de los botones principales mostrando el contador de imágenes pendientes.
+
+- **Subir cola** — crea una sola nota en HubSpot con todas las imágenes encoladas, separadas por saltos de línea. Los mensajes de cada captura se combinan al inicio de la nota.
+- **Limpiar** — vacía la cola sin subir.
+- **Auto-submit activado** o **destino Sunrun** — comportamiento clásico (subida inmediata).
+
+La cola se limpia automáticamente al cambiar de destino o activar auto-submit.
 
 ### Captura por aplicación
 
@@ -202,7 +212,12 @@ La pestaña y la celda usadas en la última captura se persisten automáticament
 
 ### Comparación de datos
 
-La pestaña **Comparación** permite buscar contactos en HubSpot por FSD, nombre, teléfono, correo o dirección, y compararlos campo por campo contra los datos registrados en Sunrun. Las diferencias se resaltan por colores:
+La pestaña **Comparación** ofrece dos botones de búsqueda independientes:
+
+- **Buscar en HubSpot** — busca contactos en HubSpot por FSD, nombre, teléfono, correo o dirección, y los compara campo por campo contra Sunrun.
+- **Buscar en Sunrun** — extrae directamente los datos del ticket en Sunrun (dispatch state, nombre, dirección, teléfonos, etc.) y los muestra en una tabla con opción de copia al portapapeles.
+
+Las diferencias en la comparación HubSpot ↔ Sunrun se resaltan por colores:
 
 - ✅ **Verde** — datos iguales en ambas plataformas
 - 🟡 **Amarillo** — datos similares (p. ej. diferencias mínimas de formato)
@@ -227,16 +242,24 @@ El comparador soporta múltiples estrategias de búsqueda en HubSpot:
 
 Cuando se busca por un atributo distinto al FSD, el sistema encuentra contactos candidatos en HubSpot, extrae su FSD asociado, y con ese FSD ejecuta la comparación completa contra Sunrun. Esto permite encontrar registros incluso cuando no se conoce el FSD de antemano.
 
-### Generador de mensajes
+### Mensajes y plantillas
 
-La pestaña **Plantillas** ofrece plantillas de mensajes por categoría (HubSpot, Sunrun, General) con editor completo. La pestaña **Mensajes** genera mensajes de contacto estandarizados:
+Al iniciar una captura, se abre un **modal de mensaje** que integra:
+
+- **Plantillas** (columna izquierda) — mensajes predefinidos agrupados por categoría (HubSpot, Sunrun, General). Un clic carga el texto en el editor.
+- **Editor** (columna derecha) — campo de texto libre para redactar o modificar el mensaje.
+- **[+ nueva plantilla]** — guarda el mensaje actual como plantilla (título + categoría).
+- **[Editar]** — abre el gestor completo de plantillas.
+- **[Gen.]** — abre el generador de mensajes de contacto e inserta el resultado directamente.
+
+Los botones **Plantillas** y **Mensajes** en la barra superior abren las ventanas completas para gestión avanzada. El generador soporta:
 
 - Fuera de Servicio
 - Buzón de Voz
 - No Contesta
 - Confirmación de visita técnica
 
-Cada mensaje está disponible en español e inglés, con fecha automática (`datetime`), manejo inteligente de singular/plural para números telefónicos, previsualización en tiempo real y copia al portapapeles con un clic.
+Cada mensaje está disponible en español e inglés, con fecha automática, manejo inteligente de singular/plural para números telefónicos y previsualización en tiempo real.
 
 ### Chrome
 
@@ -271,7 +294,7 @@ python utils/recuperar_puerto.py
 ## Tests
 
 ```bash
-pytest tests/ -v                    # Suite principal (273 tests)
+pytest tests/ -v                    # Suite principal (276 tests)
 pytest gsheets/tests/ -v            # Tests del módulo Google Sheets (83 tests)
 ```
 

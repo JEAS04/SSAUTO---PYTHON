@@ -54,15 +54,19 @@ def _retry_stale(max_intentos: int = 3, pausa: float = 0.3):
 
 class HubSpotPlugin(SitioPlugin):
     """
-    Plugin para subir capturas como imagen incrustada en una nota de HubSpot.
+    Plugin para subir capturas como imagen(es) incrustada(s) en una nota de HubSpot.
+
+    Soporta hasta 2 imagenes (ctx.rutas_imagenes) en una sola nota, con <br>
+    entre cada una para evitar reemplazos. Si hay una sola imagen, usa
+    ctx.ruta_imagen (comportamiento clasico).
 
     Flujo de subida:
       1. Intentar crear nota desde el sidebar (funciona en ticket y contacto).
       2. Si falla: navegar Actividades → Notas → Crear nota.
       3. Enfocar el editor de texto para que React renderice la toolbar.
-      4. Insertar imagen via el input file oculto (sin abrir file picker).
-      5. Esperar confirmacion visual de la imagen.
-      6. Guardar la nota.
+      4. Insertar cada imagen via el input file oculto (sin abrir file picker).
+      5. Esperar confirmacion visual de cada imagen via selector <img>.
+      6. Guardar la nota o dejarla abierta segun ctx.opciones["auto_submit_nota"].
 
     Soporta busqueda inteligente de pestanas por FSD usando CDP para evitar
     activar pestanas innecesarias y mantener el contexto correcto.
@@ -130,6 +134,15 @@ class HubSpotPlugin(SitioPlugin):
     # ── Interfaz pública ──────────────────────────────────────────────
 
     def verificar_sesion(self, driver, log: Callable) -> bool:
+        """Verifica si la pestaña actual del driver esta en HubSpot.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            log: funcion callback para registrar mensajes.
+
+        Returns:
+            True si la URL actual contiene 'hubspot'.
+        """
         try:
             url = driver.current_url.lower()
             if "hubspot" in url:
@@ -141,6 +154,16 @@ class HubSpotPlugin(SitioPlugin):
             return False
 
     def hacer_login(self, driver, credenciales: dict, log: Callable) -> bool:
+        """Navega a la pagina de login de HubSpot y autentica con credenciales.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            credenciales: dict con claves "usuario" y "clave".
+            log: funcion callback para registrar mensajes.
+
+        Returns:
+            True si tras el login la URL contiene 'hubspot' sin 'login'.
+        """
         usuario = credenciales.get("usuario", "")
         clave = credenciales.get("clave", "")
         if not usuario or not clave:
@@ -174,16 +197,22 @@ class HubSpotPlugin(SitioPlugin):
             return False
 
     def subir(self, ctx: ContextoSubida) -> ResultadoSubida:
-        """Sube la captura como imagen incrustada en una nueva nota de HubSpot.
+        """Sube la(s) captura(s) como imagen(es) incrustada(s) en una nota de HubSpot.
 
-        Flujo optimizado para tickets y contactos:
-          1. Intentar crear nota desde el sidebar (funciona en ambas paginas).
-          2. Si falla, navegar por las pestañas Actividades → Notas → Crear nota.
-          3. Enfocar editor, insertar imagen, esperar confirmacion, guardar.
+        Si ctx.rutas_imagenes tiene múltiples rutas, todas se insertan en la
+        misma nota. Si no, usa ctx.ruta_imagen (comportamiento clásico).
+
+        Flujo:
+          1. Intentar crear nota desde el sidebar.
+          2. Si falla, navegar Actividades → Notas → Crear nota.
+          3. Enfocar editor.
+          4. Insertar cada imagen con confirmación.
+          5. Guardar o dejar abierta según auto_submit.
         """
         log = ctx.log
         driver = ctx.driver
-        ruta_abs = os.path.abspath(ctx.ruta_imagen)
+        rutas = ctx.rutas_imagenes if ctx.rutas_imagenes else [ctx.ruta_imagen]
+        total = len(rutas)
         auto_submit = ctx.opciones.get("auto_submit_nota", True)
         mensaje_nota = ctx.opciones.get("mensaje_nota", "") or "Nota de captura."
         fsd_objetivo = ctx.fsd
@@ -206,7 +235,10 @@ class HubSpotPlugin(SitioPlugin):
 
         contexto_activo = self._capturar_contexto_activo(driver, log, fsd_objetivo)
 
-        log(f"  → [HubSpot] Iniciando subida: {ruta_abs}")
+        if total > 1:
+            log(f"  → [HubSpot] Iniciando subida de {total} imágenes…")
+        else:
+            log(f"  → [HubSpot] Iniciando subida: {os.path.abspath(rutas[0])}")
         esperar_carga(driver)
 
         try:
@@ -252,20 +284,48 @@ class HubSpotPlugin(SitioPlugin):
                     exitoso=False, mensaje="Cancelado por el usuario."
                 )
 
-            self._paso_insertar_imagen(driver, log, ruta_abs, contexto_activo)
+            # Insertar todas las imágenes en la misma nota
+            for i, ruta in enumerate(rutas):
+                ruta_abs = os.path.abspath(ruta)
+                if total > 1:
+                    log(f"  → [HubSpot] Insertando imagen {i+1}/{total}…")
+                self._paso_insertar_imagen(driver, log, ruta_abs, contexto_activo)
 
-            if _check():
-                return ResultadoSubida(
-                    exitoso=False, mensaje="Cancelado por el usuario."
-                )
+                if _check():
+                    return ResultadoSubida(
+                        exitoso=False, mensaje="Cancelado por el usuario."
+                    )
 
-            self._paso_esperar_imagen(driver, log, ruta_abs, contexto_activo)
+                self._paso_esperar_imagen(driver, log, ruta_abs, contexto_activo)
+
+                # Separar imágenes con salto de línea (evita que la siguiente reemplace)
+                if i < total - 1:
+                    try:
+                        driver.execute_script(
+                            """
+                            var sel = window.getSelection();
+                            if (sel.rangeCount) {
+                                var range = sel.getRangeAt(0);
+                                range.collapse(false);
+                            }
+                            document.execCommand('insertHTML', false, '<br>');
+                            """
+                        )
+                        time.sleep(0.3)
+                    except Exception:
+                        pass
 
             if not auto_submit:
-                log("  ✓ [HubSpot] Imagen insertada. Guardado manual pendiente.")
-                return ResultadoSubida(
-                    exitoso=True, mensaje="Imagen insertada (guardado manual)"
-                )
+                if total > 1:
+                    log(f"  ✓ [HubSpot] {total} imágenes insertadas. Guardado manual pendiente.")
+                    return ResultadoSubida(
+                        exitoso=True, mensaje=f"{total} imágenes insertadas (guardado manual)"
+                    )
+                else:
+                    log("  ✓ [HubSpot] Imagen insertada. Guardado manual pendiente.")
+                    return ResultadoSubida(
+                        exitoso=True, mensaje="Imagen insertada (guardado manual)"
+                    )
 
             if _check():
                 return ResultadoSubida(
@@ -281,6 +341,14 @@ class HubSpotPlugin(SitioPlugin):
     # ── Pasos internos ────────────────────────────────────────────────
 
     def _espera(self, driver) -> WebDriverWait:
+        """Crea un WebDriverWait con el timeout estandar del plugin.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+
+        Returns:
+            WebDriverWait configurado con self.TIMEOUT.
+        """
         return WebDriverWait(driver, self.TIMEOUT)
 
     def _es_pagina_registro(self, url: str) -> bool:
@@ -340,6 +408,23 @@ class HubSpotPlugin(SitioPlugin):
     def _capturar_contexto_activo(
         self, driver, log: Callable, fsd_objetivo: str | None = None
     ) -> dict:
+        """Busca y activa una pestana de HubSpot que contenga un registro.
+
+        Usa CDP Target.getTargets para encontrar la pestana correcta, la
+        despierta via CDP Runtime.evaluate, y retorna un dict con handle,
+        url y title del contexto activo.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            log: funcion callback para registrar mensajes.
+            fsd_objetivo: FSD a buscar en el titulo de la pestana (opcional).
+
+        Returns:
+            dict con claves "handle", "url", "title" del contexto activo.
+
+        Raises:
+            RuntimeError: si no se encuentra ninguna pestana de registro.
+        """
         # Estrategia 1: CDP Target.getTargets — buscar y activar pestaña HubSpot
         try:
             targets_resp = driver.execute_cdp_cmd("Target.getTargets", {})
@@ -386,6 +471,19 @@ class HubSpotPlugin(SitioPlugin):
         )
 
     def _validar_contexto_activo(self, driver, ctx: dict) -> None:
+        """Verifica que el driver siga apuntando a una pestaña de HubSpot.
+
+        Si la pestaña actual no coincide, intenta volver a la pestaña
+        guardada en ctx['handle']. Lanza RuntimeError si no es posible.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            ctx: dict con al menos la clave "handle" (window handle) y
+                opcionalmente "url".
+
+        Raises:
+            RuntimeError: si la pestaña actual no es de HubSpot tras reintentos.
+        """
         url_conocida = ctx.get("url", "")
         if url_conocida and self.dominio in url_conocida:
             return
@@ -409,17 +507,39 @@ class HubSpotPlugin(SitioPlugin):
                         pass
 
     def _safe_click(self, driver, elemento, ctx: dict) -> None:
+        """Hace click en un elemento WebElement validando contexto antes y despues.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            elemento: WebElement sobre el que hacer click.
+            ctx: dict con el contexto activo para validar.
+        """
         self._validar_contexto_activo(driver, ctx)
         elemento.click()
         self._validar_contexto_activo(driver, ctx)
 
     def _safe_send_file(self, driver, elemento, ruta_abs: str, ctx: dict) -> None:
+        """Envia una ruta de archivo a un input file validando contexto antes y despues.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            elemento: WebElement <input type="file">.
+            ruta_abs: ruta absoluta del archivo a subir.
+            ctx: dict con el contexto activo para validar.
+        """
         self._validar_contexto_activo(driver, ctx)
         elemento.send_keys(ruta_abs)
         self._validar_contexto_activo(driver, ctx)
 
     @staticmethod
     def _guardar_dom(driver, nombre: str) -> None:
+        """Guarda el DOM actual de la pagina en un archivo HTML para depuracion.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            nombre: sufijo para el nombre del archivo
+                (ej: 'actividades' → debug_dom_hubspot_actividades.html).
+        """
         try:
             ruta = f"debug_dom_hubspot_{nombre}.html"
             with open(ruta, "w", encoding="utf-8") as f:
@@ -428,6 +548,16 @@ class HubSpotPlugin(SitioPlugin):
             pass
 
     def _paso_actividades(self, driver, log: Callable, ctx: dict) -> None:
+        """Navega a la pestana Actividades en el registro de HubSpot.
+
+        Prueba selectores CSS, XPath y un fallback JS por texto visible.
+        No lanza excepcion si falla; continua sin abrir Actividades.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            log: funcion callback para registrar mensajes.
+            ctx: dict con el contexto activo para validar.
+        """
         log("  → [HubSpot] Paso 1/7: Pestaña Actividades…")
 
         selectores = [
@@ -479,6 +609,18 @@ class HubSpotPlugin(SitioPlugin):
         log("  · [HubSpot] Actividades no encontrado, continuando igual.")
 
     def _paso_notas(self, driver, log: Callable, ctx: dict) -> None:
+        """Abre el filtro Notas dentro de la pestana Actividades.
+
+        Prueba selectores CSS, XPath y un fallback JS por texto visible.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            log: funcion callback para registrar mensajes.
+            ctx: dict con el contexto activo para validar.
+
+        Raises:
+            RuntimeError: si no se pudo abrir la pestana Notas.
+        """
         log("  → [HubSpot] Paso 2/7: Pestaña Notas…")
 
         selectores = [
@@ -528,6 +670,16 @@ class HubSpotPlugin(SitioPlugin):
         )
 
     def _paso_crear_nota(self, driver, log: Callable, ctx: dict) -> None:
+        """Hace click en el boton 'Crear nota' dentro de la pestana Notas.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            log: funcion callback para registrar mensajes.
+            ctx: dict con el contexto activo para validar.
+
+        Raises:
+            RuntimeError: si no se pudo encontrar o clickear el boton.
+        """
         log("  → [HubSpot] Paso 3/7: Crear nota…")
         try:
             btn = self._espera(driver).until(
@@ -610,7 +762,22 @@ class HubSpotPlugin(SitioPlugin):
             log("  ⚠ [HubSpot] Editor no localizado. El ImageButton puede no aparecer.")
 
     def _paso_insertar_imagen(self, driver, log: Callable, ruta_abs: str, ctx: dict) -> None:
-        log("  → [HubSpot] Paso 5/7: Insertando imagen…")
+        """Inserta una imagen en el editor haciendo click en el boton de imagen
+        y enviando la ruta al input[type=file] oculto.
+
+        Ambos pasos (click y send_keys) tienen reintentos independientes
+        con @_retry_stale para manejar re-renders de React.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            log: funcion callback para registrar mensajes.
+            ruta_abs: ruta absoluta del archivo de imagen a insertar.
+            ctx: dict con el contexto activo para validar.
+
+        Raises:
+            RuntimeError: si no se pudo hacer click en el boton o enviar
+                la imagen tras los reintentos.
+        """
         try:
 
             @_retry_stale(max_intentos=3)
@@ -648,23 +815,46 @@ class HubSpotPlugin(SitioPlugin):
     def _paso_esperar_imagen(
         self, driver, log: Callable, ruta_abs: str, ctx: dict
     ) -> None:
-        log("  → [HubSpot] Paso 6/7: Esperando confirmación de imagen…")
-        nombre = os.path.basename(ruta_abs)
+        """Espera a que la imagen insertada aparezca en el DOM del editor.
+
+        Usa un selector CSS <img> dentro del editor (data-test-id='rte-content'
+        o div.ProseMirror) con un timeout de 5 segundos. No lanza excepcion
+        si el timeout expira; continua tras una pausa de 1.5s.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            log: funcion callback para registrar mensajes.
+            ruta_abs: ruta absoluta de la imagen insertada (no usada en el
+                selector, conservada por compatibilidad).
+            ctx: dict con el contexto activo para validar.
+        """
         try:
-            WebDriverWait(driver, 15).until(
-                lambda d: (self._validar_contexto_activo(d, ctx) is None)
-                and (
-                    d.find_elements(By.XPATH, f"//*[contains(text(),'{nombre}')]")
-                    or d.find_elements(By.XPATH, f"//*[contains(@title,'{nombre}')]")
+            WebDriverWait(driver, 5).until(
+                lambda d: (
+                    self._validar_contexto_activo(d, ctx) is None
+                    and d.find_elements(
+                        By.CSS_SELECTOR,
+                        '[data-test-id="rte-content"] img, div.ProseMirror img',
+                    )
                 )
             )
-            log(f"  ✓ [HubSpot] Imagen '{nombre}' confirmada en página.")
         except TimeoutException:
-            log(
-                "  · [HubSpot] No se confirmó la imagen en DOM (puede estar lista igual)."
-            )
+            time.sleep(1.5)
 
     def _paso_guardar(self, driver, log: Callable, ctx: dict) -> None:
+        """Espera a que el boton Guardar este habilitado y hace click.
+
+        Usa un expected condition personalizado que verifica que el boton
+        no tenga aria-disabled='true' ni el atributo disabled.
+
+        Args:
+            driver: instancia de Selenium WebDriver.
+            log: funcion callback para registrar mensajes.
+            ctx: dict con el contexto activo para validar.
+
+        Raises:
+            RuntimeError: si el boton no se habilita dentro del timeout.
+        """
         log("  → [HubSpot] Paso 7/7: Guardando nota…")
 
         def _boton_habilitado(d):

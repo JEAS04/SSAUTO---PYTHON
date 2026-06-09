@@ -1,8 +1,7 @@
 """
-ventana_comparacion.py — Ventana que muestra la comparación entre Sunrun y HubSpot.
+ventana_comparacion.py — Ventana que compara datos entre Sunrun y HubSpot.
 
-Muestra una tabla con los tres campos comparados, coloreada según el estado
-de cada campo:
+Muestra una tabla con los campos comparados, coloreada según el estado:
   · Verde   → igual (coinciden exactamente)
   · Amarillo → similar (pequeñas diferencias tipográficas)
   · Rojo    → diferente (valores distintos)
@@ -10,11 +9,12 @@ de cada campo:
   · Naranja → solo en Sunrun
   · Gris    → ambos vacíos
 
-La ventana también permite ingresar un FSD manualmente y lanzar
-la comparación desde aquí, sin necesidad de ir a la ventana principal.
+Permite buscar en HubSpot y en Sunrun de forma independiente, así como
+lanzar una comparación combinada entre ambos orígenes de datos.
 """
 
 import customtkinter as ctk
+import threading
 from ui.custom_ctkframe import CustomCTkFrame
 from core.comparador import Comparador, comparar
 from config.configuracion import cargar_config
@@ -28,11 +28,15 @@ from ui.comparacion.tema import COLORES_ESTADO, ETIQUETAS_ESTADO, DISPATCH_STATE
 
 class VentanaComparacion(CustomCTkFrame):
     """
-    Ventana modal que muestra la comparación de datos entre Sunrun y HubSpot.
+    Ventana modal que compara datos entre Sunrun y HubSpot.
 
     Puede abrirse:
       A) Desde la ventana principal pasando datos ya obtenidos.
-      B) Vacía, dejando al usuario ingresar el FSD y lanzar la comparación.
+      B) Vacía, dejando al usuario ingresar criterios de búsqueda.
+      C) Con resultados parciales (solo HubSpot o solo Sunrun).
+
+    Ofrece búsqueda independiente en HubSpot y en Sunrun a partir
+    del criterio ingresado, además de la comparación combinada.
 
     Parámetros
     ----------
@@ -40,6 +44,7 @@ class VentanaComparacion(CustomCTkFrame):
     datos_hubspot   : dict con datos de HubSpot (opcional, si ya se obtuvieron)
     datos_sunrun    : dict con datos de Sunrun (opcional, si ya se obtuvieron)
     log_callback    : función de log de la ventana principal
+    comparador      : instancia de Comparador (opcional)
     ventana_principal_o_comparador : referencia a la ventana principal o al comparador
     """
 
@@ -188,18 +193,34 @@ class VentanaComparacion(CustomCTkFrame):
         # Los inputs se crean dinámicamente en _al_cambiar_tipo_busqueda
         # Se llama al final de _construir_ui para inicializar con la estrategia por defecto
 
-        # BOTÓN BUSCAR
+        # BOTONES BUSCAR (en sub-frame con columnas iguales)
+        frame_botones = ctk.CTkFrame(frame_busqueda, fg_color="transparent")
+        frame_botones.grid(row=2, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 14))
+        frame_botones.grid_columnconfigure((0, 1), weight=1, uniform="search_btn")
+
         self._btn_buscar = ctk.CTkButton(
-            frame_busqueda,
+            frame_botones,
             text="🔍 Buscar en HubSpot",
             command=self._buscar_candidatos,
             font=ctk.CTkFont(size=12, weight="bold"),
             height=36,
-            fg_color=("#238636", "#2ea043"),
-            hover_color=("#1e7a30", "#26963a"),
+            fg_color=("#ed7d31", "#ed7d31"),
+            hover_color=("#c9611f", "#c9611f"),
         )
 
-        self._btn_buscar.grid(row=2, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 14))
+        self._btn_buscar.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+
+        self._btn_buscar_sunrun = ctk.CTkButton(
+            frame_botones,
+            text="☀ Buscar en Sunrun",
+            command=self._buscar_datos_sunrun,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=36,
+            fg_color=("#1f6aa5", "#1f6aa5"),
+            hover_color=("#144e7a", "#144e7a"),
+        )
+
+        self._btn_buscar_sunrun.grid(row=0, column=1, sticky="ew", padx=(4, 0))
 
         # ÁREA PRINCIPAL         # ── Área de resultados ────────────────────────────────────────
         self._frame_main = ctk.CTkFrame(self, fg_color="transparent")
@@ -309,9 +330,6 @@ class VentanaComparacion(CustomCTkFrame):
 
         # Opcional: imprimir en consola
         print(f"[{tipo.upper()}] {mensaje}")
-
-        # Refrescar UI
-        self.update_idletasks()
 
     def _al_cambiar_tipo_busqueda(self, nuevo_tipo_label):
         """Se dispara cuando cambia el dropdown de tipo de búsqueda"""
@@ -457,8 +475,173 @@ class VentanaComparacion(CustomCTkFrame):
             return self.candidatos_hubspot[idx]
         return None
 
+    # ── Búsqueda en Sunrun ─────────────────────────────────────────
+
+    def _buscar_datos_sunrun(self):
+        """Busca los datos del FSD ingresado directamente en Sunrun."""
+        criterio = self._obtener_criterio_busqueda()
+        fsd = criterio if isinstance(criterio, str) else str(criterio).strip()
+        if not fsd:
+            self.ui_log("❌ Ingresa un FSD para buscar en Sunrun", "error")
+            return
+
+        self._btn_buscar_sunrun.configure(state="disabled")
+        self._btn_buscar.configure(state="disabled")
+        self._limpiar_resultados()
+        self.ui_log("☀ Buscando en Sunrun...", "info")
+
+        def _hilo():
+            try:
+                from scraping.sunrun import ScraperSunrun
+
+                scraper = ScraperSunrun(log_callback=lambda m: self.after(0, lambda: self.ui_log(m, "info")))
+                datos = scraper.obtener_datos_por_fsd(fsd)
+
+                if datos.get("error"):
+                    self.after(0, lambda: self.ui_log(f"❌ Sunrun: {datos['error']}", "error"))
+                else:
+                    self.after(0, lambda: self._mostrar_datos_sunrun(datos))
+                    self.after(0, lambda: self.ui_log("✅ Datos de Sunrun obtenidos", "success"))
+            except Exception as e:
+                self.after(0, lambda: self.ui_log(f"❌ Error en Sunrun: {e}", "error"))
+            finally:
+                self.after(0, lambda: self._btn_buscar_sunrun.configure(state="normal"))
+                self.after(0, lambda: self._btn_buscar.configure(state="normal"))
+
+        threading.Thread(target=_hilo, daemon=True).start()
+
+    def _mostrar_datos_sunrun(self, datos: dict):
+        """Muestra los datos obtenidos de Sunrun en el área de resultados."""
+        self._limpiar_resultados()
+        frame = self._frame_resultados
+        fila = 0
+
+        # ── Encabezado FSD ─────────────────────────────────────────
+        hdr = ctk.CTkFrame(frame, fg_color=("gray85", "gray22"), border_width=1)
+        hdr.grid(row=fila, column=0, sticky="ew", pady=(0, 8))
+        hdr.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            hdr,
+            text=f"  ☀ Sunrun — {datos.get('fsd', '')}",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).grid(row=0, column=0, sticky="w", padx=14, pady=10)
+
+        self._btn_copiar = ctk.CTkButton(
+            hdr,
+            text="📋 Copiar",
+            width=90,
+            height=28,
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent",
+            border_width=1,
+            border_color=("gray60", "gray50"),
+            text_color=("gray30", "gray70"),
+            hover_color=("gray80", "gray30"),
+            command=lambda d=datos: self._copiar_datos_sunrun(d),
+        )
+        self._btn_copiar.grid(row=0, column=1, sticky="e", padx=14, pady=8)
+
+        fila += 1
+
+        # ── Dispatch state ─────────────────────────────────────────
+        estado_dispatch = datos.get("dispatch_state", "").strip().upper()
+        _, _, (header_color, frame_color) = info_dispatch_state(estado_dispatch)
+
+        ds_frame = ctk.CTkFrame(frame, fg_color=frame_color, border_width=1)
+        ds_frame.grid(row=fila, column=0, sticky="ew", pady=(0, 8))
+        ds_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            ds_frame,
+            text="Dispatch State",
+            font=ctk.CTkFont(size=11, weight="bold"),
+        ).grid(row=0, column=0, sticky="nw", padx=14, pady=(10, 2))
+
+        color_ds, sufijo, _ = info_dispatch_state(estado_dispatch)
+        box_ds = ctk.CTkTextbox(
+            ds_frame,
+            fg_color="transparent",
+            border_width=0,
+            border_spacing=0,
+            height=28,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=color_ds or None,
+            wrap="word",
+            activate_scrollbars=False,
+        )
+        box_ds.insert("1.0", f"{datos.get('dispatch_state', '-')}{sufijo}" if datos.get('dispatch_state') else "-")
+        box_ds.configure(state="disabled")
+        box_ds.grid(row=0, column=1, sticky="ew", padx=(0, 14), pady=(10, 2))
+
+        fila += 1
+
+        # ── Tabla de campos ────────────────────────────────────────
+        campos = [
+            ("Nombre", datos.get("nombre", "")),
+            ("Dirección", datos.get("direccion", "")),
+            ("Ciudad", datos.get("ciudad", "")),
+            ("Estado", datos.get("estado_pr", "")),
+            ("Condado", datos.get("condado", "")),
+            ("Código Postal", datos.get("codigo_postal", "")),
+            ("Teléfono", datos.get("telefono", "")),
+            ("Teléfono Móvil", datos.get("telefono_movil", "")),
+            ("Email", datos.get("email", "")),
+            ("Appointment Date", datos.get("appointment_date", "")),
+            ("Case Reason", datos.get("case_reason", "")),
+        ]
+
+        tabla = ctk.CTkFrame(frame, fg_color=("gray95", "gray18"), border_width=1)
+        tabla.grid(row=fila, column=0, sticky="ew", pady=(0, 8))
+        tabla.grid_columnconfigure(1, weight=1)
+
+        for idx, (label, valor) in enumerate(campos):
+            bg = ("gray90", "gray22") if idx % 2 == 0 else "transparent"
+            ctk.CTkLabel(
+                tabla,
+                text=label,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                anchor="w",
+            ).grid(row=idx, column=0, sticky="nsew", padx=14, pady=4)
+
+            box = ctk.CTkTextbox(
+                tabla,
+                fg_color="transparent",
+                border_width=0,
+                border_spacing=0,
+                height=24,
+                font=ctk.CTkFont(size=11),
+                wrap="word",
+                activate_scrollbars=False,
+            )
+            box.insert("1.0", valor or "-")
+            box.configure(state="disabled")
+            box.grid(row=idx, column=1, sticky="ew", padx=(8, 14), pady=4)
+
+    def _copiar_datos_sunrun(self, datos: dict):
+        """Copia los datos de Sunrun al portapapeles."""
+        lineas = [f"FSD: {datos.get('fsd', '')}"]
+        campos = [
+            ("Nombre", "nombre"),
+            ("Direccion", "direccion"),
+            ("Ciudad", "ciudad"),
+            ("Estado", "estado_pr"),
+            ("Condado", "condado"),
+            ("Codigo Postal", "codigo_postal"),
+            ("Telefono", "telefono"),
+            ("Telefono Movil", "telefono_movil"),
+            ("Email", "email"),
+            ("Dispatch State", "dispatch_state"),
+            ("Appointment Date", "appointment_date"),
+            ("Case Reason", "case_reason"),
+        ]
+        for label, key in campos:
+            lineas.append(f"{label}: {datos.get(key, '') or '-'}")
+        self.clipboard_clear()
+        self.clipboard_append("\n".join(lineas))
+        self.ui_log("📋 Datos copiados al portapapeles", "success")
+
     def _lanzar_comparacion_mejorada(self):
-        """Nueva versión que usa el candidato seleccionado"""
+        """Extrae el FSD del candidato seleccionado en HubSpot, busca en Sunrun y muestra la comparación."""
         candidato = self._obtener_candidato_seleccionado()
 
         if not candidato:
@@ -506,9 +689,9 @@ class VentanaComparacion(CustomCTkFrame):
         """
         Renderiza la tabla de comparación con colores por estado.
 
-        FIX #4: antes se llamaba self.state() y self.deiconify() directamente
-        sobre el Frame, lo que lanzaba AttributeError silenciado y nunca
-        restauraba la ventana. Ahora se delega al toplevel real.
+        Restaura y trae al frente el toplevel si estaba minimizado, luego
+        dibuja el encabezado, datos extra de Sunrun/HubSpot, tabla de
+        campos comparados y resumen final.
         """
         self._limpiar_resultados()
 
@@ -765,6 +948,13 @@ class VentanaComparacion(CustomCTkFrame):
         self._resumen(frame, fila, resultado["resumen"])
 
     def _fila_campo(self, parent, fila: int, cr: dict):
+        """Renderiza una fila de la tabla de comparación para un campo.
+
+        Args:
+            parent: Frame contenedor donde se inserta la fila.
+            fila: Número de fila en el grid del contenedor.
+            cr: Dict con los datos del campo (campo, valor_hs, valor_sr, estado, nota).
+        """
         estado = cr["estado"]
         colores = COLORES_ESTADO.get(estado, COLORES_ESTADO["ambos_vacios"])
 
@@ -829,6 +1019,13 @@ class VentanaComparacion(CustomCTkFrame):
             ).grid(row=0, column=0, sticky="w", padx=14, pady=(0, 6))
 
     def _resumen(self, parent, fila: int, resumen: dict):
+        """Renderiza la fila de resumen con el conteo de estados.
+
+        Args:
+            parent: Frame contenedor donde se inserta el resumen.
+            fila: Número de fila en el grid del contenedor.
+            resumen: Dict con el conteo por cada estado (igual, similar, diferente, etc.).
+        """
         frame = ctk.CTkFrame(parent, fg_color=("gray88", "gray22"), border_width=1)
         frame.grid(row=fila, column=0, sticky="ew", pady=(12, 4))
 
@@ -914,6 +1111,11 @@ class VentanaComparacion(CustomCTkFrame):
             self.ui_log(f"No se pudo copiar: {e}", "error")
 
     def _mostrar_error(self, mensaje: str):
+        """Muestra un mensaje de error en el área de resultados.
+
+        Args:
+            mensaje: Texto del error a mostrar.
+        """
         self._limpiar_resultados()
         ctk.CTkLabel(
             self._frame_resultados,

@@ -11,12 +11,16 @@
 
 ```
 dist/SSAuto/                    ← carpeta de distribucion (onedir)
-  SSAuto.exe                   ← ejecutable principal
-  _internal/                   ← modulos Python, DLLs, dependencias
-    gsheets/                   ← certificado de Google service account
+  SSAuto.exe                   ← ejecutable principal (~102 MB)
+  _internal/                   ← modulos Python, DLLs, dependencias (~274 MB)
     customtkinter/             ← assets del tema
+    gsheets/                   ← certificado de Google service account
     ...
   .env                         ← (colocar aqui manualmente)
+  config/                      ← (generada en runtime)
+  screenshots/                 ← (generada en runtime)
+  cookies/                     ← (generada en runtime)
+  doms/                        ← (generada en runtime)
 ```
 
 ## Como generar el build
@@ -34,6 +38,7 @@ El build se genera en `dist/SSAuto/`. El ejecutable es `dist/SSAuto/SSAuto.exe`.
 |---------|-----------|-------------|
 | `.env` | Si | Contiene `ACCESS_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_PATH`, `SHEETS_SPREADSHEET_ID` |
 | Google service account JSON | Si usas gsheets | El archivo indicado en `GOOGLE_SERVICE_ACCOUNT_PATH` del .env |
+| `config/plantillas.json` | No (opcional) | Si quieres pre-cargar plantillas de mensajes personalizadas |
 
 El `.env` debe copiarse manualmente a la carpeta `dist/SSAuto/` (junto al .exe).
 
@@ -72,9 +77,12 @@ El `.spec` declara explicitamente modulos que PyInstaller podria no detectar en 
 - `mss`, `mss.windows` — captura de pantalla via ctypes
 - `playwright.async_api` — APIs asincronas de Playwright
 - `googleapiclient.*`, `google.oauth2.*` — Google Sheets API
-- `keyring.backends.Windows.WinVaultKeyring` — backend de keyring cargado dinamicamente
+- `google_auth_oauthlib.flow` — OAuth 2.0 para Google APIs
+- `keyring.backends.Windows.WinVaultKeyring` — backend de keyring cargado dinamicamente (puede no encontrarse si no se usa)
 - `certifi`, `darkdetect`, `PIL._imaging` — dependencias nativas
 - `core.medidor_code` — codigo ejecutado como string en subproceso
+- `pydantic` — usado por HubSpot SDK
+- `numpy`, `rapidfuzz._feature_detector_cpp` — dependencias nativas
 - Subpaquete `gsheets.*` completo
 
 ### Datos incluidos
@@ -85,6 +93,13 @@ El `.spec` declara explicitamente modulos que PyInstaller podria no detectar en 
 ### Exclusiones
 
 - `plugins/template_new_site.py` — es una plantilla para desarrolladores, no un plugin registrado
+
+### Warnings esperados (no afectan funcionamiento)
+
+- `Hidden import 'playwright._impl._api_types' not found` — el path real es diferente, Playwright tiene su propio hook
+- `Hidden import 'keyring.backends.Windows.WinVaultKeyring' not found` — keyring maneja sus backends dinamicamente
+- `Hidden import 'pycparser.lextab'/'yacctab' not found` — warning comun de cffi/pycparser, no afecta
+- `Hidden import 'tzdata' not found` — zoneinfo se maneja internamente en Python 3.14
 
 ## Resolucion de problemas
 
@@ -112,9 +127,18 @@ set WDM_SSL_VERIFY=0
 set HTTP_PROXY=http://proxy:puerto
 ```
 
+### La cola de imagenes no aparece
+
+La funcionalidad de cola de imagenes (Subir cola / Limpiar) requiere:
+- Tener desactivado "Auto-submit nota (HubSpot)" en CONFIGURACION
+- Tener seleccionado "HUBSPOT" o "AMBOS" como destino
+- Haber capturado al menos una imagen
+
+El frame aparece en la seccion REGION DE CAPTURA, debajo de los botones principales.
+
 ## Tamano del build
 
-~106 MB (contiene Python 3.14, tkinter, Selenium, Playwright, Google APIs, HubSpot SDK, numpy, pandas, Pillow, y ~40 paquetes mas).
+~376 MB total (SSAuto.exe ~102 MB + _internal ~274 MB). Contiene Python 3.14, tkinter, Selenium, Playwright, Google APIs, HubSpot SDK, numpy, pandas, Pillow, rapidfuzz, y ~40 paquetes mas.
 
 ## Comandos utiles
 

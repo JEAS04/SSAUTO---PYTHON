@@ -35,6 +35,7 @@ class SesionService:
             usar_chrome_existente=True,
             credenciales_sesion=self._credenciales_sesion,
             opciones={"auto_submit_nota": True},
+            rutas_imagenes=["screenshots/extra1.png", "screenshots/extra2.png"],
         )
     """
 
@@ -56,9 +57,27 @@ class SesionService:
         opciones: dict | None = None,
         fsd: str | None = None,
         cancel_event: object | None = None,
+        rutas_imagenes: list[str] | None = None,
     ) -> ResultadoSubida:
         """
         Ciclo completo: driver -> sesion -> plugin.subir() -> resultado.
+
+        Args:
+            nombre_plugin: Identificador del plugin (ej. "HUBSPOT").
+            ruta_imagen: Ruta de la imagen principal a subir.
+            log: Callback para mensajes de progreso.
+            headless: Si True, lanza Chrome en modo headless.
+            usar_chrome_existente: Si True, se conecta a una instancia de Chrome
+                ya abierta por el usuario en el puerto 9222.
+            credenciales_sesion: Credenciales de sesión ya cargadas.
+            opciones: Diccionario de flags extra (auto_submit_nota, etc.).
+            fsd: FSD para búsqueda inteligente de pestaña.
+            cancel_event: threading.Event para abortar el proceso.
+            rutas_imagenes: Lista opcional de rutas de imágenes adicionales
+                para adjuntar múltiples capturas en una sola nota.
+
+        Returns:
+            ResultadoSubida con el estado final de la operación.
 
         Nunca cierra el driver del usuario (Chrome existente).
         Siempre cierra el driver propio (Chrome nuevo) al terminar.
@@ -98,6 +117,7 @@ class SesionService:
                 opciones=opciones or {},
                 fsd=fsd_normalizado,
                 cancelado=cancel_event,
+                rutas_imagenes=rutas_imagenes,
             )
             log(f"  -> [{plugin.nombre}] Iniciando subida...")
             resultado = plugin.subir(ctx)
