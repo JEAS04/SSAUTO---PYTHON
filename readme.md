@@ -16,18 +16,13 @@ ssauto/
 ├── .env                            # Variables de entorno (tokens, credenciales)
 ├── AGENTS.md                       # Instrucciones para agentes de IA
 ├── doku.md                         # Documentación y bitácora de desarrollo
-├── GENERADOR_MENSAJES.md           # Documentación del generador de mensajes
-├── image.png                       # Favicon de la aplicación
 ├── LICENSE                         # Licencia MIT
-├── repomix.config.json             # Configuración de empaquetado Repomix
-├── SELECTORES_SUNRUN.HTML          # Selectores alternativos de Sunrun (referencia)
 │
 ├── config/
 │   ├── configuracion.py            # Configuración global, carga/guardado
 │   ├── credenciales.py             # Keyring + serialización de cookies
 │   ├── apps_captura.py             # Apps de captura rápida (Wolkbox, B2Chat, etc.)
 │   ├── config.json                 # Configuración de runtime
-│   ├── config.json.bak             # Backup automático de configuración
 │   └── plantillas.json             # Plantillas de mensajes
 │
 ├── core/
@@ -60,6 +55,7 @@ ssauto/
 │   ├── ventana_credenciales.py     # Formulario de credenciales por sitio
 │   ├── ventana_plantillas.py       # Editor de plantillas de mensajes
 │   ├── ventana_generador_mensajes.py # Generador de mensajes de contacto
+|   ├── generador_mensajes.md       # Documentación del generador de mensajes
 │   ├── template_filler.py          # Utilidades de relleno de plantillas (plural/singular)
 │   ├── custom_ctkframe.py          # CTkFrame extendido (conveniencia)
 │   ├── posicion_ventanas.py        # Posicionamiento de ventanas hijas
@@ -74,17 +70,12 @@ ssauto/
 ├── data/
 │   ├── api.py                      # Cliente de HubSpot REST API
 │   ├── buscador.py                 # Estrategias de búsqueda de contactos
-│   ├── hubspot_constants.py        # Constantes de propiedades HubSpot (tickets/contactos)
-│   ├── PROPIEDADES DE CONTACTO.TXT # Referencia de propiedades de contacto HubSpot
-│   ├── PROPIEDADES DE TICKET.TXT   # Referencia de propiedades de ticket HubSpot
-│   └── test.ticket.py              # Ticket de prueba para desarrollo
+│   └── hubspot_constants.py        # Constantes de propiedades HubSpot (tickets/contactos)
 │
 ├── utils/
 │   ├── colors.py                   # Utilidades de color (oscurecer)
 │   ├── fsd.py                      # Normalización y display de FSD
-│   ├── paths.py                    # Resolución de rutas (resource_path)
-│   ├── iniciar_chrome_sesion.py    # Lanza Chrome con puerto de depuración 9222
-│   └── recuperar_puerto.py         # Diagnóstico y recuperación del puerto 9222
+│   └── paths.py                    # Resolución de rutas (resource_path)
 │
 ├── tests/                          # Suite de tests principal (276 tests)
 │   ├── conftest.py                 # Fixtures compartidos
@@ -100,11 +91,8 @@ ssauto/
 │   ├── test_plantillas.py          # Tests de plantillas de mensajes
 │   └── test_plugin_registry.py     # Tests del registro de plugins
 │
-├── test/                           # Suite de tests legacy (sin tests activos)
-│
 ├── gsheets/                        # Captura de celdas de Google Sheets
 │   ├── __init__.py                  # Punto de entrada (TicketCaptureService)
-│   ├── requirements-gsheets.txt     # Dependencias específicas de gsheets
 │   ├── utils/
 │   │   ├── cell_parser.py           # Parser de referencias A1 (F6 → A3,F3,A6,F6)
 │   │   └── image_compositor.py      # Compositor de grilla 2×2 (Pillow)

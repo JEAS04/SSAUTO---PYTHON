@@ -2359,3 +2359,18 @@ Build y guía actualizados:
 - Hidden imports actualizados (pydantic, numpy, rapidfuzz, google_auth_oauthlib)
 - Sección de troubleshooting para la cola de imágenes
 - config/plantillas.json como archivo opcional pre-cargable
+
+276/276 tests. Smoke OK. Limpieza completa:
+Acción	Archivos
+Eliminados	13 archivos/directorios (9 ahora + 4 ya ausentes)
+🔴 Google OAuth secret revocado	gsheets/client_secret_...json
+README actualizado	5 referencias huérfanas corregidas
+.gitignore	config/*.bak ya estaba cubierto
+Nada roto. Proyecto más limpio.
+
+Para GitHub, los dist/ y build/ ya están en .gitignore — no se commitean.
+Para compartir el .exe compilado, usa GitHub Releases:
+1. Crea un ZIP de dist/SSAuto/ (la carpeta completa con _internal/)
+2. Súbelo como asset en un Release (https://github.com/anomalyco/ssauto/releases)
+3. El usuario descarga el ZIP, lo descomprime, coloca su .env y ejecuta SSAuto.exe
+El ZIP pesa ~376 MB. Para reducirlo puedes comprimir con 7z/rar o usar --onefile (no recomendado para esta app porque el medidor necesita sys.executable).

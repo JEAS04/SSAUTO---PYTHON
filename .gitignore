@@ -28,3 +28,7 @@ gsheets/*.json
 
 
 doms/
+config/*.bak
+
+*.zip
+*.rar
