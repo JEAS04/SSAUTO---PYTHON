@@ -12,6 +12,20 @@ Para agregar un sitio nuevo:
   3. Nada más.
 """
 
+import sys as _sys
+
+if "--medidor" in _sys.argv:
+    try:
+        idx = _sys.argv.index("--medidor")
+        monitor_idx = _sys.argv[idx + 1]
+    except (ValueError, IndexError):
+        monitor_idx = "1"
+    _sys.argv = ["<medidor>", "--monitor", monitor_idx]
+    from core.medidor_code import MEDIDOR_CODE
+
+    exec(MEDIDOR_CODE)
+    _sys.exit(0)
+
 import customtkinter as ctk
 from version import __version__
 from config.configuracion import (
@@ -20,6 +34,7 @@ from config.configuracion import (
     cargar_config,
     guardar_config,
 )
+from utils.paths import resource_path
 
 # ── Registro de plugins ───────────────────────────────────────────────
 # Único lugar donde se declaran los sitios disponibles.
@@ -47,7 +62,8 @@ ctk.set_default_color_theme(TEMA_COLOR)
 
 # ── Ventana raíz ──────────────────────────────────────────────────────
 launcher = ctk.CTk()
-launcher.title("SSAuto")
+launcher.title(f"SSAuto {__version__}")
+launcher.iconbitmap(resource_path("solar.ico"))
 
 
 def _clamp(valor: int, minimo: int, maximo: int) -> int:

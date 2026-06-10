@@ -31,8 +31,13 @@ def ejecutar_medidor(monitor_idx: int = 1, timeout: float = 60.0) -> dict | None
     -------
     dict con claves top, left, width, height, o None si se canceló/falló.
     """
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--medidor", str(monitor_idx)]
+    else:
+        cmd = [sys.executable, "-c", MEDIDOR_CODE, "--monitor", str(monitor_idx)]
+
     proc = subprocess.Popen(
-        [sys.executable, "-c", MEDIDOR_CODE, "--monitor", str(monitor_idx)],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,

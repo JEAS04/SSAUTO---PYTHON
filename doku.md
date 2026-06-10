@@ -2374,3 +2374,163 @@ Para compartir el .exe compilado, usa GitHub Releases:
 2. Súbelo como asset en un Release (https://github.com/anomalyco/ssauto/releases)
 3. El usuario descarga el ZIP, lo descomprime, coloca su .env y ejecuta SSAuto.exe
 El ZIP pesa ~376 MB. Para reducirlo puedes comprimir con 7z/rar o usar --onefile (no recomendado para esta app porque el medidor necesita sys.executable).
+
+
+
+10/06/2026
+
+Usa el archivo @solar.ico en el proyecto por fa
+
+Listo. Agregué el ícono en main.py:52 usando launcher.iconbitmap(resource_path("solar.ico")), con resource_path para que también funcione al empaquetar con PyInstaller.
+
+Adapta @version.txt con lo de @version.py
+
+Listo. version.txt ahora refleja la versión 0.1.1.0 de version.py en filevers, prodvers, FileVersion, ProductVersion y Assembly Version.
+
+Integralo en el spec
+
+Listo. En SSAuto.spec:94-95:
+- icon="solar.ico" — asigna el ícono al .exe
+- version="version.txt" — incrusta la metadata de versión (0.1.1.0) en el ejecutable
+
+Ofusca el código con PyArmor
+
+Listo. Tres cambios:
+Archivo	Qué hace
+SSAuto.spec:9-27	Detecta automáticamente si existe dist_obf/ (ofuscado) y adapta script + pathex + runtime de PyArmor
+requirements.txt:80	pyarmor==9.2.5 agregado
+build.ps1 (nuevo)	Script de build: paso 1 pyarmor gen --recursive, paso 2 pyinstaller SSAuto.spec
+El spec funciona en ambos modos — sin dist_obf/ usa el código original, con dist_obf/ usa el ofuscado automáticamente. Build con .\build.ps1.
+Para ofuscar main.py sin PATH
+& "C:\Users\PERMICOL1\AppData\Local\Python\pythoncore-3.14-64\Scripts\pyarmor.exe" gen main.py
+Luego se usa PyInstaller
+Tenia pensado Ofuscar el .exe con PyArmor pero no se pudo por la cantidad de archivos del proyecto. PyArmor free acepta menos de 44 archivos
+Link icono:
+https://icon-icons.com/es/icono/verano-vacaciones-sol-calor-caliente/133429?ii_item_modal=1&ii_modal_origin=%2Fes%2Fsearch%3Fq%3Dsol
+Se añadieron metadatos y el icono para que Windows Defender y McAfee no de problemas
+Con version.txt el sistema Windows puede identificar el programa correctamente
+python -m PyInstaller --icon=solar.ico --version-file=version.txt SSAuto.spec
+Despues
+python -m PyInstaller SSAuto.spec
+
+Se creo un certificado de auto-firma para Windows Defender, para firmar el nuevo ejecutable (en tu ventana de PowerShell como Administrador, dentro de la carpeta del proyecto): Como Windows Defender confia instantaneamente en cualquier archivo firmado. Se genero uno propio con & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe" sign /f "C:\certificado.pfx" /p "123456" /fd SHA256 /td SHA256 /tr http://digicert.com .\dist\SSAuto\SSAuto.exe
+o 
+& "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe" sign /f "C:\certificado.pfx" /p "123456" /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com .\dist\SSAuto\SSAuto.exe
+o
+& "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe" sign /f "C:\certificado.pfx" /p "123456" /fd SHA256 /td SHA256 /tr http://timestamp.sectigo.com .\dist\SSAuto\SSAuto.exe
+
+Este proceso se debe hacer cada vez que se actualice el codigo y se use PyInstaller para actualizar el dist
+
+El error es PermissionError: Acceso denegado al intentar sobrescribir dist\SSAuto.exe. El ejecutable anterior está corriendo o tiene un handle abierto.
+Cerralo y luego reconstruí:
+taskkill /f /im SSAuto.exe 2>$null; python -m PyInstaller SSAuto.spec
+
+Para obtener el Hash
+Get-FileHash .\dist\SSAuto.exe
+
+main.py (lines 16-26)
+Si el .exe recibe --medidor N, ejecuta directamente el overlay de medición y sale, evitando abrir otra instancia de la GUI.
+core/medidor_runner.py (lines 34-38)
+Cuando sys.frozen es True (build de PyInstaller), usa [sys.executable, "--medidor", monitor_idx] en vez de -c MEDIDOR_CODE.
+data/api.py (lines 51-54)
+Cuando está congelado, load_dotenv() busca .env en la carpeta del ejecutable (sys.executable), no en el CWD. Así el token se carga sin importar desde dónde se abra el .exe.
+Para regenerar el build: python -m PyInstaller --clean SSAuto.spec
+
+
+Bugs corregidos (2 rondas)
+Ronda 1 — Problemas reportados por el usuario
+Bug	Archivo	Causa	Fix
+Medidor abre otra instancia	core/medidor_runner.py	-c no funciona en PyInstaller	Usa --medidor como flag al .exe
+Medidor abre otra instancia	main.py	No había handler para --medidor	Detecta --medidor antes de la GUI y ejecuta el overlay
+Comparación sin datos	data/api.py	load_dotenv() busca en CWD	En frozen, busca .env junto al .exe
+Ronda 2 — Bugs encontrados en auditoría
+Bug	Archivo	Causa	Fix
+Crash al importar	utils/paths.py	get_project_root() usa __file__ sin guard	Agregado guard sys.frozen
+Crash al importar	gsheets/core/playwright_capture.py	__file__ a nivel módulo	get_writable_path() en frozen
+Crash al importar	gsheets/services/ticket_capture_service.py	__file__ a nivel módulo	get_writable_path() en frozen
+Screenshots se pierden	core/captura.py	Path("screenshots") CWD-relativo	get_writable_path("screenshots") en frozen
+Cookies no se encuentran/guardan	config/credenciales.py	get_project_root() apuntaba a _MEIPASS (read-only)	get_writable_path("cookies")
+Cookies path inconsistente	services/session_manager.py	Path("cookies/...") CWD-relativo, distinto al path real de cargar_cookies()	Usa _COOKIES_DIR unificado de credenciales.py
+
+
+Resumen de los 4 cambios de esta ronda:
+Cambios realizados
+Archivo	Cambio
+core/browser.py	_obtener_chromedriver_path() busca chromedriver.exe empaquetado en frozen, con timeout de 30s si tiene que descargar
+services/driver_provider.py	Verifica que Chrome esté instalado ANTES de intentar conectar; mensajes de error claros
+SSAuto.spec	Incluye chromedriver.exe como binary en el build
+chromedriver.exe	Copiado a la raíz del proyecto para empaquetar
+Instrucciones para reconstruir y desplegar
+# 1. Reconstruir el .exe (chromedriver.exe ya está en la raíz)
+python -m PyInstaller --clean SSAuto.spec
+
+# 2. Verificar que chromedriver.exe esté en dist/SSAuto/
+dir dist\SSAuto\chromedriver.exe
+
+# 3. Copiar dist/SSAuto/ a la otra PC
+
+# 4. En la otra PC:
+#    - Asegurarse de tener Google Chrome instalado
+#    - Colocar .env junto a SSAuto.exe
+#    - En CONFIGURACION, desactivar "Usar Chrome ya abierto" 
+#      (a menos que quieras abrir Chrome manualmente con debug)
+Importante: Si la versión de Chrome en la otra PC no coincide con chromedriver 149, Selenium mostrará un error claro de version mismatch. En ese caso, conecta la PC a internet una sola vez para que webdriver_manager descargue el driver correcto automáticamente.
+
+
+Lógica final de _obtener_chromedriver_path():
+1. Si ya está cacheado → devolverlo
+2. Intentar descargar la versión correcta (30s timeout)
+   └─ Con internet: siempre versión que coincide con Chrome ✓
+3. Si timeout/error (sin internet) y modo frozen:
+   └─ Usar chromedriver.exe empaquetado (offline)
+4. Si chromedriver empaquetado no coincide con Chrome:
+   └─ SessionNotCreatedException → forzar descarga con internet
+Resultado en la otra PC:
+- Con internet: descarga el driver correcto (~3 segundos)
+- Sin internet: usa el empaquetado (funciona si Chrome es v149)
+- Sin internet + Chrome v150: error claro pidiendo conexión
+- Nunca se cuelga: timeout de 30s máximo
+Reconstruye con python -m PyInstaller --clean SSAuto.spec y copia dist/SSAuto/ a la otra PC.
+
+Con todos los fixes aplicados, sí. Pero depende de 3 cosas en la otra PC:
+1. Google Chrome instalado — la app lo detecta en C:\Program Files\Google\Chrome\... o %LOCALAPPDATA%\Google\Chrome\...
+2. Conexión a internet — necesaria para las búsquedas de HubSpot (API), Sunrun (scraping), y para que webdriver_manager descargue el chromedriver correcto la primera vez
+3. .env junto al .exe — con el ACCESS_TOKEN válido
+Si la otra PC no tiene internet, el scraping y búsquedas no funcionarán (necesitan conectarse a HubSpot/Sunrun), pero al menos la app no se colgará — mostrará errores claros en el log en vez de quedarse enganchada.
+
+
+Build exitoso, sin errores nuevos. Resumen:
+dist/SSAuto/
+├── SSAuto.exe              ← ejecutable principal
+├── _internal/              ← módulos, DLLs, dependencias
+│   ├── chromedriver.exe    ✓ empaquetado (se encuentra via sys._MEIPASS)
+│   ├── customtkinter/      ✓ assets del tema
+│   ├── gsheets/            ✓ certificado Google incluido
+│   ├── PIL/, selenium/, playwright/, ...  ✓ todas las dependencias
+│   └── ...
+Warnings: solo los 5 esperados ya documentados en guide_pyinstaller.md (pycparser.lextab, pycparser.yacctab, tzdata, playwright._impl._api_types, keyring.backends.Windows.WinVaultKeyring). Ninguno afecta el funcionamiento.
+Tamaño: 403 MB, 1908 archivos.
+Para desplegar en la otra PC: copiar dist\SSAuto\ completa + poner .env junto a SSAuto.exe.
+
+
+276/276 tests pasan. Resumen de los 3 fixes para gsheets/:
+Archivo	Fix
+gsheets/data/sheets_api.py:78-81	Si el JSON de credenciales no existe en CWD, busca en _MEIPASS vía resource_path() — encuentra el JSON empaquetado
+gsheets/core/playwright_capture.py:193	channel="chrome" en launch_persistent_context() — usa el Chrome del sistema en vez del Chromium de Playwright (que no existe en otra PC)
+gsheets/core/playwright_capture.py:29-32 + ticket_capture_service.py:34-38	asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy()) — evita errores de event loop en frozen builds
+La otra PC ya no necesita playwright install chromium. Playwright usará el mismo Google Chrome que ya requiere la app.
+Reconstruye: python -m PyInstaller --clean SSAuto.spec
+
+276 tests pasan. El fix en plugins/hubspot.py:441-477 corrige dos bugs:
+1. _capturar_contexto_activo() — El bloque que resolvía el handle tras CDP fue reescrito:
+- Antes: tomaba driver.current_window_handle sin verificar, o en fallback devolvía cualquier handle con URL del CDP (mismatch)
+- Ahora: itera todos los handles, hace switch_to.window(), y verifica driver.current_url real antes de aceptar. También recupera tabs "fríos" (Runtime.enable).
+2. _validar_contexto_activo() — Ya no confía ciegamente en ctx["url"]:
+- Antes: si ctx["url"] contenía app.hubspot.com, retornaba sin tocar el driver
+- Ahora: verifica driver.current_url real + intenta switch_to.window(ctx["handle"]) antes de declarar válido
+La subida sin FSD ahora encuentra correctamente la pestaña HubSpot activa. Reconstruye: python -m PyInstaller --clean SSAuto.spec
+
+
+Auditamos y corregimos 15 bugs de compatibilidad con PyInstaller para que el .exe funcione en otra PC: arreglamos el medidor de región que abría otra instancia del programa (main.py + medidor_runner.py usando --medidor), la carga de .env que ahora busca junto al ejecutable (data/api.py), crashes por __file__ sin guard sys.frozen en utils/paths.py, gsheets/core/playwright_capture.py y gsheets/services/ticket_capture_service.py, rutas relativas screenshots/ y cookies/ que pasaron a usar get_writable_path() en core/captura.py, config/credenciales.py y services/session_manager.py, empaquetamos chromedriver.exe en el build con timeout de 30s y fallback offline (core/browser.py + SSAuto.spec), agregamos verificación de Chrome instalado (driver_provider.py), hicimos que gsheets use el Chrome del sistema con channel="chrome" para no requerir playwright install chromium, resolvimos el JSON de Service Account vía resource_path() (sheets_api.py), agregamos WindowsSelectorEventLoopPolicy para evitar errores de asyncio en frozen, y corregimos la subida a HubSpot sin FSD que fallaba por handles Selenium/CDP desincronizados (plugins/hubspot.py — _capturar_contexto_activo y _validar_contexto_activo).
+
+ES MEJOR CREAR UN INNO SETUP, PARA MANEJAR LAS ACTUALIZACIONES, CONFIGURACIONES, ARCHIVOS. LIBRERIAS Y DEPENDENCIAS, HAY QUE CAMBIAR VARIAS COSAS LA PRIMERA, QUE CUANDO LA SUBIDA SEA SOLO SUNRUN, QUE NO SALGA EL MODAL DE PLANTILLAS DE MENSAJES, YA QUE EN SUNRUN NO SE SUBEN MENSAJES O NOTAS, SEGUNDO HACER QUE EL NOMBRE DE LA CAPTURA SEA, EL NOMBRE QUE HAY EN EL FSD, LA FECHA DEL MISMO DIA Y EL TIPO DE CAPTURA (CORREO, B2CHAT O WOLKBOX)

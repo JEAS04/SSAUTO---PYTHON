@@ -1,0 +1,33 @@
+# Encoding: utf-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    # filevers y prodvers deben coincidir con StringStruct (ej: 1, 0, 0, 0)
+    filevers=(0, 1, 1, 0),
+    prodvers=(0, 1, 1, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,      # NT_WINDOWS32 (Funciona igual en 64 bits)
+    fileType=0x1,    # VFT_APP (Significa que es un ejecutable)
+    subtype=0x0,
+    date=(0, 0)
+    ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        '040904b0', # Idioma: Inglés (EE.UU.), Codificación: Unicode
+        [
+        StringStruct('CompanyName', 'PlanetSolar SAS'),
+        StringStruct('FileDescription', 'Herramienta de Automatización SSAuto'),
+        StringStruct('FileVersion', '0.1.1.0'),
+        StringStruct('InternalName', 'SSAuto'),
+        StringStruct('LegalCopyright', '© 2026 PlanetSolar SAS. Todos los derechos reservados.'),
+        StringStruct('OriginalFilename', 'SSAuto.exe'),
+        StringStruct('ProductName', 'SSAuto Suite'),
+        StringStruct('ProductVersion', '0.1.1.0'),
+        StringStruct('Assembly Version', '0.1.1.0')
+        ])
+      ]), 
+    VarFileInfo([VarStruct('Translation', [1033, 1200])]) # Mapeo de idioma oficial
+  ]
+)

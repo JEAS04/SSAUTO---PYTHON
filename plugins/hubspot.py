@@ -441,26 +441,40 @@ class HubSpotPlugin(SitioPlugin):
                     self._despertar_pestana_cdp(driver, t["targetId"], log)
                     time.sleep(0.5)
 
-                    try:
-                        handle_actual = driver.current_window_handle
-                        ctx = {
-                            "handle": handle_actual,
-                            "url": url,
-                            "title": title,
-                        }
-                        log(f"  ✓ [HubSpot] Contexto activo (CDP): {handle_actual}")
-                        return ctx
-                    except Exception as e:
-                        log(f"  · [HubSpot] No se pudo obtener handle actual: {e}")
-
                     for handle in driver.window_handles:
                         try:
                             driver.switch_to.window(handle)
-                            ctx = {"handle": handle, "url": url, "title": title}
-                            log(f"  ✓ [HubSpot] Contexto por fallback handle: {handle}")
-                            return ctx
-                        except Exception:
+                            time.sleep(0.2)
+                            url_actual = driver.current_url.lower()
+                            if self.dominio in url_actual:
+                                ctx = {
+                                    "handle": handle,
+                                    "url": driver.current_url,
+                                    "title": driver.title,
+                                }
+                                log(f"  ✓ [HubSpot] Contexto activo: {handle}")
+                                return ctx
+                        except Exception as e:
+                            if "no such execution context" in str(e).lower():
+                                try:
+                                    driver.execute_cdp_cmd("Runtime.enable", {})
+                                    time.sleep(0.3)
+                                    driver.switch_to.window(handle)
+                                    time.sleep(0.2)
+                                    url_actual = driver.current_url.lower()
+                                    if self.dominio in url_actual:
+                                        ctx = {
+                                            "handle": handle,
+                                            "url": driver.current_url,
+                                            "title": driver.title,
+                                        }
+                                        log(f"  ✓ [HubSpot] Contexto activo (wake): {handle}")
+                                        return ctx
+                                except Exception:
+                                    pass
                             continue
+
+                    log(f"  · [HubSpot] No se pudo hacer switch a la pestaña CDP.")
 
         except Exception as e:
             log(f"  · [HubSpot] CDP falló: {str(e)[:80]}")
@@ -486,7 +500,14 @@ class HubSpotPlugin(SitioPlugin):
         """
         url_conocida = ctx.get("url", "")
         if url_conocida and self.dominio in url_conocida:
-            return
+            try:
+                if self.dominio in driver.current_url.lower():
+                    return
+                driver.switch_to.window(ctx["handle"])
+                if self.dominio in driver.current_url.lower():
+                    return
+            except Exception:
+                pass
 
         for intento in range(3):
             try:

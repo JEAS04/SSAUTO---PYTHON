@@ -8,12 +8,11 @@ ni de subida de archivos.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Callable
 
 from core.base_plugin import SitioPlugin
 from core.browser import esperar_carga
-from config.credenciales import cargar_cookies, cargar_credenciales
+from config.credenciales import cargar_cookies, cargar_credenciales, _COOKIES_DIR
 
 
 class SessionManager:
@@ -49,7 +48,7 @@ class SessionManager:
             return
 
         # Chrome propio: intentar cookies primero, luego login
-        ruta_cookies = Path(f"cookies/{plugin.nombre}.pkl")
+        ruta_cookies = _COOKIES_DIR / f"{plugin.nombre}.pkl"
         if ruta_cookies.exists():
             log(f"  -> Restaurando sesion con cookies para {plugin.nombre}...")
             url_base = getattr(plugin, "URL_LOGIN", "")

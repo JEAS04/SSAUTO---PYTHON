@@ -13,13 +13,16 @@ Uso:
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Callable
 
 from selenium import webdriver
+from selenium.common.exceptions import SessionNotCreatedException
 from subprocess import Popen
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -39,15 +42,84 @@ _chrome_exe_cache: str | None = None
 
 # ── Cache de chromedriver (evita descargarlo dos veces) ────────────────
 _chromedriver_path: str | None = None
+_frozen_fallback: bool = False
+
+
+def _obtener_chromedriver_bundled() -> str | None:
+    """Busca chromedriver.exe empaquetado con el .exe (PyInstaller)."""
+    for base in (Path(sys.executable).parent, Path(sys._MEIPASS)):
+        candidato = base / "chromedriver.exe"
+        if candidato.exists():
+            return str(candidato)
+    return None
 
 
 def _obtener_chromedriver_path() -> str:
-    """Devuelve la ruta al chromedriver, descargandolo solo la primera vez."""
-    global _chromedriver_path
+    """Devuelve la ruta al chromedriver.
+
+    Prioridad:
+      1. Cache en memoria (si ya se obtuvo con exito).
+      2. Descargar version correcta via webdriver_manager (30s timeout).
+         Con internet, esto siempre da la version que coincide con Chrome.
+      3. Si no hay internet → fallback: chromedriver.exe empaquetado.
+         Sin internet, usa el que viene en el build.
+    """
+    global _chromedriver_path, _frozen_fallback
     if _chromedriver_path is not None and Path(_chromedriver_path).exists():
         return _chromedriver_path
-    _chromedriver_path = ChromeDriverManager().install()
-    return _chromedriver_path
+
+    # Intentar descargar la version correcta (con internet)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            futuro = ex.submit(ChromeDriverManager().install)
+            _chromedriver_path = futuro.result(timeout=30)
+        _frozen_fallback = False
+        return _chromedriver_path
+    except concurrent.futures.TimeoutError:
+        pass  # sin internet, probar fallback
+    except Exception:
+        pass  # error de red, probar fallback
+
+    # Fallback: chromedriver empaquetado (sin internet)
+    if getattr(sys, "frozen", False):
+        bundled = _obtener_chromedriver_bundled()
+        if bundled:
+            _chromedriver_path = bundled
+            _frozen_fallback = True
+            logger.warning("Usando chromedriver empaquetado (sin internet).")
+            return _chromedriver_path
+
+    raise ErrorBrowser(
+        "No se pudo obtener chromedriver — sin internet y no hay "
+        "chromedriver.exe junto al ejecutable."
+    )
+
+
+def _obtener_chromedriver_forzado() -> str:
+    """Fuerza la descarga de chromedriver, ignorando el cache.
+
+    Se usa cuando el chromedriver empaquetado no coincide con la
+    version de Chrome instalada (SessionNotCreatedException).
+    """
+    global _chromedriver_path, _frozen_fallback
+    _chromedriver_path = None
+    _frozen_fallback = False
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            futuro = ex.submit(ChromeDriverManager().install)
+            _chromedriver_path = futuro.result(timeout=30)
+        return _chromedriver_path
+    except concurrent.futures.TimeoutError:
+        raise ErrorBrowser(
+            "Timeout al descargar chromedriver — sin internet.\n"
+            "El chromedriver empaquetado no coincide con tu version de Chrome.\n"
+            "Conectate a internet o instala la version correcta de Chrome."
+        )
+    except Exception as e:
+        raise ErrorBrowser(
+            f"No se pudo descargar chromedriver: {e}\n"
+            "Verifica tu conexion a internet."
+        ) from e
 
 
 def obtener_chrome_exe() -> str | None:
@@ -119,12 +191,21 @@ class BrowserFactory:
         opciones.add_experimental_option("debuggerAddress", f"127.0.0.1:{puerto}")
 
         try:
-            driver = webdriver.Chrome(
-                service=Service(_obtener_chromedriver_path()),
-                options=opciones,
-            )
+            driver = cls._crear_driver(opciones)
             _inyectar_antideteccion(driver)
             logger.debug(f"Conectado al Chrome en puerto {puerto}.")
+            return driver
+        except SessionNotCreatedException as e:
+            if not _frozen_fallback:
+                raise ErrorBrowser(
+                    f"No se pudo conectar al Chrome en puerto {puerto}. "
+                    f"¿Está abierto con --remote-debugging-port={puerto}? Error: {e}"
+                ) from e
+            logger.warning(
+                "chromedriver empaquetado incompatible, descargando version correcta..."
+            )
+            driver = cls._crear_driver(opciones, forzar_descarga=True)
+            _inyectar_antideteccion(driver)
             return driver
         except Exception as e:
             raise ErrorBrowser(
@@ -149,14 +230,33 @@ class BrowserFactory:
             opciones.add_argument("--disable-gpu")
 
         try:
-            driver = webdriver.Chrome(
-                service=Service(_obtener_chromedriver_path()),
-                options=opciones,
+            driver = cls._crear_driver(opciones)
+            _inyectar_antideteccion(driver)
+            return driver
+        except SessionNotCreatedException as e:
+            if not _frozen_fallback:
+                raise ErrorBrowser(
+                    f"No se pudo abrir Chrome nuevo: {e}"
+                ) from e
+            # chromedriver empaquetado no coincide con Chrome → forzar descarga
+            logger.warning(
+                "chromedriver empaquetado incompatible, descargando version correcta..."
             )
+            driver = cls._crear_driver(opciones, forzar_descarga=True)
             _inyectar_antideteccion(driver)
             return driver
         except Exception as e:
             raise ErrorBrowser(f"No se pudo abrir Chrome nuevo: {e}") from e
+
+    @classmethod
+    def _crear_driver(
+        cls, opciones: webdriver.ChromeOptions, forzar_descarga: bool = False
+    ) -> webdriver.Chrome:
+        path = (
+            _obtener_chromedriver_forzado() if forzar_descarga
+            else _obtener_chromedriver_path()
+        )
+        return webdriver.Chrome(service=Service(path), options=opciones)
 
     @classmethod
     def crear(

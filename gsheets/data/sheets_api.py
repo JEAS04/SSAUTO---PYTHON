@@ -14,12 +14,15 @@ from __future__ import annotations
 
 import logging
 import os
+import sys as _sys
 from pathlib import Path
 from typing import Any
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from utils.paths import resource_path
 
 # ── Logger ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +75,11 @@ class GoogleSheetsClient:
             )
 
         self._credentials_path = Path(credentials_path)
+        if not self._credentials_path.exists() and not self._credentials_path.is_absolute():
+            alt = Path(resource_path(credentials_path))
+            if alt.exists():
+                self._credentials_path = alt
+
         self._service = self._build_service()
 
     # ── Inicialización del servicio ───────────────────────────────────────

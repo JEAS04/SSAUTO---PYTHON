@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys as _sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -30,9 +31,20 @@ from gsheets.utils.image_compositor import compose_ticket_image
 
 logger = logging.getLogger(__name__)
 
+# ── Event loop policy para Windows (evita errores en frozen builds) ──────────
+if _sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
+
 # ── Directorios por defecto ───────────────────────────────────────────────────
 
-_BASE_DIR = Path(__file__).resolve().parent.parent
+if getattr(_sys, "frozen", False):
+    from utils.paths import get_writable_path
+    _BASE_DIR = Path(get_writable_path("gsheets"))
+else:
+    _BASE_DIR = Path(__file__).resolve().parent.parent
 _SCREENSHOTS_DIR = _BASE_DIR / "screenshots"
 _SESSIONS_DIR = _BASE_DIR / "sessions"
 

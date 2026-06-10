@@ -7,6 +7,7 @@ NO contiene lógica de búsquedas múltiples.
 import logging
 import os
 import re
+import sys as _sys
 from dotenv import load_dotenv
 from hubspot import HubSpot
 from hubspot.crm.tickets import PublicObjectSearchRequest as TicketSearchRequest
@@ -47,7 +48,10 @@ from data.hubspot_constants import (
 
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+if getattr(_sys, "frozen", False):
+    load_dotenv(os.path.join(os.path.dirname(_sys.executable), ".env"))
+else:
+    load_dotenv()
 
 # =========================================================
 # Lazy singleton client

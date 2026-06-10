@@ -12,10 +12,9 @@ import pickle
 import keyring
 from pathlib import Path
 from config.configuracion import KEYRING_APP
-from utils.paths import get_project_root
+from utils.paths import get_writable_path
 
-# ── Directorio base del proyecto (independiente del working directory) ──
-_COOKIES_DIR = get_project_root() / "cookies"
+_COOKIES_DIR = Path(get_writable_path("cookies"))
 
 # ── Cookies de sesión ─────────────────────────────────────────────────
 

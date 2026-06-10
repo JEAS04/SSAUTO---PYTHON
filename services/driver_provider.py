@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from typing import Callable
 
-from core.browser import BrowserFactory, ErrorBrowser, puerto_activo
+from core.browser import (
+    BrowserFactory,
+    ErrorBrowser,
+    obtener_chrome_exe,
+    puerto_activo,
+)
 
 
 class DriverProvider:
@@ -42,14 +47,22 @@ class DriverProvider:
                   False si es el Chrome del usuario (no tocar).
 
         Raises:
-            RuntimeError: si se solicita Chrome existente pero el puerto 9222
-                no esta activo.
+            RuntimeError: si no se encuentra Chrome instalado o si se solicita
+                Chrome existente pero el puerto 9222 no esta activo.
         """
+        chrome_exe = obtener_chrome_exe()
+        if not chrome_exe:
+            raise RuntimeError(
+                "Google Chrome no encontrado en el sistema. "
+                "Instala Chrome desde https://www.google.com/chrome/"
+            )
+
         if usar_chrome_existente:
             if not puerto_activo():
                 raise RuntimeError(
                     "No hay Chrome con depuracion en puerto 9222. "
-                    "Abrelo desde el boton 'Abrir Chrome con depuracion'."
+                    "Abrelo desde el boton 'Abrir Chrome con depuracion' "
+                    "o desactiva 'Usar Chrome ya abierto' en CONFIGURACION."
                 )
             log("  -> Conectando al Chrome existente (puerto 9222)...")
             driver = BrowserFactory.conectar_existente()

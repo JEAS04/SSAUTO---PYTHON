@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys as _sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -23,10 +24,22 @@ from gsheets.utils.cell_parser import col_letter_to_index
 
 logger = logging.getLogger(__name__)
 
+# ── Event loop policy para Windows (evita errores en frozen builds) ──────────
+if _sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
+
 # ── Constantes ────────────────────────────────────────────────────────────────
 
-_SESSION_DIR = Path(__file__).resolve().parent.parent / "sessions"
-_SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / "screenshots"
+if getattr(_sys, "frozen", False):
+    from utils.paths import get_writable_path
+    _SESSION_DIR = Path(get_writable_path("gsheets/sessions"))
+    _SCREENSHOTS_DIR = Path(get_writable_path("gsheets/screenshots"))
+else:
+    _SESSION_DIR = Path(__file__).resolve().parent.parent / "sessions"
+    _SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / "screenshots"
 
 # Selectores de Google Sheets (con fallbacks)
 _GRID_SELECTORS = [
@@ -172,6 +185,7 @@ class PlaywrightSheetsCapture:
         context_options = {
             "headless": self._headless,
             "viewport": self._viewport,
+            "channel": "chrome",
             "user_agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "

@@ -12,6 +12,7 @@ Uso:
 
 from __future__ import annotations
 
+import sys as _sys
 from datetime import datetime
 from pathlib import Path
 from typing import Union
@@ -33,7 +34,11 @@ class CapturaService:
     Todos los métodos son de clase — no necesita instanciarse.
     """
 
-    CARPETA_CAPTURAS = Path("screenshots")
+    if getattr(_sys, "frozen", False):
+        from utils.paths import get_writable_path
+        CARPETA_CAPTURAS = Path(get_writable_path("screenshots"))
+    else:
+        CARPETA_CAPTURAS = Path("screenshots")
 
     # ── Captura principal ─────────────────────────────────────────────
 

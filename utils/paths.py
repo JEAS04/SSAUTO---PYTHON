@@ -35,6 +35,8 @@ def get_project_root() -> Path:
 
     Se basa en la ubicación de este mismo archivo (utils/paths.py).
     """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
 
