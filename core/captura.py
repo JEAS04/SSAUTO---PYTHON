@@ -48,6 +48,8 @@ class CapturaService:
         region: Union[dict, "RegionCaptura"],  # type: ignore[name-defined]
         carpeta: Path | None = None,
         monitor: int = 1,  # ← solo informativo, el medidor ya da coords absolutas
+        fsd: str | None = None,
+        tipo: str | None = None,
     ) -> str:
         """
         Toma una captura de la región indicada y la guarda en disco.
@@ -58,6 +60,9 @@ class CapturaService:
                   (el medidor ya las entrega así, no sumar offset de monitor).
         carpeta : dónde guardar. Por defecto: ./screenshots/
         monitor : índice del monitor (1=principal, 2=secundario, ...) — solo informativo.
+        fsd     : número FSD (ej. "FSD-980124") para incluir en el nombre del archivo.
+        tipo    : tipo de captura (ej. "Correo", "B2Chat", "Wolkbox") para incluir
+                  en el nombre del archivo.
 
         Devuelve
         --------
@@ -74,7 +79,19 @@ class CapturaService:
         destino.mkdir(parents=True, exist_ok=True)
 
         marca = datetime.now().strftime("%Y%m%d_%H%M%S")
-        ruta = destino / f"captura_{marca}.png"
+
+        partes = []
+        if fsd:
+            fsd_limpio = fsd.replace("FSD-", "").replace("FSD", "").strip()
+            partes.append(f"FSD-{fsd_limpio}")
+        else:
+            partes.append("captura")
+        partes.append(marca)
+        if tipo:
+            partes.append(tipo)
+
+        nombre = "_".join(partes) + ".png"
+        ruta = destino / nombre
 
         try:
             with mss.MSS() as sct:
@@ -118,7 +135,9 @@ class CapturaService:
         destino = carpeta or cls.CARPETA_CAPTURAS
         if not destino.exists():
             return []
-        return sorted(destino.glob("captura_*.png"), reverse=True)
+        archivos = list(destino.glob("captura_*.png"))
+        archivos.extend(destino.glob("FSD-*.png"))
+        return sorted(archivos, reverse=True)
 
     @classmethod
     def limpiar_antiguas(cls, mantener: int = 50, carpeta: Path | None = None) -> int:

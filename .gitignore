@@ -28,7 +28,10 @@ gsheets/*.json
 
 
 doms/
+config/_env.py
 config/*.bak
+logs/
 
+*.exe
 *.zip
 *.rar

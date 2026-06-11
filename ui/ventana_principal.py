@@ -28,6 +28,8 @@ from config.configuracion import (
     guardar_chrome_existente,
     cargar_destino_subida,
     guardar_destino_subida,
+    cargar_capture_delay,
+    guardar_capture_delay,
 )
 from core.captura import CapturaService, ErrorCaptura
 from core.plugin_registry import PluginRegistry
@@ -95,6 +97,10 @@ class App(CustomCTkFrame):
         self._proceso_en_curso = False  # anti-reentrada
         self._cancelado = threading.Event()  # cancelación del proceso principal
         self._fsd_detectado = None
+        self._ultima_ruta: str | None = None  # ultima captura para preview
+        self._rafaga_var: ctk.BooleanVar | None = None  # toggle modo ráfaga
+        self._rafaga_apps: dict[str, ctk.BooleanVar] = {}  # checkboxes vars por app
+        self._rafaga_checkboxes: dict[str, ctk.CTkCheckBox] = {}  # widget refs
         self._cola_imagenes: list[str] = (
             []
         )  # cola de capturas para HubSpot (auto_submit OFF)
@@ -387,6 +393,29 @@ class App(CustomCTkFrame):
             parent_pack_info={"fill": "x", "pady": (2, 4)},
         )
 
+        # ── Row 1.5: Modo ráfaga ──────────────────────────────────
+        self._row_rafaga = ctk.CTkFrame(padre, fg_color="transparent")
+        self._row_rafaga.pack(fill="x", pady=(0, 4))
+        self._rafaga_var = ctk.BooleanVar(value=False)
+        ctk.CTkSwitch(
+            self._row_rafaga,
+            text="Modo ráfaga (múltiples apps en secuencia)",
+            variable=self._rafaga_var,
+            font=ctk.CTkFont(size=11),
+            command=self._toggle_rafaga,
+        ).pack(side="left")
+        self._btn_rafaga = ctk.CTkButton(
+            self._row_rafaga,
+            text="  Capturar ráfaga",
+            command=self._ejecutar_rafaga,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            height=34,
+            fg_color=("#a05a00", "#d29922"),
+            hover_color=("#8a4e00", "#b0881a"),
+        )
+        self._btn_rafaga.pack(side="right")
+        self._btn_rafaga.pack_forget()
+
         # ── Row 2: Medir | Capturar y subir | Detener ────────────
         self._row_botones = ctk.CTkFrame(padre, fg_color="transparent")
         self._row_botones.pack(fill="x")
@@ -493,6 +522,47 @@ class App(CustomCTkFrame):
 
         self._frame_cola.pack_forget()
 
+        # ── Row 4: Previsualizacion ultima captura ──────────────────────
+        self._frame_preview = ctk.CTkFrame(padre, fg_color="transparent")
+        self._preview_image: ctk.CTkImage | None = None
+
+        self._preview_label = ctk.CTkLabel(
+            self._frame_preview,
+            text="",
+            width=200,
+            height=100,
+        )
+        self._preview_label.pack(side="left", padx=(0, 8))
+
+        self._preview_info = ctk.CTkFrame(
+            self._frame_preview, fg_color="transparent"
+        )
+        self._preview_info.pack(side="left", fill="both", expand=True)
+        self._preview_path_label = ctk.CTkLabel(
+            self._preview_info,
+            text="",
+            font=ctk.CTkFont(size=10),
+            text_color=("gray50", "gray50"),
+            wraplength=300,
+            anchor="w",
+            justify="left",
+        )
+        self._preview_path_label.pack(anchor="w")
+
+        self._btn_copiar_ruta = ctk.CTkButton(
+            self._preview_info,
+            text="Copiar ruta",
+            font=ctk.CTkFont(size=10),
+            width=80,
+            height=24,
+            fg_color=("gray70", "gray35"),
+            hover_color=("gray60", "gray45"),
+            command=self._copiar_ultima_ruta,
+        )
+        self._btn_copiar_ruta.pack(anchor="w", pady=(4, 0))
+
+        self._frame_preview.pack_forget()
+
     # ── Widget callbacks ─────────────────────────────────────────────
 
     def _on_monitor_change(self, *_):
@@ -503,8 +573,15 @@ class App(CustomCTkFrame):
         guardar_config(cfg)
 
     def _on_coords_change(self):
-        """Sincroniza el campo 'Pegar region' cuando cambian las coordenadas."""
+        """Sincroniza el campo 'Pegar region' y auto-guarda perfil si hay uno activo."""
         self._profile_widget.sincronizar_paste()
+        nombre = self._profile_widget._perfil_var.get().strip()
+        if nombre and nombre != "(sin perfiles)":
+            try:
+                region = self._obtener_region_validada()
+                self._on_guardar_perfil(nombre, region)
+            except ValueError:
+                pass  # coords incompletas, no guardar
 
     def _on_cargar_perfil(self, nombre, region):
         """Callback al cargar un perfil guardado desde el ProfileManagerWidget.
@@ -693,6 +770,14 @@ class App(CustomCTkFrame):
             height=28,
             width=110,
         ).pack(side="right")
+        ctk.CTkButton(
+            hc,
+            text="Convertir a debug",
+            command=self._convertir_chrome_a_debug,
+            font=ctk.CTkFont(size=10),
+            height=28,
+            width=120,
+        ).pack(side="right", padx=(0, 4))
 
         self.auto_submit_var = ctk.BooleanVar(value=cargar_auto_submit())
         self.auto_submit_var.trace_add(
@@ -708,6 +793,44 @@ class App(CustomCTkFrame):
             variable=self.auto_submit_var,
             font=ctk.CTkFont(size=11),
         ).pack(anchor="w", pady=2)
+
+        # ── Retraso antes de capturar ────────────────────────────────
+        self.delay_var = ctk.DoubleVar(value=cargar_capture_delay())
+        self.delay_var.trace_add(
+            "write",
+            lambda *_: guardar_capture_delay(self.delay_var.get()),
+        )
+        delay_row = ctk.CTkFrame(i0, fg_color="transparent")
+        delay_row.pack(fill="x", pady=2)
+        ctk.CTkLabel(
+            delay_row,
+            text="Retraso antes de capturar:",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray60"),
+        ).pack(side="left", padx=(0, 8))
+        self.delay_slider = ctk.CTkSlider(
+            delay_row,
+            from_=0,
+            to=3,
+            number_of_steps=12,
+            variable=self.delay_var,
+            width=140,
+        )
+        self.delay_slider.pack(side="left", padx=(0, 8))
+        self.delay_label = ctk.CTkLabel(
+            delay_row,
+            text=f"{self.delay_var.get():.1f}s",
+            font=ctk.CTkFont(size=11),
+            text_color=("gray40", "gray60"),
+            width=36,
+        )
+        self.delay_label.pack(side="left")
+        self.delay_var.trace_add(
+            "write",
+            lambda *_: self.delay_label.configure(
+                text=f"{self.delay_var.get():.1f}s"
+            ),
+        )
 
         # ── Col 1: Herramientas ────────────────────────────────────
         g1, i1 = self._tarjeta(cont, "Herramientas")
@@ -933,6 +1056,22 @@ class App(CustomCTkFrame):
             dropdown_monitor.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
             if not es_calendar:
+                cb_var = ctk.BooleanVar(value=False)
+                self._rafaga_apps[nombre] = cb_var
+                cb = ctk.CTkCheckBox(
+                    bot_row,
+                    text="",
+                    variable=cb_var,
+                    width=22,
+                    height=22,
+                    checkbox_width=18,
+                    checkbox_height=18,
+                    border_width=1,
+                )
+                cb.pack(side="left", padx=(0, 4))
+                cb.pack_forget()  # oculto hasta activar ráfaga
+                self._rafaga_checkboxes[nombre] = cb
+
                 ctk.CTkButton(
                     bot_row,
                     text="⚙",
@@ -946,6 +1085,151 @@ class App(CustomCTkFrame):
                 ).pack(side="right")
 
     # ── Lanzador de app ───────────────────────────────────────────────
+
+    def _toggle_rafaga(self):
+        """Muestra u oculta checkboxes en apps y el boton de rafaga."""
+        activo = self._rafaga_var.get()
+        if activo:
+            self._btn_rafaga.pack(side="right")
+            self._log("✓ Modo ráfaga activado. Seleccioná las apps y hacé clic en 'Capturar ráfaga'.")
+        else:
+            self._btn_rafaga.pack_forget()
+            self._log("✓ Modo ráfaga desactivado.")
+        for nombre, cb in self._rafaga_checkboxes.items():
+            cb.pack(side="left", padx=(0, 4)) if activo else cb.pack_forget()
+
+    # ── Lanzador de app ───────────────────────────────────────────────
+
+    def _ejecutar_rafaga(self):
+        """Lanza la captura en rafaga de las apps seleccionadas."""
+        if self._proceso_en_curso:
+            self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
+            return
+
+        seleccionadas = [
+            app for app in APPS_CAPTURA
+            if app["nombre"] != "Calendar"
+            and self._rafaga_apps.get(app["nombre"], ctk.BooleanVar(value=False)).get()
+        ]
+        if not seleccionadas:
+            self._log("✗ Seleccioná al menos una app para la ráfaga.")
+            return
+
+        self._proceso_en_curso = True
+        self._cancelado.clear()
+        self.btn.configure(state="disabled")
+        self.btn_detener.configure(state="normal")
+        self._btn_rafaga.configure(state="disabled")
+        for btn in self._btns_apps.values():
+            btn.configure(state="disabled")
+        self.fsd_btn_buscar.configure(state="disabled")
+        self._set_status("Ejecutando ráfaga...")
+        self.log_texto.clear()
+
+        nombres = ", ".join(a["nombre"] for a in seleccionadas)
+        mensaje = self._abrir_modal_mensaje(f"Capturar ráfaga ({nombres})")
+        if mensaje is None:
+            self._proceso_en_curso = False
+            self.btn.configure(state="normal")
+            self.btn_detener.configure(state="disabled")
+            self._btn_rafaga.configure(state="normal")
+            self._rehabilitar_btns_apps()
+            self._set_status("Listo")
+            return
+        self._mensaje_nota = mensaje
+
+        self._label_estado_app.configure(
+            text=f"  ▶  Ráfaga: {nombres}…"
+        )
+
+        threading.Thread(
+            target=self._proceso_rafaga,
+            args=(seleccionadas,),
+            daemon=True,
+        ).start()
+
+    def _proceso_rafaga(self, apps: list):
+        """Ejecuta captura y subida en rafaga para las apps seleccionadas (hilo)."""
+        def ui(msg):
+            self.after(0, lambda m=msg: self._log(m))
+
+        rutas: list[str] = []
+        try:
+            self.after(0, self.iconify_window)
+            time.sleep(0.4)
+
+            fsd_base = self._detectar_fsd_de_chrome()
+            if fsd_base:
+                self._fsd_detectado = fsd_base
+                ui(f"→ FSD detectado: {fsd_base}")
+
+            for i, app in enumerate(apps):
+                if self._cancelado.is_set():
+                    ui("⚠ Ráfaga cancelada.")
+                    break
+
+                nombre = app["nombre"]
+                region = self._regiones_apps.get(nombre, app["region"])
+                monitor_idx = self._obtener_monitor_app(app)
+                prefix = f"[{nombre}] "
+
+                delay = self.delay_var.get()
+                if i > 0 and delay > 0:
+                    ui(f"{prefix}Esperando {delay:.1f}s para cambiar de ventana…")
+                    self.after(0, lambda a=app: self._label_estado_app.configure(
+                        text=f"  ▶  Ráfaga {i+1}/{len(apps)}: {a['nombre']} — cambiá de ventana…"
+                    ))
+                    time.sleep(delay)
+
+                ui(f"{prefix}Capturando {region['width']}×{region['height']} px…")
+                self.after(0, lambda a=app, idx=i: self._label_estado_app.configure(
+                    text=f"  ▶  Ráfaga {idx+1}/{len(apps)}: {a['nombre']}…"
+                ))
+
+                ruta = CapturaService.capturar(
+                    region, monitor=monitor_idx,
+                    fsd=(self._obtener_fsd_actual() or self._fsd_detectado),
+                    tipo=nombre,
+                )
+                rutas.append(ruta)
+                ui(f"✓ {prefix}Imagen guardada: {ruta}")
+                self.after(0, lambda r=ruta: self._mostrar_preview(r))
+
+            if not self._cancelado.is_set() and rutas:
+                for ruta in rutas:
+                    if self._cancelado.is_set():
+                        break
+                    ui("")
+                    self._subir_a_destinos(ruta, ui, f"[Ráfaga] ")
+
+            ahora = datetime.now().strftime("%H:%M:%S")
+            n = len(rutas)
+            if n:
+                self.after(0, self._notificar_fin)
+                self.after(0, lambda: self._label_ultimo_proceso.configure(
+                    text=f"Último proceso: ráfaga {n} apps {ahora}"
+                ))
+                self.after(0, lambda: self._label_estado_app.configure(
+                    text=f"  ✓ Ráfaga completada: {n} capturas a las {ahora}"
+                ))
+
+        except ErrorCaptura as e:
+            self.after(0, lambda err=e: self._log(f"✗ [Ráfaga] Error de captura: {err}"))
+            self.after(0, lambda: self._set_status("Error"))
+        except Exception as e:
+            self.after(0, lambda err=e: self._log(f"✗ [Ráfaga] Error: {err}"))
+            self.after(0, lambda: self._set_status("Error"))
+        finally:
+            self._proceso_en_curso = False
+            self._cancelado.clear()
+            self.after(0, self.deiconify_window)
+            self.after(0, lambda: self.btn.configure(state="normal"))
+            self.after(0, lambda: self.btn_detener.configure(state="disabled"))
+            self.after(0, lambda: self._btn_rafaga.configure(state="normal"))
+            self.after(0, self._rehabilitar_btns_apps)
+            self.after(0, self._actualizar_sitios_status)
+            if not self._cancelado.is_set() and rutas:
+                self.after(0, lambda: self._set_status("Completado"))
 
     def _ejecutar_app(self, app: dict):
         """Lanza la captura y subida para una aplicacion especifica en un hilo.
@@ -1206,6 +1490,7 @@ class App(CustomCTkFrame):
                     ),
                 )
                 self.after(0, lambda: self._set_status("Completado"))
+                self.after(0, self._notificar_fin)
                 self.after(0, self._actualizar_sitios_status)
             except Exception as e:
                 self.after(0, lambda: self._log(f"✗ Error subiendo cola: {e}"))
@@ -1242,14 +1527,25 @@ class App(CustomCTkFrame):
             self.after(0, self.iconify_window)
             time.sleep(0.4)
 
-            ruta = CapturaService.capturar(region, monitor=monitor_idx)
+            delay = self.delay_var.get()
+            if delay > 0:
+                time.sleep(delay)
+
+            fsd_app = self._detectar_fsd_de_chrome()
+            if fsd_app:
+                self._fsd_detectado = fsd_app
+                ui(f"{prefix}FSD detectado: {fsd_app}")
+
+            ruta = CapturaService.capturar(region, monitor=monitor_idx, fsd=(self._obtener_fsd_actual() or self._fsd_detectado), tipo=nombre)
             ui(f"✓ {prefix}Imagen guardada: {ruta}")
+            self.after(0, lambda r=ruta: self._mostrar_preview(r))
             ui("")
 
             self._subir_a_destinos(ruta, ui, prefix)
 
             ui(f"✓ {prefix}Proceso completado.")
             self.after(0, lambda: self._set_status("Completado"))
+            self.after(0, self._notificar_fin)
             ahora = datetime.now().strftime("%H:%M:%S")
             self.after(
                 0,
@@ -1308,6 +1604,10 @@ class App(CustomCTkFrame):
         Returns:
             str con el mensaje seleccionado, o None si el usuario cancela.
         """
+        destino = self.destino_var.get()
+        if destino == "SUNRUN":
+            return ""
+
         resultado = [None]  # mutable para capturar desde closure
 
         modal = ctk.CTkToplevel(self)
@@ -1940,6 +2240,7 @@ class App(CustomCTkFrame):
 
                 ui(f"{prefix}✓ Proceso completado.")
                 self.after(0, lambda: self._set_status("Completado"))
+                self.after(0, self._notificar_fin)
                 ahora = datetime.now().strftime("%H:%M:%S")
                 self.after(
                     0,
@@ -2328,6 +2629,42 @@ class App(CustomCTkFrame):
                 fila, text=f"  {estado}  ", font=ctk.CTkFont(size=10), text_color=color
             ).pack(side="right", padx=10, pady=6)
 
+    # ── Preview / Copiar ruta ─────────────────────────────────────────
+
+    def _mostrar_preview(self, ruta: str):
+        """Muestra thumbnail y ruta de la ultima captura en el panel."""
+        self._ultima_ruta = ruta
+        self._preview_path_label.configure(text=Path(ruta).name)
+
+        try:
+            from PIL import Image
+            img = Image.open(ruta)
+            img.thumbnail((200, 100), Image.NEAREST)
+            ctk_img = ctk.CTkImage(light_image=img, size=img.size)
+            self._preview_label.configure(image=ctk_img, text="")
+            self._preview_image = ctk_img  # mantener referencia viva
+        except Exception:
+            self._preview_label.configure(image=None, text="(sin vista previa)")
+
+        self._frame_preview.pack(fill="x", pady=(10, 0))
+
+    def _copiar_ultima_ruta(self):
+        """Copia la ruta de la ultima captura al portapapeles."""
+        if self._ultima_ruta:
+            self.clipboard_clear()
+            self.clipboard_append(self._ultima_ruta)
+            self._log(f"✓ Ruta copiada: {self._ultima_ruta}")
+        else:
+            self._log("✗ No hay captura para copiar.")
+
+    def _notificar_fin(self):
+        """Reproduce un sonido del sistema al completar una subida."""
+        try:
+            import winsound
+            winsound.PlaySound("SystemAsterisk", winsound.SND_ALIAS)
+        except Exception:
+            pass
+
     # ── Log ───────────────────────────────────────────────────────────
 
     def _log(self, msg: str):
@@ -2538,9 +2875,64 @@ class App(CustomCTkFrame):
                 chrome_exe,
                 "--remote-debugging-port=9222",
                 f"--user-data-dir={CHROME_USER_DATA}",
+                "--disable-background-mode",
+                "--disable-popup-blocking",
+                "--no-first-run",
+                "--no-default-browser-check",
             ]
         )
         self._log("✓ Chrome abierto con depuración en puerto 9222.")
+
+    def _convertir_chrome_a_debug(self):
+        """Cierra Chrome y lo relanza con --remote-debugging-port=9222.
+
+        Detecta el perfil del Chrome actual (via psutil), cierra todos los
+        procesos chrome.exe, y relanza con el mismo perfil + restore-last-session
+        para mantener pestañas y sesiones.
+        """
+        from core.browser import (
+            puerto_activo,
+            obtener_chrome_user_data_dir,
+            detectar_perfil_activo,
+            obtener_chrome_exe_desde_proceso,
+            cerrar_chrome,
+            abrir_chrome_debug_con_perfil,
+        )
+
+        if puerto_activo():
+            self._log("✓ Chrome con depuración ya está activo en el puerto 9222.")
+            return
+
+        self._log("→ Detectando perfil de Chrome actual…")
+        user_data = obtener_chrome_user_data_dir()
+        if not user_data:
+            self._log("✗ No se pudo detectar el perfil. ¿Tenés psutil instalado?")
+            return
+        profile = detectar_perfil_activo(user_data)
+        chrome_exe = obtener_chrome_exe_desde_proceso()
+        self._log(f"  User data: {user_data}")
+        self._log(f"  Perfil activo: {profile}")
+        if chrome_exe:
+            self._log(f"  Ejecutable: {chrome_exe}")
+
+        self._log("→ Cerrando Chrome…")
+        if not cerrar_chrome(log=self._log):
+            self._log("✗ No se pudo cerrar Chrome completamente.")
+            self._log("  Cerrá Chrome manualmente y probá de nuevo.")
+            self._log("  Si sigue fallando, reiniciá la PC.")
+            return
+        self._log("  Chrome cerrado.")
+
+        self._log("→ Relanzando Chrome con depuración…")
+        if abrir_chrome_debug_con_perfil(
+            user_data, profile_dir=profile, chrome_exe=chrome_exe,
+            log=self._log,
+        ):
+            self._log("✓ Chrome relanzado con depuración en puerto 9222.")
+            self._log("  Las pestañas y sesiones deberían restaurarse.")
+        else:
+            self._log("✗ No se pudo lanzar Chrome con depuración.")
+            self._log("  Verificá que Chrome esté instalado y probá de nuevo.")
 
     # ── Keybind ───────────────────────────────────────────────────────
 
@@ -2673,12 +3065,17 @@ class App(CustomCTkFrame):
             self.after(0, self.iconify_window)
             time.sleep(0.4)
 
+            delay = self.delay_var.get()
+            if delay > 0:
+                time.sleep(delay)
+
             self._fsd_detectado = self._detectar_fsd_de_chrome()
             if self._fsd_detectado:
                 ui(f"→ FSD detectado automáticamente: {self._fsd_detectado}")
 
-            ruta = CapturaService.capturar(region, monitor=monitor_idx)
+            ruta = CapturaService.capturar(region, monitor=monitor_idx, fsd=self._fsd_detectado)
             ui(f"✓ Imagen guardada: {ruta}")
+            self.after(0, lambda r=ruta: self._mostrar_preview(r))
             ui("")
 
             if self._cancelado.is_set():
@@ -2695,6 +3092,7 @@ class App(CustomCTkFrame):
 
             ui("✓ Proceso completado.")
             self.after(0, lambda: self._set_status("Completado"))
+            self.after(0, self._notificar_fin)
             ahora = datetime.now().strftime("%H:%M:%S")
             self.after(
                 0,

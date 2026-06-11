@@ -16,7 +16,6 @@ dist/SSAuto/                    ← carpeta de distribucion (onedir)
     customtkinter/             ← assets del tema
     gsheets/                   ← certificado de Google service account
     ...
-  .env                         ← (colocar aqui manualmente)
   config/                      ← (generada en runtime)
   screenshots/                 ← (generada en runtime)
   cookies/                     ← (generada en runtime)
@@ -27,6 +26,10 @@ dist/SSAuto/                    ← carpeta de distribucion (onedir)
 
 ```bash
 # Desde la raiz del proyecto:
+
+# 1. Editar config/_env.py con los valores reales (ACCESS_TOKEN, etc.)
+
+# 2. Buildear:
 python -m PyInstaller SSAuto.spec
 ```
 
@@ -36,19 +39,22 @@ El build se genera en `dist/SSAuto/`. El ejecutable es `dist/SSAuto/SSAuto.exe`.
 
 | Archivo | Requerido | Descripcion |
 |---------|-----------|-------------|
-| `.env` | Si | Contiene `ACCESS_TOKEN`, `GOOGLE_SERVICE_ACCOUNT_PATH`, `SHEETS_SPREADSHEET_ID` |
-| Google service account JSON | Si usas gsheets | El archivo indicado en `GOOGLE_SERVICE_ACCOUNT_PATH` del .env |
+| Google service account JSON | Si usas gsheets | El archivo indicado en `GOOGLE_SERVICE_ACCOUNT_PATH` dentro de `config/_env.py`. En el build, el JSON debe estar en el path especificado (relativo a la carpeta del .exe) o empaquetado via `datas` en el `.spec`. |
 | `config/plantillas.json` | No (opcional) | Si quieres pre-cargar plantillas de mensajes personalizadas |
 
-El `.env` debe copiarse manualmente a la carpeta `dist/SSAuto/` (junto al .exe).
+> **Nota:** El `.env` ya NO se copia manualmente. Las variables de entorno estan compiladas dentro de `config/_env.py` en el PYZ (bytecode).
 
 ## Requisitos en la maquina destino
 
 | Dependencia | Como se obtiene |
 |-------------|----------------|
-| Google Chrome | Instalado en `C:\Program Files\Google\Chrome\Application\chrome.exe` u otras rutas comunes |
-| ChromeDriver | Lo descarga automaticamente `webdriver-manager` en la primera ejecucion (requiere internet) |
-| Playwright browsers | Ejecutar `playwright install chromium` una vez en la maquina destino |
+| Google Chrome | Instalado en `%ProgramFiles%\Google\Chrome\Application\chrome.exe`, `%ProgramFiles(x86)%`, o `%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe` |
+| ChromeDriver | Lo descarga automaticamente `webdriver-manager` en la primera ejecucion (requiere internet). Sin internet, copiar `chromedriver.exe` junto a `SSAuto.exe` |
+| Conexion a internet | Solo la primera ejecucion (para descargar ChromeDriver). Ejecuciones posteriores usan el cache en `%USERPROFILE%\.wdm\` |
+
+> **Nota sobre ChromeDriver offline:** Si la maquina destino no tiene internet, coloca un `chromedriver.exe` compatible con la version de Chrome instalada en la misma carpeta que `SSAuto.exe`. El codigo lo detecta automaticamente.
+
+> **Datos de sesion de Chrome:** La app usa `%LOCALAPPDATA%\chrome_sesion_ssauto\` como perfil de usuario de Chrome para mantener sesiones iniciadas.
 
 ## Como funciona el build
 
@@ -109,7 +115,7 @@ Verificar que el `.spec` tenga `collect_data_files("customtkinter")` y `collect_
 
 ### Error "ACCESS_TOKEN no configurado"
 
-Colocar el archivo `.env` en la misma carpeta que `SSAuto.exe`.
+Verificar que `config/_env.py` contenga `ACCESS_TOKEN` con el valor real antes de buildear.
 
 ### Error al guardar configuracion
 

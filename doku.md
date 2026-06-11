@@ -2533,4 +2533,503 @@ La subida sin FSD ahora encuentra correctamente la pestaña HubSpot activa. Reco
 
 Auditamos y corregimos 15 bugs de compatibilidad con PyInstaller para que el .exe funcione en otra PC: arreglamos el medidor de región que abría otra instancia del programa (main.py + medidor_runner.py usando --medidor), la carga de .env que ahora busca junto al ejecutable (data/api.py), crashes por __file__ sin guard sys.frozen en utils/paths.py, gsheets/core/playwright_capture.py y gsheets/services/ticket_capture_service.py, rutas relativas screenshots/ y cookies/ que pasaron a usar get_writable_path() en core/captura.py, config/credenciales.py y services/session_manager.py, empaquetamos chromedriver.exe en el build con timeout de 30s y fallback offline (core/browser.py + SSAuto.spec), agregamos verificación de Chrome instalado (driver_provider.py), hicimos que gsheets use el Chrome del sistema con channel="chrome" para no requerir playwright install chromium, resolvimos el JSON de Service Account vía resource_path() (sheets_api.py), agregamos WindowsSelectorEventLoopPolicy para evitar errores de asyncio en frozen, y corregimos la subida a HubSpot sin FSD que fallaba por handles Selenium/CDP desincronizados (plugins/hubspot.py — _capturar_contexto_activo y _validar_contexto_activo).
 
-ES MEJOR CREAR UN INNO SETUP, PARA MANEJAR LAS ACTUALIZACIONES, CONFIGURACIONES, ARCHIVOS. LIBRERIAS Y DEPENDENCIAS, HAY QUE CAMBIAR VARIAS COSAS LA PRIMERA, QUE CUANDO LA SUBIDA SEA SOLO SUNRUN, QUE NO SALGA EL MODAL DE PLANTILLAS DE MENSAJES, YA QUE EN SUNRUN NO SE SUBEN MENSAJES O NOTAS, SEGUNDO HACER QUE EL NOMBRE DE LA CAPTURA SEA, EL NOMBRE QUE HAY EN EL FSD, LA FECHA DEL MISMO DIA Y EL TIPO DE CAPTURA (CORREO, B2CHAT O WOLKBOX)
+ES MEJOR CREAR UN INNO SETUP, PARA MANEJAR LAS ACTUALIZACIONES, CONFIGURACIONES, ARCHIVOS. LIBRERIAS Y DEPENDENCIAS, HAY QUE CAMBIAR VARIAS COSAS LA PRIMERA, QUE CUANDO LA SUBIDA SEA SOLO SUNRUN, QUE NO SALGA EL MODAL DE PLANTILLAS DE MENSAJES, YA QUE EN SUNRUN NO SE SUBEN MENSAJES O NOTAS, SI ES EN AMBOS QUE CONTINUE EL FLUJO COMO AHORA, SEGUNDO HACER QUE EL NOMBRE DE LA CAPTURA SEA, EL NOMBRE QUE HAY EN EL FSD, LA FECHA DEL MISMO DIA Y EL TIPO DE CAPTURA (CORREO, B2CHAT O WOLKBOX)
+
+
+
+11/06/2026
+
+Sintaxis ok. El cambio fue hecho.
+Que cambio: ui/ventana_principal.py:1311-1313 — _abrir_modal_mensaje ahora devuelve "" inmediatamenet cuando el destino seleccionado is "SUNRUN" evita el modal enteramente. Para "HUBSPOT" o "AMBOS", el modal aparece como antes.
+
+Respecto a AMBOS: Lo que asumiste es correcto - el mensaje siempre se baja a ambos plugin via opciones in _subir_a_destinos(), pero el metodo subir() de Sunrun (plugins/sunrun.py:254) ignora mensaje_nota completamente (el solo maneja subida de archivos). Entonces el mensaje solo llega a Hubspor incluso cuando ambos destinos estan seleccionados. Sin cambios necesitados aqui.
+
+- core/captura.py:76-77: capturas se nombran captura_20260611_143025.png (prefijo fijo + timestamp)
+- Las apps de captura están definidas en config/apps_captura.py: Wolkbox, B2Chat, Correo, Calendar, App 5, App 6
+- El FSD se obtiene de 2 fuentes: self._obtener_fsd_actual() (campo manual) o self._fsd_detectado (detección automática desde título de Chrome)
+- En _proceso_app (captura por app) no se detecta FSD automáticamente, solo está disponible vía el campo manual
+Plan propuesto
+1. core/captura.py — añadir parámetros fsd y tipo
+@classmethod
+def capturar(cls, region, carpeta=None, monitor=1, 
+             fsd: str | None = None, tipo: str | None = None) -> str:
+Lógica del nombre:
+- Con FSD + tipo: FSD-980124_20260611_143025_Correo.png
+- Con FSD, sin tipo: FSD-980124_20260611_143025.png
+- Sin FSD + tipo: captura_20260611_143025_Correo.png
+- Sin nada: captura_20260611_143025.png (comportamiento actual, backward-compatible)
+2. ui/ventana_principal.py — call sites
+Call site	FSD	tipo
+_proceso (botón principal)	self._fsd_detectado	None (sin tipo)
+_proceso_app (per-app)	self._obtener_fsd_actual() or self._fsd_detectado	app["nombre"]
+_ejecutar_captura_calendar	N/A (usa otro servicio)	"Calendar" (requiere cambiar TicketCaptureConfig)
+Antes de implementar, dos preguntas:
+1. Duplicados: si se captura el mismo FSD + mismo tipo + mismo día varias veces, los archivos se sobrescribirían. ¿Incluyo la hora (_143025) como en el ejemplo de arriba, o preferís solo fecha (_2026-06-11) y que se sobrescriba?
+2. Botón principal ("Capturar y subir"): ese no tiene tipo de app asociado. ¿Querés que su captura también tenga el formato FSD-fecha (sin tipo), o dejarlo como está?
+
+Resumen de cambios
+core/captura.py
+- capturar() ahora acepta fsd: str | None = None y tipo: str | None = None
+- Nombre generado: FSD-980124_20260611_143025_Correo.png cuando hay FSD y tipo, o captura_20260611_143025.png (formato anterior) cuando no
+ui/ventana_principal.py
+- Botón principal (_proceso): pasa fsd=self._fsd_detectado (detectado automáticamente de Chrome)
+- Botones de apps (_proceso_app): pasa fsd=(campo manual o detectado) + tipo=nombre (Correo, B2Chat, Wolkbox, etc.)
+Ejemplos de nombres resultantes:
+Escenario	Nombre
+App Correo con FSD-980124	FSD-980124_20260611_143025_Correo.png
+App B2Chat con FSD-980124	FSD-980124_20260611_143025_B2Chat.png
+App Wolkbox con FSD-980124	FSD-980124_20260611_143025_Wolkbox.png
+Botón principal con FSD	FSD-980124_20260611_143025.png
+Sin FSD, sin tipo	captura_20260611_143025.png (backward-compatible)
+
+Con el código actual, cuando no hay FSD pero sí hay tipo, el resultado es:
+captura_20260611_143025_Correo.png
+La lógica es:
+if fsd:
+    partes.append(f"FSD-{fsd_limpio}")
+else:
+    partes.append("captura")    # ← fallback sin FSD
+partes.append(marca)            # ← fecha+hora siempre
+if tipo:
+    partes.append(tipo)          # ← tipo si existe
+Queda cubierto. Ejemplos de todos los casos:
+FSD	Tipo	Nombre
+FSD-980124	Correo	FSD-980124_20260611_143025_Correo.png
+FSD-980124	—	FSD-980124_20260611_143025.png
+—	Correo	captura_20260611_143025_Correo.png
+—	—	captura_20260611_143025.png
+¿Querés ajustar algo de ese comportamiento o te parece bien así?
+
+
+Plan para proteger el .env en el ejecutable
+Tenés razón: dejar el .env como archivo plano al lado del .exe es inseguro. Aunque se empaquete como data file, sigue siendo texto plano en _internal/. La forma correcta con PyInstaller es:
+Problema actual
+dist/SSAuto/
+  SSAuto.exe
+  .env          ← ACCESS_TOKEN en texto plano, legible por cualquiera
+Solución propuesta (3 pasos)
+1. Crear config/_env.py (gitignored) con los secretos como constantes
+# config/_env.py — NO COMMITEAR
+ACCESS_TOKEN = "pat-na1-xxxxx"
+GOOGLE_SERVICE_ACCOUNT_PATH = "gsheets/trusty-courage-...json"
+SHEETS_SPREADSHEET_ID = "1AbCdEfGhIjKlMnOp..."
+Al estar en un .py, PyInstaller lo compila a .pyc y lo empaqueta en el PYZ (archivo comprimido de bytecode), no como texto plano suelto.
+2. Modificar data/api.py y ui/ventana_principal.py para usar el módulo en modo frozen
+# data/api.py
+if getattr(sys, "frozen", False):
+    from config._env import ACCESS_TOKEN
+else:
+    from dotenv import load_dotenv
+    load_dotenv()
+    ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
+Mismo patrón para GOOGLE_SERVICE_ACCOUNT_PATH y SHEETS_SPREADSHEET_ID en ventana_principal.py. En desarrollo se sigue usando .env, en producción se usa el módulo compilado.
+3. Agregar --key al .spec para encriptar el bytecode
+# SSAuto.spec — modificar EXE
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    ...
+)
+
+# Agregar:
+block_cipher = pyi_crypto.PyiBlockCipher(key='tu-clave-secreta-aqui')
+
+# Y pasar cipher al Analysis y EXE:
+a = Analysis(..., cipher=block_cipher)
+exe = EXE(..., cipher=block_cipher)
+Esto encripta todo el bytecode (incluido _env.pyc) con AES256. Para extraer el token haría falta la clave, que solo vos tenés.
+Nivel de seguridad resultante
+Capa	Qué protege
+Módulo .py compilado a .pyc	El token no está en texto plano suelto
+PYZ comprimido	Los .pyc están dentro de un archivo binario
+AES256 con --key	El PYZ está encriptado; sin la clave no se extrae el bytecode
+Archivos a modificar
+Archivo	Cambio
+config/_env.py	Nuevo — constantes con los secretos (gitignored)
+.gitignore	Agregar config/_env.py
+data/api.py:51-54	En frozen → importar config._env en vez de load_dotenv
+ui/ventana_principal.py:1703-1704	En frozen → usar config._env para Google vars
+SSAuto.spec	Agregar block_cipher + key
+guide_pyinstaller.md	Actualizar instrucciones de build
+Desventaja
+El token queda "quemado" en el ejecutable. Si rota el ACCESS_TOKEN, hay que recompilar. Pero es el precio de la seguridad.
+¿Avanzamos con esto? Dos preguntas antes de implementar:
+1. ¿La clave de encriptación (--key) la manejás vos manualmente al buildear, o querés que la lea de una variable de entorno?
+2. ¿Querés que los valores no sensibles (GOOGLE_SERVICE_ACCOUNT_PATH, SHEETS_SPREADSHEET_ID) también vayan al módulo encriptado, o esos pueden quedar en .env?
+
+
+Buenas preguntas. Te respondo punto por punto:
+¿Dos versiones/entornos?
+No. Un solo código, misma rama. La distinción ya existe con getattr(sys, "frozen", False):
+Desarrollo (python main.py)   →  lee .env (archivo en disco)
+Producción  (SSAuto.exe)      →  importa config._env (compilado en bytecode encriptado)
+El if ya está en data/api.py:51-54, solo hay que cambiar la rama frozen para que importe el módulo en vez de buscar .env.
+¿La clave de encriptación?
+Sí, exactamente eso. Vos creás una clave (la que quieras), y se la pasás a PyInstaller al buildear:
+# En SSAuto.spec, vos ponés tu clave:
+block_cipher = pyi_crypto.PyiBlockCipher(key='MiClaveSecreta2026!')
+Esa clave no va en el ejecutable ni se necesita para correr la app. Solo se usa en el momento de compilar para encriptar el bytecode. PyInstaller mete el descifrado en el bootloader. Sin esa clave, nadie puede extraer ACCESS_TOKEN del .exe.
+¿InnoSetup?
+Correcto. El flujo sería:
+1. python -m PyInstaller SSAuto.spec --key tu-clave
+   → dist/SSAuto/  (carpeta con .exe + _internal encriptado)
+
+2. InnoSetup empaqueta dist/SSauto/ → instalador .exe
+Al usuario final le llega un solo .exe instalador. El ACCESS_TOKEN está encriptado dentro del bytecode, no hay .env suelto por ningún lado.
+Plan final
+Archivo	Acción
+config/_env.py	Nuevo — ACCESS_TOKEN = "...", GOOGLE_SERVICE_ACCOUNT_PATH = "...", SHEETS_SPREADSHEET_ID = "..." (gitignored)
+.gitignore	Agregar config/_env.py
+data/api.py:51-54	Rama frozen: from config._env import ACCESS_TOKEN
+ui/ventana_principal.py:1703	Reemplazar os.getenv(...) por from config._env import ... en frozen
+gsheets/data/sheets_api.py	Mismo patrón para GOOGLE_SERVICE_ACCOUNT_PATH
+SSAuto.spec	Agregar block_cipher con --key + datas ya no necesita .env
+guide_pyinstaller.md	Quitar paso de "copiar .env manualmente"
+¿Arranco?
+
+
+Resumen de cambios
+Archivo	Acción
+config/_env.py	Nuevo — en dev carga .env con load_dotenv(), en frozen setea os.environ con valores compilados
+.gitignore	Agregado config/_env.py
+data/api.py:11	import config._env reemplaza el bloque load_dotenv()
+SSAuto.spec:8-11,87,91,107	block_cipher = None + cipher=block_cipher en Analysis, PYZ y EXE
+guide_pyinstaller.md	Eliminada la copia manual de .env, agregado --key
+Cómo se usa
+Desarrollo (sin cambios):
+python main.py   →  lee .env automáticamente
+Build para producción:
+# 1. Editar config/_env.py con los valores reales
+# 2. Buildear con clave:
+python -m PyInstaller --key=tu-clave-secreta SSAuto.spec
+El dist/SSAuto/ resultante ya no necesita .env al lado del .exe. El token está compilado en bytecode encriptado con AES256 dentro del PYZ. Para InnoSetup, empaquetás esa carpeta directamente.
+
+La clave se crea desde el codigo o al momento de buildear?
+
+Al momento de buildear. Vos elegís la clave y se la pasás a PyInstaller:
+python -m PyInstaller --key=MiClaveSecreta2026! SSAuto.spec
+PyInstaller la usa para encriptar el bytecode con AES256 durante el build. La clave no va en el .exe ni en el código — solo vos la conocés. El ejecutable resultante se auto-descifra al correr sin necesitarla.
+El flujo:
+Vos creás la clave  →  PyInstaller encripta el PYZ con ella  →  .exe se auto-descifra en runtime
+La clave puede ser cualquier string (una frase, caracteres random, etc.). Lo importante es que no la pierdas, porque sin ella no podrías rebuildear con la misma protección.
+
+
+aqui la clave XD
+
+python -m PyInstaller --key=planets2026* SSAuto.spec
+
+No, la clave es solo para buildear. Respondo cada punto:
+¿Puedo cambiar la clave?
+Sí, cada vez que buildeás podés usar una distinta. No hay relación entre builds.
+# Build de hoy
+python -m PyInstaller --key=ClaveEnero2026 SSAuto.spec
+
+# Build de mañana, otra clave sin problema
+python -m PyInstaller --key=OtraClave123 SSAuto.spec
+¿Es siempre la misma?
+No, la elegís vos cada vez. No hay una clave fija ni maestra. Es literalmente lo que escribas después de --key=.
+¿Si la pierdo?
+No pasa nada. La clave solo se usa al buildear, no al ejecutar. El .exe funciona igual aunque no recuerdes la clave. Lo único que no podrías hacer es "desempaquetar" ese build viejo para extraer el código fuente. Pero podés rebuildear con una clave nueva sin ningún problema.
+
+Exacto. Sin --key, cualquiera puede extraer el código del .exe con herramientas como pyinstxtractor en 2 clicks y leer el ACCESS_TOKEN de config/_env.pyc. Con --key, el bytecode queda encriptado con AES256 y esas herramientas no pueden leerlo.
+No es blindaje militar — un reverse engineer determinado podría extraer la clave del bootloader o leer la memoria en runtime — pero sube la barrera de "cualquiera con un tutorial de YouTube" a "necesita conocimientos serios de reversing". Para una app de escritorio distribuida a usuarios finales, es el nivel adecuado.
+
+Qué mala suerte. PyInstaller v6.0 removió la encriptación nativa. Con el pyinstaller==6.20.0 de tu requirements.txt, --key no funciona.
+Toca revertir el block_cipher del .spec y elegir otra estrategia. Las opciones viables para proteger ACCESS_TOKEN:
+Opción A — Bytecode compilado (sin cambios extra)
+El config/_env.py ya se compila a .pyc y se empaqueta en el PYZ. No es texto plano suelto en disco. Para un usuario casual, ya no es legible. Para alguien con pycdc o uncompyle6, sí es reversible.
+Ventaja: no requiere dependencias extra, ya está implementado.
+Opción B — Ofuscación simple (base64 o XOR)
+import base64
+_TOKEN = base64.b64decode("cGF0LW5hMS14eHh4eA==").decode()
+os.environ["ACCESS_TOKEN"] = _TOKEN
+Sube un poco la barrera, pero sigue siendo trivial para quien sepa Python.
+Opción C — Cython → .pyd (recomendada para protección real)
+Compilar config/_env.py a una extensión nativa de Windows (.pyd) usando Cython. El resultado es código máquina, no bytecode Python. Muy difícil de reverse-engineerear.
+# Build step adicional:
+cythonize -i config/_env.py  # genera config/_env.pyd
+PyInstaller empaqueta .pyd sin problemas. Solo agrega cython como dependencia de build.
+Opción D — PyArmor (herramienta externa)
+Ofusca y encripta módulos Python completos. Es de pago para uso comercial.
+Resumen:
+Opción	Protección	Complejidad	Dependencia extra
+A — bytecode .pyc	Baja	Nula	Ninguna
+B — base64	Baja+	Mínima	Ninguna
+C — Cython .pyd	Alta	Media	cython + compilador C
+D — PyArmor	Muy alta	Alta	Licencia de pago
+¿Con cuál te sentís cómodo? Personalmente recomendaría A para ya (revertir block_cipher y seguir con .pyc), y si más adelante querés protección real, migrar a C (Cython).
+Opcion A
+276 tests pasaron. Revertido.
+El config/_env.py queda compilado a .pyc dentro del PYZ del build. No es texto plano suelto — hay que usar pyinstxtractor + pycdc para leerlo, lo cual ya filtra al usuario casual. Para tu caso de uso con InnoSetup, suficiente.
+
+Cómo actualizar tu instalador en el futuro (en 2 pasos):En tu terminal: Ejecutas de nuevo pyinstaller tu_archivo.spec para actualizar los archivos de tu app en la carpeta dist.En Inno Setup: Abres tu archivo .iss y presionas el botón Compile (o la tecla F9). Inno Setup leerá la carpeta dist actualizada y generará el nuevo instalador automáticamente.
+
+1. Asegúrate de haber ejecutado PyInstaller
+Antes de tocar Inno Setup, recuerda correr en tu terminal de Python el comando para que se actualice la carpeta dist: python -m PyInstaller --clean SSAuto.spec
+2. Abre tu archivo .iss en Inno Setup
+Si ya lo tienes cerrado, abre el programa Inno Setup Compiler, ve al menú File > Open (Archivo > Abrir) y busca el archivo de configuración que guardaste antes (el que termina en .iss).
+3. Compila el nuevo instalador
+Con el script cargado en pantalla, solo debes hacer una de estas tres cosas (todas hacen lo mismo): Presiona la tecla F9 en tu teclado. O haz clic en el botón verde de Play (ejecutar) en la barra de herramientas superior. O ve al menú Build > Compile (Construir > Compilar). Inno Setup leerá automáticamente la carpeta dist con los cambios del icono que arreglamos, empaquetará todo de nuevo y sobrescribirá el archivo .exe del instalador viejo por el nuevo en un par de segundos.
+
+¡Y listo! Ve a probar el nuevo instalador generado. Cuéntame si esta vez sí abrió la aplicación a la perfección y sin el error del icono.
+
+¿Para compartirlo solo necesito el setup?
+Sí, absolutamente. Para compartir tu aplicación con cualquier persona, solo necesitas enviarle el archivo del instalador (el .exe que generó Inno Setup).Ese único archivo funciona como un contenedor inteligente: dentro lleva tu ejecutable de Python, tus claves del .env, el icono de CustomTkinter y todas las librerías necesarias empaquetadas.
+
+¿Cómo compartirlo de forma eficiente?El archivo pesa un poco: Al incluir Python, CustomTkinter y las librerías, el instalador puede pesar desde unos 40 MB hasta más de 100 MB.Usa la nube: Como es un archivo pesado para enviarlo por correo o WhatsApp, súbelo a Google Drive, OneDrive, Mega o Dropbox y comparte el enlace de descarga con tus usuarios.¿Qué hará el usuario final?: Tu usuario solo descargará ese archivo, hará doble clic, aceptará tu licencia, se creará el acceso directo en su escritorio y listo. No necesita tener Python instalado en su computadora, ni clonar repositorios, ni instalar librerías. Todo funcionará a la primera.
+
+¡Felicidades por empaquetar tu aplicación! Si quieres, cuéntame:¿Pudiste probar el nuevo instalador y abrió la app correctamente sin el error del icono?¿Quieres que revisemos cómo configurar el instalador para que cree un acceso directo en el escritorio si el asistente no lo dejó activado?
+
+
+Resumen de correcciones
+core/browser.py:32-45
+- CHROME_USER_DATA: C:\chrome_sesion_ssauto → %LOCALAPPDATA%\chrome_sesion_ssauto
+- CHROME_PATHS: rutas hardcodeadas a C:\ → usan %ProgramFiles%, %ProgramFiles(x86)%, %LOCALAPPDATA%
+SSAuto.spec:78
+- Agregado "version" a hiddenimports (seguridad extra para el __version__)
+guide_pyinstaller.md:47-59
+- Actualizada la tabla de requisitos con paths dinámicos
+- Documentado el caso offline de ChromeDriver
+Lo que NO se corrigió (no es necesario)
+Item	Razón
+chromedriver.exe en datas	webdriver-manager lo descarga automáticamente. Solo se necesita offline con copia manual
+config/_env.py con secrets	Es intencional para el build; va gitignored y el usuario lo edita antes de buildear
+python-dotenv incluido en build	La rama else lo importa; PyInstaller lo incluye (~200 KB extra, irrelevante)
+
+
+Unas cuantas ideas ordenadas por utilidad para tu flujo diario:
+Mejoras rápidas (bajo esfuerzo)
+#	Idea	Detalle
+1	FSD auto-detección en apps	Las capturas por app (Wolkbox, B2Chat, etc.) no detectan FSD del título de Chrome. Solo lo hace el botón principal. Se puede agregar en _proceso_app.
+2	Retraso configurable antes de capturar	Un slider de 0-3 segundos para dar tiempo a cambiar de ventana antes de que se tome la captura.
+3	Previsualización de la última captura	Mostrar thumbnail en la UI después de capturar, antes de subir.
+4	Copiar ruta al portapapeles	Botón para copiar la ruta del último archivo generado.
+5	Log a archivo	Además del widget, guardar log_YYYYMMDD.txt en %APPDATA%/SSAuto/logs/ para debug.
+Mejoras medias
+#	Idea	Detalle
+6	Offline chromedriver	Empaquetar chromedriver.exe en el spec para que funcione 100% sin internet en el primer uso.
+7	Auto-guardar perfil al cambiar coords	Si movés las coordenadas manualmente y tenés un perfil seleccionado, auto-guardar sin preguntar.
+8	Notificación al terminar	Un sonido o toast de Windows cuando la subida se completa (útil si minimizaste la app).
+9	Modo ráfaga	Capturar múltiples regiones en secuencia con una sola orden (ej. Wolkbox + Correo juntos).
+Mejoras grandes
+#	Idea	Detalle
+10	Auto-detección del nombre del cliente	Si la captura es a HubSpot, scrapear el nombre del contacto/ticket de la página abierta y usarlo en el nombre del archivo: FSD-980124_JuanPerez_20260611_Correo.png.
+11	Tests para lo nuevo	Agregar tests unitarios para los cambios de nombres de archivo, config/_env.py, etc.
+12	Instalador con InnoSetup	Crear el script .iss que empaquete dist/SSAuto/ + ChromeDriver offline + atajos en escritorio.
+¿Te interesa alguna en particular? Las de bajo esfuerzo las saco rápido.
+
+Resumen
+#	Mejora	Archivos	Qué hace
+1	FSD auto-detección en apps	ventana_principal.py:1331-1334	Las capturas por app (Wolkbox, B2Chat, etc.) ahora detectan FSD del título de Chrome, igual que el botón principal
+2	Retraso configurable	configuracion.py:64, ventana_principal.py:714-751	Slider 0-3s en CONFIGURACIÓN. Se aplica antes de toda captura para dar tiempo a cambiar de ventana
+3	Previsualización thumbnail	ventana_principal.py:498-538	Debajo de los botones de captura aparece un thumbnail (200x100 px) de la última imagen capturada
+4	Botón copiar ruta	ventana_principal.py:534-542,2443-2450	Botón "Copiar ruta" junto a la preview, copia la ruta absoluta al portapapeles
+5	Log a archivo	log_widget.py:65-77	Cada línea del log se escribe también a logs/log_20260611_143025.txt con marca de tiempo completa
+
+El modo ráfaga sería capturar varias apps en secuencia con un solo clic, sin tener que volver a la ventana entre cada una.
+Cómo funcionaría
+1. Activás "Modo ráfaga" (toggle en la UI)
+2. Marcás con checkboxes qué apps querés: ☑ Wolkbox  ☑ B2Chat  ☐ Correo
+3. Clic en "Capturar ráfaga"
+4. Modal de mensaje (una sola vez, mismo mensaje para todas)
+5. La app se minimiza → cuenta regresiva (3s) → captura Wolkbox
+6. Cuenta regresiva → vos cambiás a la ventana de B2Chat → captura B2Chat
+7. Se restaura la app → sube todas las imágenes
+Resultado
+En vez de 4 interacciones (clic Wolkbox → esperar → clic B2Chat → esperar), hacés 1 solo clic y solo tenés que ir cambiando de ventana entre capturas.
+Lo que habría que implementar
+Componente	Detalle
+Toggle "Modo ráfaga"	Switch en REGIÓN DE CAPTURA
+Checkboxes en apps	Al activar ráfaga, los botones de apps se vuelven checkboxes
+Botón "Capturar ráfaga"	Reemplaza o se añade a los botones existentes
+Hilo de ráfaga	Itera las apps seleccionadas: delay → captura → delay → captura...
+Subida al final	Todas las imágenes se suben juntas al destino
+¿Te interesa que lo implemente?
+
+Resumen de lo nuevo
+1. Modo ráfaga
+Componente	Dónde
+Toggle "Modo ráfaga"	REGIÓN DE CAPTURA, debajo de coordenadas
+Checkboxes en apps	Aparecen en cada tarjeta al activar ráfaga (excepto Calendar)
+Botón "Capturar ráfaga"	A la derecha del toggle, aparece al activar
+Flujo: Activás ráfaga → tildás las apps → clic en "Capturar ráfaga" → modal de mensaje (uno solo) → la app se minimiza → captura cada app con delay entre ellas → restaura → sube todas
+2. Notificación al terminar
+Suena SystemAsterisk de Windows cada vez que una captura + subida se completa. En el botón principal, apps, ráfaga, cola y Calendar.
+3. Auto-guardar perfil
+Al cambiar coordenadas manualmente, si hay un perfil seleccionado en el dropdown, se guarda automáticamente. Sin tocar "Guardar".
+4. Offline chromedriver
+Si existe chromedriver.exe en la raíz del proyecto al buildear, se empaqueta automáticamente en el spec. Si no existe, se omite sin error.
+
+PYTHON PUEDE DETECTAR UNA VENTANA DE UNA APLICACION Y MEDIR LA REGION DE LA PANTALLA SOLO DE ESA APLICACION PARA TOMAR UNA CAPTURA, SIN IMPORTAR SI SE MUEVE DE LA PANTALLA
+Sí, Python puede detectar una ventana específica, calcular su región exacta en tiempo real y tomarle una captura de pantalla sin importar si se mueve, siempre y cuando la ventana no esté minimizada.Para lograrlo en Windows, la combinación más eficiente y moderna es utilizar la librería PyWinCtl (una versión avanzada y multiplataforma de PyGetWindow) para rastrear las coordenadas dinámicas de la ventana, junto con la librería mss para realizar capturas de pantalla ultrarrápidas de esa región.
+
+Resumen
+Botón "Convertir a debug" — CONFIGURACIÓN > Comportamiento
+Al hacer clic ejecuta 4 pasos:
+Paso	Acción	Herramienta
+1	Detecta el perfil del Chrome actual (lee --user-data-dir del proceso)	psutil
+2	Cierra Chrome (terminate → espera 1.5s → kill si no cerró)	psutil
+3	Relanza Chrome con --remote-debugging-port=9222 + --user-data-dir=<perfil> + --restore-last-session	subprocess
+4	Espera hasta que el puerto 9222 responda (máx 6s)	socket
+Archivos modificados
+Archivo	Cambio
+requirements.txt:72	Agregado psutil==7.2.2
+core/browser.py:305-400	3 nuevas funciones: obtener_chrome_user_data_dir(), cerrar_chrome(), abrir_chrome_debug_con_perfil()
+ui/ventana_principal.py:767	Botón "Convertir a debug" junto a "Abrir Chrome"
+ui/ventana_principal.py:2875	Método _convertir_chrome_a_debug()
+SSAuto.spec:60-62	psutil + psutil._pswindows en hiddenimports
+Flujo
+Tenés Chrome abierto con pestañas y sesiones
+  → Clic en "Convertir a debug"
+  → Chrome se cierra y se relanza solo
+  → Vuelve con las mismas pestañas, mismas sesiones
+  → Puerto 9222 activo → ya podés usar "Usar Chrome ya abierto"
+
+Los procesos que dependen del puerto 9222 son los que usan usar_chrome_existente=True en el SesionService. Son estos:
+Proceso	Archivo	Línea
+Captura y subir (botón principal)	ventana_principal.py:1062	_subir_a_destinos
+Capturas por app (Wolkbox, B2Chat, etc.)	ventana_principal.py:1062	_subir_a_destinos
+Subir cola (HubSpot)	ventana_principal.py:1189	_subir_cola_hubspot
+Ráfaga (múltiples apps)	ventana_principal.py:1062	_subir_a_destinos
+Calendar (Google Sheets)	ventana_principal.py:1062	_subir_a_destinos
+Búsqueda FSD en Sunrun	ventana_principal.py:2336	_buscar_fsd_sunrun
+Cómo funciona internamente
+_subir_a_destinos pasa usar_chrome_existente=self.chrome_existente_var.get() a SesionService.ejecutar_subida() → DriverProvider.obtener() → BrowserFactory.conectar_existente(9222).
+Si el switch está apagado, no se usa el puerto 9222 — se lanza un Chrome nuevo (headless o visible según el otro switch).
+En resumen
+El puerto 9222 es necesario cuando tenés tildado "Usar Chrome ya abierto (puerto 9222)". Si lo desactivás, la app funciona sin el puerto.
+
+El error ocurre en el paso 4 de la conversión: abrir_chrome_debug_con_perfil() no encontró el ejecutable de Chrome. Es casi seguro que en la otra PC Chrome está instalado en una ruta no estándar que CHROME_PATHS no cubre.
+Diagnóstico rápido
+El botón cierra Chrome correctamente (confirma que Chrome corriendo), pero al relanzar falla porque no encuentra chrome.exe. Las rutas que busca son solo estas:
+%ProgramFiles%\Google\Chrome\Application\chrome.exe
+%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe  
+%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe
+Solución propuesta
+Mejorar abrir_chrome_debug_con_perfil() para que extraiga la ruta exacta del ejecutable desde el proceso Chrome que acaba de cerrar (usando psutil), en vez de buscar en rutas predefinidas. Si Chrome estaba corriendo, sabemos dónde está su .exe — lo guardamos antes de cerrarlo y lo usamos para relanzar.
+Plan
+Archivo	Cambio
+core/browser.py	Nuevo helper obtener_chrome_exe_desde_proceso() — busca el .exe del proceso chrome.exe corriendo vía psutil
+core/browser.py	abrir_chrome_debug_con_perfil() — usa primero el exe del proceso, luego fallback a CHROME_PATHS
+core/browser.py	_convertir_chrome_a_debug (o el helper) — detecta y guarda la ruta del exe antes de cerrar Chrome
+Flujo corregido
+1. Detectar perfil Y ruta del .exe desde el proceso Chrome (psutil)
+2. Cerrar Chrome
+3. Relanzar con la misma ruta de .exe (no buscar en CHROME_PATHS) 
+   + --remote-debugging-port=9222 + --user-data-dir=<perfil detectado>
+4. Esperar puerto 9222
+¿Avanzamos con esto?
+▣  Plan · DeepSeek V4 Pro · 24.0s
+Verique la ruta del chrome instalado en el otro pc y es esta, %ProgramFiles%\Google\Chrome\Application\chrome.exe
+Ademas, el script si abre chrome y llega hasta la seleccion de perfiles
+
+El problema no es la ruta de Chrome — esa está bien. Es que --user-data-dir apunta a la carpeta raíz User Data\, y Chrome no sabe qué perfil cargar, por eso muestra el selector.
+Causa
+User Data\          ← --user-data-dir apunta acá
+  Default\          ← perfil real del usuario
+  Profile 1\
+  Local State       ← acá dice cuál fue el último perfil activo
+Falta pasar --profile-directory=Default para que Chrome abra directo en el perfil del usuario sin mostrar el selector.
+Plan
+Archivo	Cambio
+core/browser.py	Nuevo helper detectar_perfil_activo(user_data_dir) — lee Local State JSON, extrae profile.last_used
+core/browser.py	abrir_chrome_debug_con_perfil() — agrega --profile-directory=<perfil> al Popen
+core/browser.py	obtener_chrome_user_data_dir() — ya funciona bien, no se toca
+El flujo quedaría:
+1. Detectar user-data-dir del proceso Chrome (ya funciona)
+2. Leer User Data\Local State → obtener el perfil activo (ej. "Default")
+3. Cerrar Chrome
+4. Relanzar: chrome.exe --remote-debugging-port=9222 --user-data-dir=<detectado> --profile-directory=Default --restore-last-session
+5. Esperar puerto 9222
+
+Funciona. Detectó Profile 2 correctamente en mi PC, y Default en la tuya.
+276 tests pasaron. El flujo ahora es:
+"Convertir a debug"
+  → Detecta user-data-dir:   %LOCALAPPDATA%\Google\Chrome\User Data
+  → Lee perfil activo:       Default  (o Profile 2, etc.)
+  → Cierra Chrome
+  → Relanza:  chrome.exe --remote-debugging-port=9222 --user-data-dir=... --profile-directory=Default --restore-last-session
+  → Chrome abre directo en tu perfil, sin selector
+Probá de nuevo en la otra PC con el botón "Convertir a debug".
+276 tests pasaron, la ruta del exe se detecta correctamente.
+Qué cambió
+Ahora el botón "Convertir a debug" extrae la ruta exacta del chrome.exe desde el proceso corriendo (vía psutil.proc.exe), antes de cerrar Chrome. Así no depende de CHROME_PATHS. El log ahora muestra:
+[15:38:08] → Detectando perfil de Chrome actual…
+[15:38:09]   User data: C:\Users\...\Google\Chrome\User Data
+[15:38:09]   Perfil activo: Profile 7
+[15:38:09]   Ejecutable: C:\Program Files\Google\Chrome\Application\chrome.exe  ← nuevo
+[15:38:09] → Cerrando Chrome…
+[15:38:10]   Chrome cerrado.
+[15:38:10] → Relanzando Chrome con depuración…
+[15:38:12] ✓ Chrome relanzado con depuración en puerto 9222.
+Probá de nuevo en la otra PC. Si el ejecutable aparece en el log y aun así falla, el problema sería otra cosa (Chrome tardando en abrir, o algún warning del --profile-directory).
+
+276 pasaron. Cambios:
+Qué	Antes	Ahora
+Timeout espera puerto	6s (30 × 0.2s)	15s (50 × 0.3s)
+--profile-directory	Siempre se pasaba	Solo si el directorio existe en disco
+Diagnóstico	Silencioso	Loggea si falta el perfil, timeout, y tiempo exacto
+Exe origen	Solo CHROME_PATHS	Primero psutil del proceso corriendo, fallback a CHROME_PATHS
+Ahora el log va a mostrar algo como:
+→ Relanzando Chrome con depuración...
+  ⚠ Directorio de perfil no encontrado: ...\Profile 7
+  → Lanzando sin --profile-directory.
+  → Esperando puerto 9222…
+  ✓ Puerto 9222 activo tras 4.5s.
+✓ Chrome relanzado con depuración en puerto 9222.
+Probá de nuevo en la otra PC. Si Profile 7 no existe, lo va a decir y va a omitir el flag, usando el perfil por defecto de Chrome automáticamente.
+
+Qué cambió
+Cambio	Por qué
+cerrar_chrome() reescrito	Ahora espera activamente a que TODOS los chrome.exe mueran antes de devolver True. Si alguno sobrevive, lo reporta
+--disable-background-mode	Evita que Chrome deje procesos corriendo al cerrar (Settings → "Seguir ejecutando apps en segundo plano")
+--no-first-run	Evita el wizard de bienvenida que bloquea el puerto
+--no-default-browser-check	Evita dialogo de navegador por defecto
+El log ahora debería verse así
+→ Cerrando Chrome…
+  5 procesos Chrome encontrados. Cerrando...
+  ✓ Chrome cerrado completamente.
+  Chrome cerrado.
+→ Relanzando Chrome con depuración...
+  → Esperando puerto 9222…
+  ✓ Puerto 9222 activo tras 2.7s.
+✓ Chrome relanzado con depuración en puerto 9222.
+Si aun así falla, el log va a decir exactamente cuántos procesos sobrevivieron. En ese caso extremo, la solución es reiniciar la PC (Chrome a veces se resiste).
+
+
+Resumen de la sesión de hoy
+Implementado y funcionando (24 cambios)
+#	Qué	Archivos
+1	Protección .env → config/_env.py compilado en bytecode	config/_env.py, data/api.py, .gitignore
+2	block_cipher en spec → revertido (PyInstaller v6 lo removió)	SSAuto.spec, guide_pyinstaller.md
+3	CHROME_USER_DATA y CHROME_PATHS usan %LOCALAPPDATA% / %ProgramFiles%	core/browser.py
+4	version agregado a hiddenimports	SSAuto.spec
+5	Guía PyInstaller actualizada	guide_pyinstaller.md
+6	Nombres de captura: FSD-980124_20260611_143025_Correo.png	core/captura.py, ventana_principal.py
+7	Modal de mensaje no aparece si destino = SUNRUN	ventana_principal.py
+8	FSD auto-detección en apps (Wolkbox, B2Chat, etc.)	ventana_principal.py
+9	Retraso configurable 0-3s (slider en CONFIGURACIÓN)	configuracion.py, ventana_principal.py
+10	Previsualización thumbnail + botón copiar ruta	ventana_principal.py
+11	Log a archivo: logs/log_YYYYMMDD_HHMMSS.txt	log_widget.py
+12	Modo ráfaga (toggle + checkboxes + captura múltiple)	ventana_principal.py
+13	Sonido al completar (winsound)	ventana_principal.py
+14	Auto-guardar perfil al cambiar coords	ventana_principal.py
+15	Offline chromedriver opcional en spec	SSAuto.spec
+16	psutil agregado como dependencia	requirements.txt, SSAuto.spec
+17	obtener_chrome_user_data_dir() vía psutil	core/browser.py
+18	detectar_perfil_activo() lee Local State	core/browser.py
+19	obtener_chrome_exe_desde_proceso() vía psutil	core/browser.py
+20	cerrar_chrome() con kill forzoso + verificación	core/browser.py
+21	abrir_chrome_debug_con_perfil() con timeout 15s	core/browser.py
+22	_convertir_chrome_a_debug() en UI	ventana_principal.py
+23	Limpieza de SingletonLock / SingletonSocket	core/browser.py
+24	--disable-background-mode, --no-first-run en todos los Popen	core/browser.py, ventana_principal.py
+Pendiente (1 problema)
+#	Problema	Estado
+1	"Convertir a debug" no activa el puerto 9222	Sin resolver. Chrome abre con el perfil correcto pero el debug port nunca responde. El botón "Abrir Chrome" (que usa perfil separado chrome_sesion_ssauto) sí funciona perfecto.
+Conclusión sobre el problema
+La causa raíz es que Chrome no permite dos instancias con el mismo --user-data-dir. Al relanzar con el perfil real del usuario, Chrome hereda restricciones del singleton que bloquean el puerto de debug, incluso después de matar procesos y borrar locks. El botón "Abrir Chrome" funciona porque usa un perfil distinto (chrome_sesion_ssauto), sin conflictos.
+Workaround práctico: usar el botón "Abrir Chrome" (que sí funciona) para tener el puerto 9222 activo, y luego abrir manualmente las pestañas que necesites. No es lo ideal pero es funcional hoy mismo.
+¿Querés que intente otra estrategia para lo de debug, o dejamos eso y pasamos a otra cosa?

@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import sys as _sys
-from dotenv import load_dotenv
+import config._env  # noqa: F401 — sets os.environ (dev: .env, prod: compiled)
 from hubspot import HubSpot
 from hubspot.crm.tickets import PublicObjectSearchRequest as TicketSearchRequest
 from hubspot.crm.contacts import PublicObjectSearchRequest as ContactSearchRequest
@@ -47,11 +47,6 @@ from data.hubspot_constants import (
 )
 
 logger = logging.getLogger(__name__)
-
-if getattr(_sys, "frozen", False):
-    load_dotenv(os.path.join(os.path.dirname(_sys.executable), ".env"))
-else:
-    load_dotenv()
 
 # =========================================================
 # Lazy singleton client

@@ -61,6 +61,7 @@ toggle_auto_submit = ToggleConfig("auto_submit_nota", True)
 toggle_headless = ToggleConfig("headless", False)
 toggle_chrome_existente = ToggleConfig("chrome_existente", True)
 toggle_destino_subida = ToggleConfig("destino_subida", "AMBOS")
+toggle_capture_delay = ToggleConfig("capture_delay", 0.5)
 
 
 # ── Backward-compatible wrappers (las funciones antiguas siguen funcionando) ──
@@ -88,6 +89,12 @@ def cargar_destino_subida() -> str:
 
 def guardar_destino_subida(valor: str) -> None:
     toggle_destino_subida.guardar(valor)
+
+def cargar_capture_delay() -> float:
+    return toggle_capture_delay.cargar()
+
+def guardar_capture_delay(valor: float) -> None:
+    toggle_capture_delay.guardar(valor)
 
 
 # ── Backward-compat constants (replaced by ToggleConfig instances) ────
