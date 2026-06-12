@@ -11,9 +11,7 @@ from typing import Callable
 
 from core.browser import (
     BrowserFactory,
-    ErrorBrowser,
     obtener_chrome_exe,
-    puerto_activo,
 )
 
 
@@ -38,7 +36,8 @@ class DriverProvider:
             log: callback para registrar mensajes de estado.
             headless: si True, abre Chrome en modo sin interfaz grafica.
             usar_chrome_existente: si True, intenta conectar al Chrome del
-                usuario en puerto 9222. Si False, abre un Chrome nuevo.
+                usuario en puerto 9222. Si el puerto no esta activo, lanza
+                Chrome automaticamente.
 
         Returns:
             Tupla (driver, es_propio) donde:
@@ -47,8 +46,8 @@ class DriverProvider:
                   False si es el Chrome del usuario (no tocar).
 
         Raises:
-            RuntimeError: si no se encuentra Chrome instalado o si se solicita
-                Chrome existente pero el puerto 9222 no esta activo.
+            RuntimeError: si no se encuentra Chrome instalado.
+            ErrorBrowser: si no se pudo crear o conectar el driver.
         """
         chrome_exe = obtener_chrome_exe()
         if not chrome_exe:
@@ -58,13 +57,6 @@ class DriverProvider:
             )
 
         if usar_chrome_existente:
-            if not puerto_activo():
-                raise RuntimeError(
-                    "No hay Chrome con depuracion en puerto 9222. "
-                    "Abrelo desde el boton 'Abrir Chrome con depuracion' "
-                    "o desactiva 'Usar Chrome ya abierto' en CONFIGURACION."
-                )
-            log("  -> Conectando al Chrome existente (puerto 9222)...")
             driver = BrowserFactory.conectar_existente()
             log("  v Conectado.")
             return driver, False

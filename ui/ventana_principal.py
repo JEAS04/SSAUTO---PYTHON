@@ -95,6 +95,8 @@ class App(CustomCTkFrame):
         self._config = cargar_config()
         self._ui_scale = self._calcular_ui_scale()
         self._proceso_en_curso = False  # anti-reentrada
+        self._watchdog_detenido = False
+        self._indicador_chrome: ctk.CTkLabel | None = None
         self._cancelado = threading.Event()  # cancelación del proceso principal
         self._fsd_detectado = None
         self._ultima_ruta: str | None = None  # ultima captura para preview
@@ -111,6 +113,15 @@ class App(CustomCTkFrame):
         self._construir_ui()
 
         self.update_idletasks()
+
+        # Auto-lanzar Chrome con debug port si el switch esta activo
+        self.after(100, self._auto_abrir_chrome)
+
+        # Watchdog: relanza Chrome si se cierra y el switch esta activo
+        threading.Thread(target=self._watchdog_chrome, daemon=True).start()
+
+        # Indicador de estado del puerto 9222
+        self.after(2000, self._actualizar_indicador_chrome)
 
         # Abrir credenciales si falta alguna
         faltan_creds = any(
@@ -762,6 +773,8 @@ class App(CustomCTkFrame):
             variable=self.chrome_existente_var,
             font=ctk.CTkFont(size=11),
         ).pack(side="left")
+        self._indicador_chrome = ctk.CTkLabel(hc, text="", font=ctk.CTkFont(size=10))
+        self._indicador_chrome.pack(side="left", padx=(6, 0))
         ctk.CTkButton(
             hc,
             text="Abrir Chrome",
@@ -772,13 +785,20 @@ class App(CustomCTkFrame):
         ).pack(side="right")
         ctk.CTkButton(
             hc,
-            text="Convertir a debug",
-            command=self._convertir_chrome_a_debug,
+            text="Crear acceso directo",
+            command=self._crear_acceso_directo_chrome,
+            font=ctk.CTkFont(size=10),
+            height=28,
+            width=140,
+        ).pack(side="right", padx=(0, 4))
+        ctk.CTkButton(
+            hc,
+            text="Reiniciar perfil",
+            command=self._reiniciar_perfil_chrome,
             font=ctk.CTkFont(size=10),
             height=28,
             width=120,
         ).pack(side="right", padx=(0, 4))
-
         self.auto_submit_var = ctk.BooleanVar(value=cargar_auto_submit())
         self.auto_submit_var.trace_add(
             "write",
@@ -1245,6 +1265,8 @@ class App(CustomCTkFrame):
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
+        if self.chrome_existente_var.get():
+            self._abrir_chrome_debug()
         self._proceso_en_curso = True
         nombre = app["nombre"]
         region = self._regiones_apps.get(nombre, app["region"])
@@ -2094,6 +2116,13 @@ class App(CustomCTkFrame):
                 )
                 return
             sheet_name = sheet_var.get().strip() if _sheet_names else None
+            if _sheet_names and not sheet_name:
+                messagebox.showwarning(
+                    "Pestana requerida",
+                    "Selecciona una pestana de la hoja de calculo.",
+                    parent=modal,
+                )
+                return
             config = cargar_config()
             config["ultima_celda_calendar"] = cell_ref
             if sheet_name:
@@ -2257,7 +2286,8 @@ class App(CustomCTkFrame):
                 self.after(0, self._actualizar_sitios_status)
 
             except Exception as e:
-                self.after(0, lambda err=e: self._log(f"✗ {prefix}Error: {err}"))
+                msg = str(e) or repr(e)
+                self.after(0, lambda err=msg: self._log(f"✗ {prefix}Error: {err}"))
                 self.after(0, lambda: self._set_status("Error"))
                 self.after(
                     0,
@@ -2843,6 +2873,68 @@ class App(CustomCTkFrame):
         self._log("→ Cookies eliminadas. Se hará login en la próxima ejecución.")
         self._actualizar_sitios_status()
 
+    def _auto_abrir_chrome(self):
+        """Lanza Chrome con depuracion al iniciar la app si el switch esta activo."""
+        if self.chrome_existente_var.get():
+            self._abrir_chrome_debug()
+
+    def _watchdog_chrome(self):
+        """Hilo daemon que relanza Chrome si se cierra y el switch esta activo.
+
+        Verifica cada 5 segundos si el puerto 9222 responde. Si no,
+        y el switch esta tildado, y no hay un proceso en curso, relanza
+        Chrome automaticamente. Maximo 3 reintentos por minuto para
+        evitar bucles.
+        """
+        from core.browser import puerto_activo
+
+        intentos = 0
+        ventana_inicio = time.time()
+        while not self._watchdog_detenido:
+            time.sleep(5)
+            if self._watchdog_detenido:
+                return
+            if not self.chrome_existente_var.get():
+                intentos = 0
+                continue
+            if puerto_activo():
+                intentos = 0
+                continue
+            if self._proceso_en_curso:
+                continue
+
+            ahora = time.time()
+            if ahora - ventana_inicio > 60:
+                intentos = 0
+                ventana_inicio = ahora
+
+            intentos += 1
+            if intentos > 3:
+                continue
+            self._log("→ Chrome cerrado. Relanzando…")
+            try:
+                self._abrir_chrome_debug()
+            except Exception:
+                pass
+
+    def _actualizar_indicador_chrome(self):
+        """Actualiza el indicador visual del estado del puerto 9222."""
+        if self._watchdog_detenido:
+            return
+        from core.browser import puerto_activo
+
+        indicador = self._indicador_chrome
+        if indicador is not None:
+            if self.chrome_existente_var.get():
+                if puerto_activo():
+                    indicador.configure(text="● Activo", text_color="#4CAF50")
+                else:
+                    indicador.configure(text="○ Inactivo", text_color="#F44336")
+            else:
+                indicador.configure(text="")
+
+        self.after(2000, self._actualizar_indicador_chrome)
+
     def _abrir_chrome_debug(self):
         """Abre Chrome con depuracion remota en puerto 9222.
 
@@ -2855,7 +2947,6 @@ class App(CustomCTkFrame):
         from core.browser import (
             puerto_activo,
             CHROME_USER_DATA,
-            CHROME_PATHS,
             obtener_chrome_exe,
         )
 
@@ -2875,6 +2966,7 @@ class App(CustomCTkFrame):
                 chrome_exe,
                 "--remote-debugging-port=9222",
                 f"--user-data-dir={CHROME_USER_DATA}",
+                "--profile-directory=Default",
                 "--disable-background-mode",
                 "--disable-popup-blocking",
                 "--no-first-run",
@@ -2883,56 +2975,61 @@ class App(CustomCTkFrame):
         )
         self._log("✓ Chrome abierto con depuración en puerto 9222.")
 
-    def _convertir_chrome_a_debug(self):
-        """Cierra Chrome y lo relanza con --remote-debugging-port=9222.
+    def _crear_acceso_directo_chrome(self):
+        """Crea un acceso directo en el escritorio para abrir Chrome con depuracion.
 
-        Detecta el perfil del Chrome actual (via psutil), cierra todos los
-        procesos chrome.exe, y relanza con el mismo perfil + restore-last-session
-        para mantener pestañas y sesiones.
+        El acceso directo lanza Chrome con --remote-debugging-port=9222 y
+        el perfil chrome_sesion_ssauto, igual que el boton Abrir Chrome pero
+        sin necesidad de abrir la app primero.
         """
-        from core.browser import (
-            puerto_activo,
-            obtener_chrome_user_data_dir,
-            detectar_perfil_activo,
-            obtener_chrome_exe_desde_proceso,
-            cerrar_chrome,
-            abrir_chrome_debug_con_perfil,
+        desktop = Path.home() / "Desktop"
+        lnk = desktop / "Chrome Debug.lnk"
+
+        from core.browser import obtener_chrome_exe, CHROME_USER_DATA
+
+        chrome_exe = obtener_chrome_exe()
+        if not chrome_exe:
+            self._log("✗ No se encontró chrome.exe.")
+            return
+
+        import subprocess
+
+        ps = (
+            f"$ws = New-Object -ComObject WScript.Shell; "
+            f"$s = $ws.CreateShortcut('{lnk}'); "
+            f"$s.TargetPath = '{chrome_exe}'; "
+            f"$s.Arguments = '--remote-debugging-port=9222 "
+            f'--user-data-dir=\\"{CHROME_USER_DATA}\\" '
+            f'--profile-directory=Default\'; '
+            f"$s.Save()"
         )
+        try:
+            subprocess.run(["powershell", "-Command", ps], check=True)
+            self._log(f"✓ Acceso directo creado en: {lnk}")
+        except subprocess.CalledProcessError:
+            self._log("✗ Error al crear el acceso directo.")
 
-        if puerto_activo():
-            self._log("✓ Chrome con depuración ya está activo en el puerto 9222.")
-            return
+    def _reiniciar_perfil_chrome(self):
+        """Borra el perfil chrome_sesion_ssauto y relanza Chrome limpio."""
+        import subprocess
 
-        self._log("→ Detectando perfil de Chrome actual…")
-        user_data = obtener_chrome_user_data_dir()
-        if not user_data:
-            self._log("✗ No se pudo detectar el perfil. ¿Tenés psutil instalado?")
-            return
-        profile = detectar_perfil_activo(user_data)
-        chrome_exe = obtener_chrome_exe_desde_proceso()
-        self._log(f"  User data: {user_data}")
-        self._log(f"  Perfil activo: {profile}")
-        if chrome_exe:
-            self._log(f"  Ejecutable: {chrome_exe}")
+        from core.browser import CHROME_USER_DATA
 
-        self._log("→ Cerrando Chrome…")
-        if not cerrar_chrome(log=self._log):
-            self._log("✗ No se pudo cerrar Chrome completamente.")
-            self._log("  Cerrá Chrome manualmente y probá de nuevo.")
-            self._log("  Si sigue fallando, reiniciá la PC.")
-            return
-        self._log("  Chrome cerrado.")
-
-        self._log("→ Relanzando Chrome con depuración…")
-        if abrir_chrome_debug_con_perfil(
-            user_data, profile_dir=profile, chrome_exe=chrome_exe,
-            log=self._log,
-        ):
-            self._log("✓ Chrome relanzado con depuración en puerto 9222.")
-            self._log("  Las pestañas y sesiones deberían restaurarse.")
+        perfil = Path(CHROME_USER_DATA)
+        if perfil.exists():
+            self._log("→ Cerrando Chrome…")
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chrome.exe"],
+                capture_output=True,
+            )
+            time.sleep(2)
+            self._log(f"→ Borrando {perfil}…")
+            shutil.rmtree(str(perfil))
+            self._log("✓ Perfil eliminado. Relanzando Chrome limpio…")
         else:
-            self._log("✗ No se pudo lanzar Chrome con depuración.")
-            self._log("  Verificá que Chrome esté instalado y probá de nuevo.")
+            self._log("→ Perfil no existe, lanzando Chrome limpio…")
+
+        self._abrir_chrome_debug()
 
     # ── Keybind ───────────────────────────────────────────────────────
 
@@ -3018,6 +3115,8 @@ class App(CustomCTkFrame):
         if self._proceso_en_curso:
             self._log("✗ Ya hay un proceso en curso. Espera a que termine.")
             return
+        if self.chrome_existente_var.get():
+            self._abrir_chrome_debug()
         self._proceso_en_curso = True
         self._cancelado.clear()
         self.btn.configure(state="disabled")
